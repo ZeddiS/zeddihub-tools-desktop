@@ -26,9 +26,9 @@ except ImportError:
 
 from .langs import L, SUPPORTED_LANGS
 
-VERSION = "v2.9.0 Ultimate Edition"
-CONSOLE_WIDTH = 100
-CONSOLE_HEIGHT = 45
+VERSION = "v3.0.0"
+CONSOLE_WIDTH = 110
+CONSOLE_HEIGHT = 48
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ZH_DIR = SCRIPT_DIR
 CONFIG_PATH = os.path.join(ZH_DIR, "config.json")

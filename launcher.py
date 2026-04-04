@@ -4,6 +4,8 @@ import platform
 import time
 import traceback
 import re
+import json
+import glob
 
 try:
     import msvcrt
@@ -68,19 +70,9 @@ def setup_console():
 def clear_console():
     sys.stdout.write("\033[2J\033[H")
 
-def get_system_info():
-    info = []
-    info.append(f"OS: {platform.system()} {platform.release()}")
-    info.append(f"Python: {platform.python_version()}")
-    try:
-        info.append(f"CPU: {platform.processor()[:40]}")
-    except Exception:
-        pass
-    return " | ".join(info)
-
 def print_header():
     clear_console()
-    logo = [
+    logo_lines = [
         r"  ______         _     _ _ _    _       _      ",
         r" |___  /        | |   | (_) |  | |     | |     ",
         r"    / /  ___  __| | __| |_| |__| |_   _| |__   ",
@@ -89,25 +81,26 @@ def print_header():
         r" /_____|\___|\__,_|\__,_|_|_|  |_|\__,_|_.__/  ",
     ]
 
+    box_w = 60
+    left_pad = (CONSOLE_WIDTH - box_w) // 2
+    pad = " " * left_pad
+
     print()
-    w = CONSOLE_WIDTH
-    print(ORANGE + center("+" + "=" * (w - 12) + "+", w) + RESET)
-    print(ORANGE + center("|" + " " * (w - 12) + "|", w) + RESET)
-    for line in logo:
-        padded = line.center(w - 12)
-        print(ORANGE + center("|", w // 2 - (w - 12) // 2) + GOLD + padded + ORANGE + "|" + RESET)
-    print(ORANGE + center("|" + " " * (w - 12) + "|", w) + RESET)
+    print(ORANGE + pad + "+" + "=" * (box_w - 2) + "+" + RESET)
+    print(ORANGE + pad + "|" + " " * (box_w - 2) + "|" + RESET)
+    for line in logo_lines:
+        inner = line.center(box_w - 2)
+        print(ORANGE + pad + "|" + GOLD + inner + ORANGE + "|" + RESET)
+    print(ORANGE + pad + "|" + " " * (box_w - 2) + "|" + RESET)
 
-    tag_line = f"TOOLS LAUNCHER {VERSION}"
-    pad_tag = (w - 12 - len(tag_line)) // 2
-    print(ORANGE + center("|" + " " * pad_tag + WHITE + BOLD + tag_line + RESET + ORANGE + " " * (w - 12 - pad_tag - len(tag_line)) + "|", w) + RESET)
+    tag = f"TOOLS LAUNCHER {VERSION}"
+    tag_inner = tag.center(box_w - 2)
+    print(ORANGE + pad + "|" + WHITE + BOLD + tag_inner + RESET + ORANGE + "|" + RESET)
 
-    print(ORANGE + center("|" + " " * (w - 12) + "|", w) + RESET)
-    print(ORANGE + center("+" + "=" * (w - 12) + "+", w) + RESET)
+    print(ORANGE + pad + "|" + " " * (box_w - 2) + "|" + RESET)
+    print(ORANGE + pad + "+" + "=" * (box_w - 2) + "+" + RESET)
 
     print(CYAN + center("https://zeddihub.eu  |  Made by ZeddiS  |  dsc.gg/zeddihub") + RESET)
-    sys_info = get_system_info()
-    print(DIM + GRAY + center(sys_info) + RESET)
     print()
 
 def read_key():
@@ -149,22 +142,61 @@ def draw_tool_status():
             statuses.append(f"{RED}[--]{RESET} {name}")
     print(GRAY + center("   ".join(statuses)) + RESET)
 
+def reset_all_settings():
+    """Reset all module configs to factory defaults."""
+    configs = [
+        os.path.join(current_dir, "zeddihub_rust_editor", "editor_config.json"),
+        os.path.join(current_dir, "zeddihub_csgo_tools", "csgo_config.json"),
+        os.path.join(current_dir, "zeddihub_cs2_tools", "cs2_config.json"),
+        os.path.join(current_dir, "zeddihub_translator", "config.json"),
+        os.path.join(current_dir, "zeddihub_server_status", "status_config.json"),
+    ]
+    count = 0
+    for cfg in configs:
+        if os.path.exists(cfg):
+            os.remove(cfg)
+            count += 1
+    print_header()
+    if count > 0:
+        print("\n" * 4 + GREEN + center(f"Smazáno {count} konfiguračních souborů.") + RESET)
+        print(WHITE + center("Všechny moduly byly resetovány do továrního nastavení.") + RESET)
+    else:
+        print("\n" * 4 + YELLOW + center("Žádné konfigurační soubory nebyly nalezeny.") + RESET)
+    time.sleep(2)
+
 def credits_menu():
     import webbrowser
     sel = 0
-    opts = ["Web (zeddihub.eu)", "ZeddiS (zeddis.xyz)", "Discord (dsc.gg/zeddihub)"]
-    icons = ["WEB", "DEV", "COM"]
+    opts = [
+        "🌐 Web (zeddihub.eu)",
+        "📖 ZeddiWiki (wiki.zeddihub.eu)",
+        "👨‍💻 ZeddiS (zeddis.xyz)",
+        "🐙 GitHub (github.com/ZeddiS)",
+        "💬 Discord (dsc.gg/zeddihub)",
+        f"✨ Verze: {VERSION}"
+    ]
+    descs = [
+        "Oficiální web ZeddiHub komunity.",
+        "Wiki s návody a dokumentací.",
+        "Portfolio a kontakt na autora.",
+        "Repozitáře a open-source projekty.",
+        "Komunitní Discord server.",
+        ""
+    ]
     while True:
         print_header()
         print(YELLOW + center("CREDITS A ODKAZY") + RESET)
         draw_separator("-", CYAN)
         print()
         for i in range(len(opts)):
-            icon = f"[{icons[i]}]"
             if i == sel:
-                print(GREEN + center(f"  >>  {icon} {opts[i]}  <<  ") + RESET)
+                print(GREEN + center(f"  >>  {opts[i]}  <<  ") + RESET)
+                if descs[i]:
+                    print(WHITE + center(descs[i]) + RESET)
             else:
-                print(CYAN + center(f"      {icon} {opts[i]}      ") + RESET)
+                print(CYAN + center(f"      {opts[i]}      ") + RESET)
+                if descs[i]:
+                    print(DIM + GRAY + center(descs[i]) + RESET)
             print()
         draw_separator()
         print(YELLOW + center("[W/S] Pohyb | [D/Enter] Otevřít | [A/Esc] Zpět") + RESET)
@@ -174,30 +206,47 @@ def credits_menu():
         elif k == 's' and sel < len(opts)-1: sel += 1
         elif k in ['d', 'enter', 'space']:
             if sel == 0: webbrowser.open("https://zeddihub.eu")
-            elif sel == 1: webbrowser.open("https://zeddis.xyz")
-            elif sel == 2: webbrowser.open("https://dsc.gg/zeddihub")
+            elif sel == 1: webbrowser.open("https://wiki.zeddihub.eu")
+            elif sel == 2: webbrowser.open("https://zeddis.xyz")
+            elif sel == 3: webbrowser.open("https://github.com/ZeddiS")
+            elif sel == 4: webbrowser.open("https://dsc.gg/zeddihub")
+
+def launch_module(name, import_func):
+    try:
+        mod = import_func()
+        mod()
+        setup_console()
+    except Exception:
+        print_header()
+        print("\n" * 2 + RED + center(f"CHYBA: Nelze načíst {name}!") + RESET + "\n")
+        for line in traceback.format_exc().splitlines():
+            print(center(line[:100]))
+        print("\n" + YELLOW + center("[Stiskněte libovolnou klávesu pro návrat]") + RESET)
+        read_key()
 
 def main():
     setup_console()
     sel = 0
     opts = [
-        "Spustit ZeddiHub Rust Editor",
-        "Spustit ZeddiHub CS:GO Tools",
-        "Spustit ZeddiHub CS2 Tools",
-        "Spustit ZeddiHub Translator",
-        "Spustit ZeddiHub Server Status",
-        "Credits a Odkazy"
+        "🔧 Spustit ZeddiHub Rust Editor",
+        "🎯 Spustit ZeddiHub CS:GO Tools",
+        "🎮 Spustit ZeddiHub CS2 Tools",
+        "🌍 Spustit ZeddiHub Translator",
+        "📡 Spustit ZeddiHub Server Status",
+        "⚙️ Resetovat všechna nastavení",
+        "🌟 Credits a Odkazy"
     ]
-    icons = ["RUST", "CSGO", "CS2 ", "LANG", "STAT", "INFO"]
+    icons = ["RUST", "CSGO", "CS2 ", "LANG", "STAT", "RSET", "INFO"]
     descs = [
         "Nástroje pro opravy, kompilace a úpravy Rust pluginů.",
         "Editor databází a generátory configů pro CS:GO servery.",
         "Crosshair, Viewmodel, Autoexec, Server.cfg pro Counter-Strike 2.",
         "Komplexní nástroj pro hromadný překlad souborů.",
         "Monitoring stavu herních serverů v reálném čase.",
-        "Odkazy na naši komunitu a web."
+        "Smaže všechny konfigurace a obnoví tovární nastavení.",
+        "Odkazy na komunitu, wiki a kontakty."
     ]
-    colors = [ORANGE, CYAN, MAGENTA, GREEN, YELLOW, GRAY]
+    colors = [ORANGE, CYAN, MAGENTA, GREEN, YELLOW, RED, GRAY]
 
     while True:
         print_header()
@@ -231,66 +280,33 @@ def main():
         elif k == 's' and sel < len(opts)-1: sel += 1
         elif k in ['d', 'enter', 'space']:
             if sel == 0:
-                try:
-                    from zeddihub_rust_editor.main import start_editor
-                    start_editor()
-                    setup_console()
-                except Exception:
-                    print_header()
-                    print("\n" * 2 + RED + center("CHYBA: Nelze načíst Rust Editor!") + RESET + "\n")
-                    for line in traceback.format_exc().splitlines():
-                        print(center(line[:100]))
-                    print("\n" + YELLOW + center("[Stiskněte libovolnou klávesu pro návrat]") + RESET)
-                    read_key()
+                def imp():
+                    from zeddihub_rust_editor.menus import start_editor
+                    return start_editor
+                launch_module("Rust Editor", imp)
             elif sel == 1:
-                try:
-                    from zeddihub_csgo_tools.main import start_csgo_tools
-                    start_csgo_tools()
-                    setup_console()
-                except Exception:
-                    print_header()
-                    print("\n" * 2 + RED + center("CHYBA: Nelze načíst CS:GO Tools!") + RESET + "\n")
-                    for line in traceback.format_exc().splitlines():
-                        print(center(line[:100]))
-                    print("\n" + YELLOW + center("[Stiskněte libovolnou klávesu pro návrat]") + RESET)
-                    read_key()
+                def imp():
+                    from zeddihub_csgo_tools.menus import start_editor
+                    return start_editor
+                launch_module("CS:GO Tools", imp)
             elif sel == 2:
-                try:
-                    from zeddihub_cs2_tools.main import start_cs2_tools
-                    start_cs2_tools()
-                    setup_console()
-                except Exception:
-                    print_header()
-                    print("\n" * 2 + RED + center("CHYBA: Nelze načíst CS2 Tools!") + RESET + "\n")
-                    for line in traceback.format_exc().splitlines():
-                        print(center(line[:100]))
-                    print("\n" + YELLOW + center("[Stiskněte libovolnou klávesu pro návrat]") + RESET)
-                    read_key()
+                def imp():
+                    from zeddihub_cs2_tools.menus import start_editor
+                    return start_editor
+                launch_module("CS2 Tools", imp)
             elif sel == 3:
-                try:
+                def imp():
                     from zeddihub_translator.main import start_translator
-                    start_translator()
-                    setup_console()
-                except Exception:
-                    print_header()
-                    print("\n" * 2 + RED + center("CHYBA: Nelze načíst Translator!") + RESET + "\n")
-                    for line in traceback.format_exc().splitlines():
-                        print(center(line[:100]))
-                    print("\n" + YELLOW + center("[Stiskněte libovolnou klávesu pro návrat]") + RESET)
-                    read_key()
+                    return start_translator
+                launch_module("Translator", imp)
             elif sel == 4:
-                try:
+                def imp():
                     from zeddihub_server_status.main import start_server_status
-                    start_server_status()
-                    setup_console()
-                except Exception:
-                    print_header()
-                    print("\n" * 2 + RED + center("CHYBA: Nelze načíst Server Status!") + RESET + "\n")
-                    for line in traceback.format_exc().splitlines():
-                        print(center(line[:100]))
-                    print("\n" + YELLOW + center("[Stiskněte libovolnou klávesu pro návrat]") + RESET)
-                    read_key()
+                    return start_server_status
+                launch_module("Server Status", imp)
             elif sel == 5:
+                reset_all_settings()
+            elif sel == 6:
                 credits_menu()
 
 if __name__ == "__main__":

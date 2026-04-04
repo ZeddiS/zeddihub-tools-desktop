@@ -14,9 +14,9 @@ import threading
 import queue
 from .langs import L
 
-VERSION = "v1.9.0 Ultimate Setup"
-CONSOLE_WIDTH = 100
-CONSOLE_HEIGHT = 45 
+VERSION = "v3.0.0"
+CONSOLE_WIDTH = 110
+CONSOLE_HEIGHT = 48
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 COMPILER_DIR = os.path.join(SCRIPT_DIR, "compiler_refs")

@@ -296,17 +296,25 @@ def credits_menu():
     import webbrowser
     sel = 0
     while True:
-        opts = ["Web (zeddihub.eu)", "ZeddiS (zeddis.xyz)", "Discord (dsc.gg/zeddihub)",
-                f"Verze Aplikace: {VERSION}"]
-        render_menu(t("m_credits"), opts, sel)
+        opts = [
+            "🌐 Web (zeddihub.eu)",
+            "📖 ZeddiWiki (wiki.zeddihub.eu)",
+            "👨‍💻 ZeddiS (zeddis.xyz)",
+            "🐙 GitHub (github.com/ZeddiS)",
+            "💬 Discord (dsc.gg/zeddihub)",
+            f"✨ Verze: {VERSION}"
+        ]
+        render_menu("🌟 " + t("m_credits"), opts, sel)
         k = read_key()
         if k in ['a', 'esc', 'q']: return
         elif k == 'w' and sel > 0: sel -= 1
         elif k == 's' and sel < len(opts) - 1: sel += 1
         elif k in ['d', 'enter', 'space']:
             if sel == 0: webbrowser.open("https://zeddihub.eu")
-            elif sel == 1: webbrowser.open("https://zeddis.xyz")
-            elif sel == 2: webbrowser.open("https://dsc.gg/zeddihub")
+            elif sel == 1: webbrowser.open("https://wiki.zeddihub.eu")
+            elif sel == 2: webbrowser.open("https://zeddis.xyz")
+            elif sel == 3: webbrowser.open("https://github.com/ZeddiS")
+            elif sel == 4: webbrowser.open("https://dsc.gg/zeddihub")
 
 
 def start_editor():

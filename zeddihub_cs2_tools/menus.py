@@ -11,11 +11,11 @@ def player_tools_menu():
     sel = 0
     while True:
         opts = [
-            "Crosshair Generátor (ASCII náhled)",
-            "Viewmodel Generátor",
-            "Autoexec Config Generátor",
-            "Practice Config Generátor",
-            "Buy Binds Generátor"
+            "🎯 Crosshair Generátor",
+            "🔫 Viewmodel Generátor",
+            "📝 Autoexec Config Generátor",
+            "🎮 Practice Config Generátor",
+            "🛒 Buy Binds Generátor"
         ]
         descs = [
             "Vygeneruje crosshair se živým náhledem přímo v konzoli.",
@@ -24,7 +24,7 @@ def player_tools_menu():
             "Vygeneruje practice config s granáty a nekonečnou municí.",
             "Vygeneruje buy bindy na numpad pro rychlý nákup."
         ]
-        render_menu("CS2 HRÁČSKÉ NÁSTROJE", opts, sel, descs)
+        render_menu("👤 CS2 HRÁČSKÉ NÁSTROJE", opts, sel, descs)
         k = read_key()
         if k in ['a', 'esc', 'q']: return
         elif k == 'w' and sel > 0: sel -= 1
@@ -41,10 +41,10 @@ def server_tools_menu():
     sel = 0
     while True:
         opts = [
-            "Server.cfg Generátor",
-            "Gamemode Presety",
-            "Map Group Editor",
-            "RCON Klient"
+            "📋 Server.cfg Generátor",
+            "🎮 Gamemode Presety",
+            "🗺️ Map Group Editor",
+            "🖥️ RCON Klient"
         ]
         descs = [
             "Vygeneruje kompletní server.cfg s rozumnými výchozími hodnotami.",
@@ -52,7 +52,7 @@ def server_tools_menu():
             "Vytvořte a spravujte skupiny map (Active Duty, Custom...).",
             "Připojte se k serveru přes RCON a posílejte příkazy vzdáleně."
         ]
-        render_menu("CS2 SERVEROVÉ NÁSTROJE", opts, sel, descs)
+        render_menu("🖥️ CS2 SERVEROVÉ NÁSTROJE", opts, sel, descs)
         k = read_key()
         if k in ['a', 'esc', 'q']: return
         elif k == 'w' and sel > 0: sel -= 1
@@ -117,17 +117,25 @@ def credits_menu():
     import webbrowser
     sel = 0
     while True:
-        opts = ["Web (zeddihub.eu)", "ZeddiS (zeddis.xyz)", "Discord (dsc.gg/zeddihub)",
-                f"Verze Aplikace: {VERSION}"]
-        render_menu(t("m_credits"), opts, sel)
+        opts = [
+            "🌐 Web (zeddihub.eu)",
+            "📖 ZeddiWiki (wiki.zeddihub.eu)",
+            "👨‍💻 ZeddiS (zeddis.xyz)",
+            "🐙 GitHub (github.com/ZeddiS)",
+            "💬 Discord (dsc.gg/zeddihub)",
+            f"✨ Verze: {VERSION}"
+        ]
+        render_menu("🌟 " + t("m_credits"), opts, sel)
         k = read_key()
         if k in ['a', 'esc', 'q']: return
         elif k == 'w' and sel > 0: sel -= 1
         elif k == 's' and sel < len(opts) - 1: sel += 1
         elif k in ['d', 'enter', 'space']:
             if sel == 0: webbrowser.open("https://zeddihub.eu")
-            elif sel == 1: webbrowser.open("https://zeddis.xyz")
-            elif sel == 2: webbrowser.open("https://dsc.gg/zeddihub")
+            elif sel == 1: webbrowser.open("https://wiki.zeddihub.eu")
+            elif sel == 2: webbrowser.open("https://zeddis.xyz")
+            elif sel == 3: webbrowser.open("https://github.com/ZeddiS")
+            elif sel == 4: webbrowser.open("https://dsc.gg/zeddihub")
 
 
 def start_editor():
@@ -146,10 +154,10 @@ def start_editor():
     while True:
         try:
             opts = [
-                f"{t('m_player')}",
-                f"{t('m_server')}",
-                f"{t('m_settings')}",
-                f"{t('m_credits')}"
+                f"👤 {t('m_player')}",
+                f"🖥️ {t('m_server')}",
+                f"⚙️ {t('m_settings')}",
+                f"🌟 {t('m_credits')}"
             ]
             descs = [t('d_player'), t('d_server'), t('d_settings'), t('d_credits')]
             render_menu(t("main_menu"), opts, sel, descs, centered=True)

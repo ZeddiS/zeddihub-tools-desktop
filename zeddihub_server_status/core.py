@@ -12,7 +12,7 @@ try:
 except ImportError:
     pass
 
-VERSION = "v1.0.0 Server Status"
+VERSION = "v3.0.0"
 CONSOLE_WIDTH = 110
 CONSOLE_HEIGHT = 48
 

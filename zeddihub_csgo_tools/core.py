@@ -15,9 +15,9 @@ try:
 except ImportError:
     pass
 
-VERSION = "v3.2.0 CS:GO Ultimate"
-CONSOLE_WIDTH = 100
-CONSOLE_HEIGHT = 45 
+VERSION = "v3.0.0"
+CONSOLE_WIDTH = 110
+CONSOLE_HEIGHT = 48
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "csgo_config.json")
