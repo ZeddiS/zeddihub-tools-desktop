@@ -19,7 +19,11 @@ VERSION = "v3.0.0"
 CONSOLE_WIDTH = 110
 CONSOLE_HEIGHT = 48
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Frozen (PyInstaller) support: user data next to exe
+if getattr(sys, 'frozen', False):
+    SCRIPT_DIR = os.path.join(os.path.dirname(sys.executable), "data", "zeddihub_cs2_tools")
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "cs2_config.json")
 os.makedirs(SCRIPT_DIR, exist_ok=True)
 

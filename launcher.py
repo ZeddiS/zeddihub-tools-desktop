@@ -144,12 +144,17 @@ def draw_tool_status():
 
 def reset_all_settings():
     """Reset all module configs to factory defaults."""
+    # When frozen, configs live in <exe_dir>/data/<module>/
+    if getattr(sys, 'frozen', False):
+        data_root = os.path.join(os.path.dirname(sys.executable), "data")
+    else:
+        data_root = current_dir
     configs = [
-        os.path.join(current_dir, "zeddihub_rust_editor", "editor_config.json"),
-        os.path.join(current_dir, "zeddihub_csgo_tools", "csgo_config.json"),
-        os.path.join(current_dir, "zeddihub_cs2_tools", "cs2_config.json"),
-        os.path.join(current_dir, "zeddihub_translator", "config.json"),
-        os.path.join(current_dir, "zeddihub_server_status", "status_config.json"),
+        os.path.join(data_root, "zeddihub_rust_editor", "editor_config.json"),
+        os.path.join(data_root, "zeddihub_csgo_tools", "csgo_config.json"),
+        os.path.join(data_root, "zeddihub_cs2_tools", "cs2_config.json"),
+        os.path.join(data_root, "zeddihub_translator", "config.json"),
+        os.path.join(data_root, "zeddihub_server_status", "status_config.json"),
     ]
     count = 0
     for cfg in configs:

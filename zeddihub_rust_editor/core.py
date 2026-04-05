@@ -18,12 +18,25 @@ VERSION = "v3.0.0"
 CONSOLE_WIDTH = 110
 CONSOLE_HEIGHT = 48
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-COMPILER_DIR = os.path.join(SCRIPT_DIR, "compiler_refs")
+# Frozen (PyInstaller) support: bundled read-only data from _MEIPASS, user data next to exe
+if getattr(sys, 'frozen', False):
+    BUNDLE_DIR = os.path.join(sys._MEIPASS, "zeddihub_rust_editor")
+    SCRIPT_DIR = os.path.join(os.path.dirname(sys.executable), "data", "zeddihub_rust_editor")
+    os.makedirs(SCRIPT_DIR, exist_ok=True)
+    # Copy compiler_refs from bundle to user dir on first run (one-time setup)
+    COMPILER_DIR = os.path.join(SCRIPT_DIR, "compiler_refs")
+    _bundle_refs = os.path.join(BUNDLE_DIR, "compiler_refs")
+    if not os.path.isdir(COMPILER_DIR) and os.path.isdir(_bundle_refs):
+        shutil.copytree(_bundle_refs, COMPILER_DIR)
+else:
+    BUNDLE_DIR = os.path.dirname(os.path.abspath(__file__))
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    COMPILER_DIR = os.path.join(SCRIPT_DIR, "compiler_refs")
+    os.makedirs(COMPILER_DIR, exist_ok=True)
+
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "editor_config.json")
 
 os.makedirs(SCRIPT_DIR, exist_ok=True)
-os.makedirs(COMPILER_DIR, exist_ok=True)
 
 ORANGE, CYAN, GREEN, YELLOW, RED, GRAY, RESET = '\033[38;5;208m', '\033[38;5;51m', '\033[38;5;46m', '\033[38;5;226m', '\033[38;5;196m', '\033[90m', '\033[0m'
 BOLD = '\033[1m'

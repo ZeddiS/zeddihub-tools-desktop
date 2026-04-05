@@ -30,6 +30,11 @@ build/
 # Claude Code
 .claude/
 
+# PyInstaller build artifacts
+build/
+dist/
+*.exe
+
 # OS
 Thumbs.db
 Desktop.ini

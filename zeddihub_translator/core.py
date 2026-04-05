@@ -29,7 +29,12 @@ from .langs import L, SUPPORTED_LANGS
 VERSION = "v3.0.0"
 CONSOLE_WIDTH = 110
 CONSOLE_HEIGHT = 48
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Frozen (PyInstaller) support: user data next to exe
+if getattr(sys, 'frozen', False):
+    SCRIPT_DIR = os.path.join(os.path.dirname(sys.executable), "data", "zeddihub_translator")
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(SCRIPT_DIR, exist_ok=True)
 ZH_DIR = SCRIPT_DIR
 CONFIG_PATH = os.path.join(ZH_DIR, "config.json")
 
