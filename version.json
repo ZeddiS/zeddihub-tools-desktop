@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "release_date": "2026-04-10",
+  "changelog": "Kompletní přepis aplikace na moderní GUI (customtkinter).\nPřidány: splash screen, per-game témata, keybind generátor s vizuální klávesnicí,\nautentizační systém pro Server Tools, auto-update, server status panel,\nTranslator toolkit s GUI, DNS správa, links panel (ZeddiS-Client).\nVšechny nástroje CS2, CS:GO, Rust portovány do GUI.",
+  "mandatory": false,
+  "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
+}
