@@ -1,0 +1,13 @@
+dist/
+build/
+*.spec
+__pycache__/
+*.pyc
+*.pyo
+.vscode/
+.idea/
+assets/banner.png
+assets/logo.png
+data/
+*.enc
+Thumbs.db

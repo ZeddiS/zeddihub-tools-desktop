@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "release_date": "2026-04-10",
+  "changelog": "Verze 1.0.0 - První vydání GUI aplikace.",
+  "mandatory": false,
+  "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest/download/ZeddiHubTools_latest.exe"
+}

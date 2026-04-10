@@ -1,0 +1,29 @@
+[
+  {
+    "name": "ZeddiHub Rust #1",
+    "ip": "rust1.zeddihub.eu",
+    "port": 28015,
+    "game": "rust",
+    "status": "online",
+    "max_players": 100,
+    "players": 0
+  },
+  {
+    "name": "ZeddiHub CS2 #1",
+    "ip": "cs2.zeddihub.eu",
+    "port": 27015,
+    "game": "cs2",
+    "status": "online",
+    "max_players": 32,
+    "players": 0
+  },
+  {
+    "name": "ZeddiHub CS:GO #1",
+    "ip": "csgo.zeddihub.eu",
+    "port": 27015,
+    "game": "csgo",
+    "status": "online",
+    "max_players": 32,
+    "players": 0
+  }
+]
