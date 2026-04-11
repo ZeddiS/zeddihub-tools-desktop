@@ -162,16 +162,16 @@ Requires PHP 7.4+ and write permissions on the `data/` directory.
 
 ---
 
-## Cesky
+## Česky
 
-### Rychly zacatek
+### Rychlý začátek
 
-1. Stahni **`ZeddiHub.Tools.exe`** ze [stranky Releases](https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest)
-2. Spust — zadna instalace, zadny Python
-3. Pri prvnim spusteni zvol jazyk a slozku pro data aplikace
+1. Stáhni **`ZeddiHub.Tools.exe`** ze [stránky Releases](https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest)
+2. Spusť — žádná instalace, žádný Python
+3. Při prvním spuštění zvol jazyk a složku pro data aplikace
 4. Hotovo
 
-> **Windows SmartScreen** muze zobrazit upozorneni pri prvnim spusteni — klikni na **"Dalsi informace"** a pak **"Presto spustit"**.
+> **Windows SmartScreen** může zobrazit upozornění při prvním spuštění — klikni na **"Další informace"** a pak **"Přesto spustit"**.
 
 ### Funkce
 
@@ -181,7 +181,7 @@ Requires PHP 7.4+ and write permissions on the `data/` directory.
 - **Systémová lišta** — aplikace běží na pozadí, přístup přes pravý klik na ikonu
 - **Automatické aktualizace** — stažení a instalace přímo v aplikaci
 
-### Systemove pozadavky
+### Systémové požadavky
 
 - Windows 10 nebo 11 (64-bit)
 - Připojení k internetu

@@ -8,17 +8,23 @@
  * Data soubory musí být v /data/ (o úroveň výše od /admin/)
  */
 
-// Session security — works with both mod_php and FastCGI/php-fpm
-ini_set('session.cookie_httponly', '1');
-ini_set('session.cookie_samesite', 'Strict');
+// ── Session — works with mod_php AND FastCGI/php-fpm ─────────────────────────
+$_session_opts = [
+    'cookie_httponly' => true,
+    'cookie_samesite' => 'Strict',
+];
 if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
-    ini_set('session.cookie_secure', '1');
+    $_session_opts['cookie_secure'] = true;
 }
-
-session_start();
+session_start($_session_opts);
 
 // ── Configuration ────────────────────────────────────────────────────────────
-define('DATA_DIR',    realpath(__DIR__ . '/../data') . '/');
+// Resolve data directory robustly — realpath() returns false if dir doesn't exist yet
+$_data_path = realpath(__DIR__ . '/../data');
+if ($_data_path === false) {
+    $_data_path = dirname(__DIR__) . '/data';
+}
+define('DATA_DIR', rtrim($_data_path, '/\\') . '/');
 define('APP_TITLE',  'ZeddiHub Admin');
 define('APP_VERSION','1.3.0');
 
@@ -27,6 +33,30 @@ define('FILE_RECOMMENDED', DATA_DIR . 'recommended.json');
 define('FILE_TRAY',        DATA_DIR . 'tray_tools.json');
 define('FILE_SERVERS',     DATA_DIR . 'servers.json');
 define('FILE_VERSION',     DATA_DIR . 'version.json');
+
+// ── Startup check ─────────────────────────────────────────────────────────────
+if (!is_dir(DATA_DIR)) {
+    http_response_code(503);
+    echo '<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
+<title>Setup chyba – ZeddiHub Admin</title>
+<style>body{font-family:Segoe UI,sans-serif;background:#0c0c0c;color:#e8e8e8;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+.box{background:#1a1a1a;border:1px solid #f0a500;border-radius:10px;padding:32px 40px;max-width:520px;}
+h2{color:#f0a500;margin-bottom:12px}code{background:#222;padding:2px 6px;border-radius:4px;font-size:13px}
+</style></head><body><div class="box">
+<h2>&#9888; Složka <code>data/</code> nenalezena</h2>
+<p>Admin panel očekává složku <code>data/</code> o úroveň výše než složka <code>admin/</code>.</p>
+<p style="margin-top:12px;color:#888;font-size:13px">
+Struktura na serveru musí být:<br><br>
+<code>admin/index.php</code><br>
+<code>data/auth.json</code><br>
+<code>data/servers.json</code> atd.
+</p>
+<p style="margin-top:16px;color:#888;font-size:13px">
+Aktuální cesta hledaná pro data: <code>' . htmlspecialchars(DATA_DIR) . '</code>
+</p>
+</div></body></html>';
+    exit;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
