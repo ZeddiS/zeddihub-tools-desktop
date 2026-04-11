@@ -12,3 +12,5 @@ data/
 *.enc
 Thumbs.db
 webhosting_files/
+.claude/
+assets/web_favicon.ico

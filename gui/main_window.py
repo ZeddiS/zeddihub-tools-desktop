@@ -19,7 +19,7 @@ except ImportError:
 
 from .themes import get_theme, GAME_THEMES
 from .auth import is_authenticated, load_credentials, verify_access, save_credentials, clear_credentials, logout, get_current_user
-from .updater import check_for_update, CURRENT_VERSION
+from .updater import check_for_update, download_update, apply_update, open_release_page, CURRENT_VERSION
 from .locale import t, get_lang, set_lang, init as locale_init, load_settings, save_settings
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
@@ -733,34 +733,132 @@ class MainWindow(ctk.CTk):
             self._update_label.bind("<Button-1>", lambda _: self._show_update_dialog(result))
 
     def _show_update_dialog(self, update_info: dict):
+        """Update download wizard — Step 1: info, Step 2: downloading, Step 3: done."""
         th = get_theme(self._current_game)
         d = ctk.CTkToplevel(self)
         d.title(t("update_available"))
-        d.geometry("460x280")
+        d.geometry("480x340")
         d.configure(fg_color=th["content_bg"])
         d.grab_set()
+        d.resizable(False, False)
 
-        ctk.CTkLabel(d, text=f"⬆ {t('update_available')}: v{update_info['latest']}",
-                     font=ctk.CTkFont("Segoe UI", 16, "bold"),
-                     text_color="#fb923c").pack(pady=(20, 4), padx=24, anchor="w")
-        ctk.CTkLabel(d, text=f"Aktuální verze: v{CURRENT_VERSION}",
-                     font=ctk.CTkFont("Segoe UI", 11), text_color=th["text_dim"]
-                     ).pack(padx=24, anchor="w")
+        latest = update_info.get("latest", "?")
+        changelog = update_info.get("changelog", "")
+        download_url = update_info.get("download_url", "")
 
-        btn_row = ctk.CTkFrame(d, fg_color="transparent")
-        btn_row.pack(fill="x", padx=24, pady=20)
+        # ── Step 1: info ──────────────────────────────────────────────────────
+        frame1 = ctk.CTkFrame(d, fg_color="transparent")
+        frame2 = ctk.CTkFrame(d, fg_color="transparent")
+        frame3 = ctk.CTkFrame(d, fg_color="transparent")
 
-        ctk.CTkButton(btn_row, text="📥 " + t("download") + " / GitHub",
+        def _show(f):
+            for ff in (frame1, frame2, frame3):
+                ff.pack_forget()
+            f.pack(fill="both", expand=True, padx=24, pady=16)
+
+        # Frame 1 — Info
+        ctk.CTkLabel(frame1, text=f"⬆ Nová verze: v{latest}",
+                     font=ctk.CTkFont("Segoe UI", 17, "bold"),
+                     text_color="#fb923c").pack(anchor="w", pady=(0, 2))
+        ctk.CTkLabel(frame1, text=f"Aktuální verze: v{CURRENT_VERSION}",
+                     font=ctk.CTkFont("Segoe UI", 11),
+                     text_color=th["text_dim"]).pack(anchor="w", pady=(0, 12))
+
+        if changelog:
+            notes_box = ctk.CTkTextbox(frame1, height=110, fg_color=th["card_bg"],
+                                       text_color=th["text_dim"],
+                                       font=ctk.CTkFont("Segoe UI", 10))
+            notes_box.pack(fill="x", pady=(0, 14))
+            notes_box.insert("end", changelog[:800])
+            notes_box.configure(state="disabled")
+
+        btn_row1 = ctk.CTkFrame(frame1, fg_color="transparent")
+        btn_row1.pack(fill="x")
+
+        ctk.CTkButton(btn_row1, text="📥 Stáhnout a nainstalovat",
                       fg_color="#fb923c", hover_color="#e07b20",
                       font=ctk.CTkFont("Segoe UI", 12, "bold"), height=40,
-                      command=lambda: (webbrowser.open(
-                          "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"),
-                          d.destroy())
+                      command=lambda: _start_download()
                       ).pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-        ctk.CTkButton(btn_row, text=t("later"),
+        ctk.CTkButton(btn_row1, text=t("later"),
                       fg_color=th["secondary"], height=40,
                       command=d.destroy).pack(side="left", width=100)
+
+        # Frame 2 — Downloading
+        ctk.CTkLabel(frame2, text="📥 Stahuji aktualizaci...",
+                     font=ctk.CTkFont("Segoe UI", 15, "bold"),
+                     text_color="#fb923c").pack(anchor="w", pady=(0, 8))
+        _dl_status = ctk.CTkLabel(frame2, text="Připravuji stahování...",
+                                   font=ctk.CTkFont("Segoe UI", 10),
+                                   text_color=th["text_dim"])
+        _dl_status.pack(anchor="w", pady=(0, 12))
+        _progress_bar = ctk.CTkProgressBar(frame2, height=14,
+                                            progress_color="#fb923c")
+        _progress_bar.pack(fill="x", pady=(0, 4))
+        _progress_bar.set(0)
+        _pct_label = ctk.CTkLabel(frame2, text="0 %",
+                                   font=ctk.CTkFont("Segoe UI", 10),
+                                   text_color=th["text_dim"])
+        _pct_label.pack(anchor="e")
+
+        # Frame 3 — Done
+        ctk.CTkLabel(frame3, text="✓ Aktualizace stažena!",
+                     font=ctk.CTkFont("Segoe UI", 17, "bold"),
+                     text_color="#22c55e").pack(anchor="w", pady=(0, 8))
+        ctk.CTkLabel(frame3,
+                     text=f"Verze v{latest} je připravena.\n"
+                          "Po kliknutí na 'Restartovat' se aplikace zavře\n"
+                          "a automaticky nahradí sebe novou verzí.",
+                     font=ctk.CTkFont("Segoe UI", 11),
+                     text_color=th["text_dim"], justify="left").pack(anchor="w", pady=(0, 20))
+
+        _new_exe_path = [None]
+
+        def _restart():
+            if _new_exe_path[0]:
+                apply_update(_new_exe_path[0])
+            d.destroy()
+            self.destroy()
+
+        ctk.CTkButton(frame3, text="🔄 Restartovat a nainstalovat",
+                      fg_color="#22c55e", hover_color="#16a34a",
+                      font=ctk.CTkFont("Segoe UI", 13, "bold"), height=44,
+                      command=_restart).pack(fill="x")
+
+        # ── Download logic ────────────────────────────────────────────────────
+        def _start_download():
+            if not download_url or download_url.startswith("https://github.com") and download_url.endswith("/latest"):
+                # No direct asset URL — open GitHub page
+                open_release_page()
+                d.destroy()
+                return
+            _show(frame2)
+
+            def _on_progress(pct: float):
+                d.after(0, _progress_bar.set, pct)
+                d.after(0, _pct_label.configure, {"text": f"{int(pct * 100)} %"})
+                mb_done = ""
+                d.after(0, _dl_status.configure,
+                        {"text": f"Stahování: {int(pct * 100)} %"})
+
+            def _on_done(success: bool, path_or_error: str):
+                if success:
+                    _new_exe_path[0] = path_or_error
+                    d.after(0, _show, frame3)
+                else:
+                    d.after(0, _dl_status.configure,
+                            {"text": f"Chyba stahování: {path_or_error}"})
+                    d.after(0, _progress_bar.configure, {"progress_color": "#ef4444"})
+
+            download_update(
+                download_url,
+                version=latest,
+                progress_callback=lambda p: d.after(0, _on_progress, p),
+                done_callback=lambda s, v: d.after(0, _on_done, s, v),
+            )
+
+        _show(frame1)
 
 
 class _LogoutDialog(ctk.CTkToplevel):

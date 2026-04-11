@@ -21,29 +21,42 @@ import urllib.request
 import urllib.error
 
 # --- Config ---
-DATA_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ZeddiHub" / "Tools"
-CRED_FILE = DATA_DIR / "auth.enc"
-KEY_FILE = DATA_DIR / ".key"
-AUTH_API_URL = "https://files.zeddihub.eu/tools/auth.json"  # Update with your actual endpoint
+AUTH_API_URL = "https://files.zeddihub.eu/tools/auth.json"
 
 _cached_token: str | None = None
 _auth_verified: bool = False
 
 
+def _get_data_dir() -> Path:
+    from .config import get_data_dir
+    return get_data_dir()
+
+
+def _cred_file() -> Path:
+    return _get_data_dir() / "auth.enc"
+
+
+def _key_file() -> Path:
+    return _get_data_dir() / ".key"
+
+
 def _ensure_dir():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _get_data_dir().mkdir(parents=True, exist_ok=True)
 
 
 def _get_or_create_key() -> bytes:
     """Get or create machine-specific encryption key."""
     _ensure_dir()
-    if KEY_FILE.exists():
-        return KEY_FILE.read_bytes()
-    # Derive key from machine-specific info
+    kf = _key_file()
+    if kf.exists():
+        return kf.read_bytes()
     machine_id = _get_machine_id()
     key = base64.urlsafe_b64encode(hashlib.sha256(machine_id.encode()).digest())
-    KEY_FILE.write_bytes(key)
-    KEY_FILE.chmod(0o600)
+    kf.write_bytes(key)
+    try:
+        kf.chmod(0o600)
+    except Exception:
+        pass
     return key
 
 
@@ -67,19 +80,20 @@ def save_credentials(username: str, password: str, remember: bool = True):
         f = Fernet(key)
         data = json.dumps({"username": username, "password": password}).encode()
         encrypted = f.encrypt(data)
-        CRED_FILE.write_bytes(encrypted)
+        _cred_file().write_bytes(encrypted)
     except Exception:
         pass
 
 
-def load_credentials() -> tuple[str, str] | None:
+def load_credentials():
     """Load and decrypt saved credentials. Returns (username, password) or None."""
-    if not CRYPTO_OK or not CRED_FILE.exists():
+    cf = _cred_file()
+    if not CRYPTO_OK or not cf.exists():
         return None
     try:
         key = _get_or_create_key()
         f = Fernet(key)
-        data = f.decrypt(CRED_FILE.read_bytes())
+        data = f.decrypt(cf.read_bytes())
         creds = json.loads(data.decode())
         return creds.get("username", ""), creds.get("password", "")
     except Exception:
@@ -88,8 +102,9 @@ def load_credentials() -> tuple[str, str] | None:
 
 def clear_credentials():
     """Remove saved credentials."""
-    if CRED_FILE.exists():
-        CRED_FILE.unlink()
+    cf = _cred_file()
+    if cf.exists():
+        cf.unlink()
     global _cached_token, _auth_verified
     _cached_token = None
     _auth_verified = False
@@ -106,7 +121,7 @@ def verify_access(username: str, password: str, callback=None) -> bool:
         try:
             req = urllib.request.Request(
                 AUTH_API_URL,
-                headers={"User-Agent": "ZeddiHubTools/1.0.0"}
+                headers={"User-Agent": "ZeddiHubTools/1.2.0"}
             )
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())

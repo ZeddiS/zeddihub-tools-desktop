@@ -3,110 +3,96 @@
 </p>
 
 <p align="center">
-  <strong>Desktopová aplikace pro správu herních serverů a nastavení hráčů</strong><br>
-  <em>Desktop application for game server management and player configuration</em>
+  <strong>Nástroje pro správce herních serverů CS2, CS:GO a Rust</strong><br>
+  <em>Tools for CS2, CS:GO and Rust game server admins</em>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/verze-v1.1.0-orange?style=flat-square" alt="Version">
-  <img src="https://img.shields.io/badge/platform-Windows-lightgrey?style=flat-square&logo=windows" alt="Platform">
-  <img src="https://img.shields.io/badge/standalone-.exe-blue?style=flat-square" alt="Standalone">
+  <img src="https://img.shields.io/badge/verze-v1.2.0-orange?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey?style=flat-square&logo=windows" alt="Platform">
   <img src="https://img.shields.io/badge/jazyk-CZ%20%2F%20EN-green?style=flat-square" alt="Language">
-  <img src="https://img.shields.io/badge/Python-3.11+-yellow?style=flat-square&logo=python" alt="Python">
 </p>
 
 <p align="center">
-  <a href="https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"><strong>⬇ Stáhnout nejnovější verzi</strong></a>
+  <a href="https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest">
+    <strong>⬇ Stáhnout nejnovější verzi</strong>
+  </a>
 </p>
 
 ---
 
-## O aplikaci
+## Jak začít
 
-**ZeddiHub Tools** je kompletní sada nástrojů pro správce herních serverů a hráče. Aplikace je postavena na moderním dark GUI frameworku **customtkinter** s čistým minimalistickým designem, per-game barevnými tématy a plnohodnotnými nástroji pro CS2, CS:GO, Rust i správu PC.
+1. Stáhni **`ZeddiHub.Tools.exe`** ze [stránky Releases](https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest)
+2. Spusť — žádná instalace, žádný Python
+3. Při prvním spuštění zvol jazyk a složku pro data aplikace
+4. Hotovo
 
-Stačí spustit `.exe` — Python ani žádné instalace nejsou potřeba.
-
----
-
-## Stažení
-
-Ze [stránky Releases](https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest) stáhni:
-
-**`ZeddiHub.Tools.exe`** — přenosný single-file build, žádný instalátor (~22 MB)
-
-Dvojklik a spustit.
+> **Windows může zobrazit upozornění SmartScreen** při prvním spuštění — to je normální u nepodepsaných aplikací. Klikni na "Více informací" → "Přesto spustit".
 
 ---
 
-## Funkce
+## Co aplikace umí
 
-### 🎮 Herní nástroje (CS2 / CS:GO / Rust)
+### Herní nástroje (CS2 / CS:GO / Rust)
 
-| Modul | Popis |
-|-------|-------|
-| **Hráčské nástroje** | Crosshair generátor (živý náhled), Viewmodel, Autoexec editor, Practice config, Buy Binds |
-| **Serverové nástroje** | Server.cfg generátor, Gamemode presety, RCON klient, Map Group Editor |
-| **Rust Plugin Manager** | Hromadná oprava pluginů, analyzér závislostí, překladač zpráv |
-| **Keybind Generátor** | Vizuální klávesnice — přiřaď příkazy kliknutím na klávesu |
-| **Translator** | Hromadný překlad JSON/TXT/LANG souborů do 20+ jazyků |
+- **Crosshair generátor** — živý náhled, export kódu
+- **Viewmodel editor** — nastavení zbraní s náhledem
+- **Autoexec editor** — config soubor přímo v aplikaci
+- **Server.cfg generátor** — vytvoř config pro svůj server
+- **RCON klient** — vzdálená správa serveru
+- **Keybind generátor** — vizuální klávesnice, přiřaď příkazy klikem
+- **Buy Binds** — nákupní zkratky pro CS2/CS:GO
+- **Rust Plugin Manager** — hromadná oprava pluginů, analýza závislostí
+- **Translator** — překlad JSON/TXT/LANG souborů do 20+ jazyků
 
-### 💻 PC Nástroje
+### PC Nástroje
 
-| Funkce | Popis |
-|--------|-------|
-| Informace o PC | CPU, GPU, RAM, Disk, OS — veškeré systémové informace |
-| DNS flush | Vymaže DNS cache jedním klikem |
-| Temp cleanup | Skenuje a maže dočasné soubory |
-| Ping | Otestuj odezvu libovolného serveru nebo IP |
-| IP Info | Geolokace a informace o IP adrese |
-| Shutdown Timer | Naplánuj vypnutí PC za X minut |
+- Informace o systému (CPU, GPU, RAM, Disk)
+- DNS flush, čištění temp souborů
+- Ping tester, IP geolokace
+- Shutdown timer
 
-### 🏠 Hlavní stránka
+### Domovská stránka
 
-- **Status serverů** — živé dotazování přes Steam A2S_INFO (hráči, mapa, ping)
-- **Doporučené nástroje** — konfigurovatelné přes webhosting
-- Rychlé odkazy na Discord, Steam, ZeddiHub web
+- Live status herních serverů (Steam A2S query — hráči, mapa, ping)
+- Rychlé odkazy na Discord a web
 
-### 🔐 Přístupová kontrola
+### Přístupová kontrola
 
-- Server Tools jsou uzamčeny pro neautorizované uživatele
-- Šifrované ukládání přihlašovacích údajů (Fernet/AES)
-- Správa přístupu přes webhosting (auth.json)
-
-### ⚙ Nastavení & Jazyk
-
-- Přepínání jazyků: 🇨🇿 Česky / 🇬🇧 English (dialog při prvním spuštění)
-- Nastavení aplikace (jazyk, účet, o aplikaci)
-- Auto-update ze souboru version.json na webhosting
+Serverové nástroje jsou chráněné — přihlášení přes Discord / ZeddiS.xyz.
 
 ---
 
-## Co je nového ve v1.1.0
+## Aktualizace
 
-- **Kompletní redesign UI** — moderní černé téma, per-game accent barvy
-- **PC Nástroje** — systémové info, DNS, Temp, Ping, IP Info, Shutdown Timer
-- **Nastavení** — jazyk, přihlášení, o aplikaci
-- **Jazykový systém** — Čeština / Angličtina, dotaz při prvním spuštění
-- **Skutečný server status** — Steam A2S_INFO UDP query (hráči, mapa, ping)
-- **Doporučené nástroje** na domovské stránce
-- **Skládací sidebar** — sekce CS2 ▼ / CS:GO ▼ / Rust ▼ se rozklikávají
-- **Opraveno:** header game badge, status přihlášení, verze v titulku
+Aplikace automaticky zkontroluje novou verzi při každém spuštění.  
+Pokud je dostupná, nabídne stažení a instalaci přímo v aplikaci — bez potřeby otevírat prohlížeč.
 
 ---
 
-## Buildy z historie
+## Systémové požadavky
+
+- Windows 10 nebo 11 (64-bit)
+- Připojení k internetu (pro kontrolu serveru, autorizaci a aktualizace)
+
+---
+
+## Přehled verzí
 
 | Verze | Popis |
 |-------|-------|
-| **v1.1.0** | Redesign, PC Nástroje, jazyk CZ/EN, reálný server status |
+| **v1.2.0** | Auto-update wizard, výběr složky s daty, GitHub API update check, čistší repo |
+| v1.1.0 | Redesign UI, PC Nástroje, jazykový systém CZ/EN, reálný server status |
 | v1.0.0 | První customtkinter GUI, splash screen, auth systém |
 | v0.1.0 | První GUI pokus (tkinter frameless) |
-| v0.0.1 | Původní terminálové TUI |
 
 ---
 
-## Build ze zdrojových kódů
+<details>
+<summary>Pro vývojáře — build ze zdrojových kódů</summary>
+
+### Spuštění ze zdrojáků
 
 ```bash
 git clone https://github.com/ZeddiS/zeddihub-tools-desktop.git
@@ -115,26 +101,29 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Pro sestavení .exe:
+### Build .exe
+
 ```bash
 pip install pyinstaller
 python -m PyInstaller --onefile --windowed --name "ZeddiHub.Tools" --icon assets/icon.ico --add-data "assets;assets" --add-data "gui;gui" --add-data "locale;locale" app.py
 ```
 
----
+Vyžaduje Python 3.11+.
 
-## Požadavky
+### Poznámka k Windows Defender / SmartScreen
 
-- Windows 10/11 (64-bit)
-- Při spouštění ze zdrojáků: Python 3.11+
+Nepodepsaná PyInstaller aplikace bývá při prvním spuštění označena jako neznámá.  
+Reputace se buduje s počtem spuštění. Pro produkci doporučuji code-signing certifikát (OV/EV).  
+Alternativně lze exe odeslat Microsoftu k analýze: [aka.ms/submitmalware](https://aka.ms/submitmalware).
+
+</details>
 
 ---
 
 <p align="center">
   <a href="https://zeddihub.eu">zeddihub.eu</a> ·
-  <a href="https://wiki.zeddihub.eu">ZeddiWiki</a> ·
-  <a href="https://zeddis.xyz">zeddis.xyz</a> ·
-  <a href="https://dsc.gg/zeddihub">Discord</a>
+  <a href="https://dsc.gg/zeddihub">Discord</a> ·
+  <a href="https://zeddis.xyz">zeddis.xyz</a>
 </p>
 
 <p align="center">

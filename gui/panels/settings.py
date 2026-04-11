@@ -19,6 +19,7 @@ try:
     from ..locale import t, get_lang, set_lang, load_settings, save_settings
     from ..auth import is_authenticated, get_current_user, logout, clear_credentials
     from ..updater import check_for_update, CURRENT_VERSION
+    from ..config import get_data_dir, set_data_dir
 except ImportError:
     def t(key, **kw): return key
     def get_lang(): return "cs"
@@ -30,6 +31,8 @@ except ImportError:
     def logout(): pass
     def clear_credentials(): pass
     def check_for_update(callback=None): pass
+    def get_data_dir(): from pathlib import Path; return Path.home()
+    def set_data_dir(p): pass
     CURRENT_VERSION = "1.0.0"
 
 ASSETS_DIR = Path(__file__).parent.parent.parent / "assets"
@@ -113,7 +116,7 @@ class SettingsPanel(ctk.CTkFrame):
         update_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         update_card.pack(fill="x", pady=6)
 
-        _label(update_card, "🔄 " + t("update_available"), 13, bold=True, color=th["primary"]
+        _label(update_card, "🔄 Aktualizace", 13, bold=True, color=th["primary"]
                ).pack(padx=14, pady=(12, 6), anchor="w")
 
         self._update_status = _label(update_card, f"Aktuální verze: v{CURRENT_VERSION}",
@@ -124,6 +127,24 @@ class SettingsPanel(ctk.CTkFrame):
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._check_updates
+                      ).pack(padx=14, pady=(0, 14), anchor="w")
+
+        # Data folder section
+        data_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        data_card.pack(fill="x", pady=6)
+
+        _label(data_card, "📁 Složka s daty / Data folder", 13, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(data_card, "Nastavení, přihlašovací údaje a cache aplikace.",
+               10, color=th["text_dim"]).pack(padx=14, pady=(0, 6), anchor="w")
+
+        self._data_dir_label = _label(data_card, str(get_data_dir()), 9, color=th["text_dim"])
+        self._data_dir_label.pack(padx=14, pady=(0, 8), anchor="w")
+
+        ctk.CTkButton(data_card, text="📂 Změnit složku",
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=34,
+                      command=self._change_data_dir
                       ).pack(padx=14, pady=(0, 14), anchor="w")
 
     def _select_language(self, lang: str):
@@ -155,14 +176,37 @@ class SettingsPanel(ctk.CTkFrame):
             elif result.get("available"):
                 latest = result.get("latest", "?")
                 self._update_status.configure(
-                    text=f"⬆ Dostupná aktualizace: v{latest}  (aktuální: v{CURRENT_VERSION})",
-                    text_color=self.theme["warning"])
+                    text=f"⬆ Dostupná aktualizace: v{latest}  — klikněte pro stažení",
+                    text_color="#fb923c")
+                self._update_status.bind("<Button-1>", lambda _: self._open_update_wizard(result))
+                self._update_status.configure(cursor="hand2")
             else:
                 self._update_status.configure(
                     text=t("up_to_date") + f"  (v{CURRENT_VERSION})",
                     text_color=self.theme["success"])
 
         check_for_update(callback=lambda r: self.after(0, on_result, r))
+
+    def _open_update_wizard(self, result: dict):
+        """Trigger the update wizard from the main window."""
+        # Walk up to the MainWindow and call its update dialog
+        parent = self.winfo_toplevel()
+        if hasattr(parent, "_show_update_dialog"):
+            parent._show_update_dialog(result)
+
+    def _change_data_dir(self):
+        import tkinter as tk
+        from tkinter import filedialog
+        from pathlib import Path
+        current = get_data_dir()
+        base = filedialog.askdirectory(
+            title="Vyberte složku pro ZeddiHub.Tools.Data",
+            initialdir=str(current.parent),
+        )
+        if base:
+            new_dir = Path(base) / "ZeddiHub.Tools.Data"
+            set_data_dir(new_dir)
+            self._data_dir_label.configure(text=str(new_dir))
 
     # ─── ACCOUNT ──────────────────────────────────────────────────────────────
 

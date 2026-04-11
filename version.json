@@ -1,7 +1,7 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "release_date": "2026-04-11",
-  "changelog": "Kompletní redesign UI (moderní tmavé téma, per-game barvy).\nNové: PC Nástroje (CPU/GPU/RAM info, DNS flush, Temp cleanup, Ping, IP Info, Shutdown Timer).\nNové: Nastavení aplikace (jazyk, účet, o aplikaci).\nNové: Jazykový systém (Česky / English), dialog při prvním spuštění.\nNové: Skutečný server status (Steam A2S_INFO UDP query - hráči, mapa, ping).\nNové: Doporučené nástroje na hlavní stránce.\nNové: Skládací sidebar menu.\nNové: Registrace - info o Discordu.\nOpraveno: Header game badge, status přihlášení, verze v titulku.",
+  "changelog": "Auto-update wizard: stažení a instalace přímo v aplikaci bez prohlížeče.\nKontrola aktualizací přes GitHub Releases API.\nNové: výběr složky pro data (ZeddiHub.Tools.Data) při prvním spuštění.\nData (nastavení, přihlašovací údaje) nyní v uživatelsky zvolené složce.\nVyčištěno repo: odebrány soubory, které na GitHubu být nemusí.\nNastavení: zobrazení a změna složky s daty.\nOpraveno: update dialog je nyní průvodce se stavem stahování.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

@@ -1,6 +1,6 @@
 """
 ZeddiHub Tools - Auto-update system.
-Checks version.json on webhosting and downloads update if available.
+Checks GitHub Releases API for newer versions and provides an in-app download wizard.
 """
 
 import os
@@ -9,49 +9,59 @@ import json
 import threading
 import subprocess
 import tempfile
-import shutil
 import urllib.request
 import urllib.error
 from pathlib import Path
 
-CURRENT_VERSION = "1.0.0"
-UPDATE_CHECK_URL = "https://files.zeddihub.eu/tools/version.json"
-UPDATE_DOWNLOAD_URL = "https://files.zeddihub.eu/tools/ZeddiHubTools_latest.exe"
+CURRENT_VERSION = "1.2.0"
+GITHUB_API_URL = "https://api.github.com/repos/ZeddiS/zeddihub-tools-desktop/releases/latest"
 GITHUB_RELEASES_URL = "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 
 
 def parse_version(v: str) -> tuple:
-    """Parse version string to tuple for comparison."""
     try:
         return tuple(int(x) for x in v.strip().lstrip("v").split("."))
     except Exception:
         return (0, 0, 0)
 
 
-def check_for_update(callback=None) -> dict | None:
+def check_for_update(callback=None) -> "dict | None":
     """
-    Check if a newer version is available.
-    Returns dict with version info or None if up-to-date / unreachable.
-    callback(result: dict | None) if provided (runs in background).
+    Check GitHub Releases API for a newer version.
+    Returns a dict or None. If callback is provided, runs in background thread.
     """
     def _check():
         try:
             req = urllib.request.Request(
-                UPDATE_CHECK_URL,
-                headers={"User-Agent": "ZeddiHubTools/" + CURRENT_VERSION}
+                GITHUB_API_URL,
+                headers={
+                    "User-Agent": f"ZeddiHubTools/{CURRENT_VERSION}",
+                    "Accept": "application/vnd.github.v3+json",
+                }
             )
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())
 
-            latest = data.get("version", "0.0.0")
+            tag = data.get("tag_name", "0.0.0")
+            latest = tag.lstrip("v")
+
             if parse_version(latest) > parse_version(CURRENT_VERSION):
+                # Find the .exe asset URL
+                assets = data.get("assets", [])
+                download_url = GITHUB_RELEASES_URL
+                for asset in assets:
+                    name = asset.get("name", "")
+                    if name.endswith(".exe"):
+                        download_url = asset.get("browser_download_url", GITHUB_RELEASES_URL)
+                        break
+
                 result = {
                     "available": True,
                     "current": CURRENT_VERSION,
                     "latest": latest,
-                    "changelog": data.get("changelog", ""),
-                    "download_url": data.get("download_url", UPDATE_DOWNLOAD_URL),
-                    "mandatory": data.get("mandatory", False),
+                    "changelog": data.get("body", ""),
+                    "download_url": download_url,
+                    "mandatory": data.get("prerelease", False) is False and False,
                 }
             else:
                 result = {"available": False, "current": CURRENT_VERSION, "latest": latest}
@@ -67,25 +77,34 @@ def check_for_update(callback=None) -> dict | None:
     if callback:
         t = threading.Thread(target=_check, daemon=True)
         t.start()
+        return None
     else:
         return _check()
 
 
-def download_and_install(url: str, progress_callback=None, done_callback=None):
-    """Download update and launch installer. Runs in background."""
+def download_update(url: str, version: str = "",
+                    progress_callback=None, done_callback=None):
+    """
+    Download the new exe to a temp file.
+    progress_callback(float 0..1)
+    done_callback(success: bool, path_or_error: str)
+    """
     def _download():
         try:
-            tmp = tempfile.mktemp(suffix=".exe", prefix="zeddihub_update_")
-            req = urllib.request.Request(url, headers={"User-Agent": "ZeddiHubTools/" + CURRENT_VERSION})
+            filename = f"ZeddiHub.Tools.v{version}.exe" if version else "ZeddiHub.Tools.update.exe"
+            tmp_path = os.path.join(tempfile.gettempdir(), filename)
 
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": f"ZeddiHubTools/{CURRENT_VERSION}"}
+            )
+            with urllib.request.urlopen(req, timeout=180) as resp:
                 total = int(resp.headers.get("Content-Length", 0))
                 downloaded = 0
-                chunk_size = 8192
 
-                with open(tmp, "wb") as f:
+                with open(tmp_path, "wb") as f:
                     while True:
-                        chunk = resp.read(chunk_size)
+                        chunk = resp.read(65536)
                         if not chunk:
                             break
                         f.write(chunk)
@@ -93,10 +112,12 @@ def download_and_install(url: str, progress_callback=None, done_callback=None):
                         if progress_callback and total > 0:
                             progress_callback(downloaded / total)
 
-            # Launch installer
-            subprocess.Popen([tmp], shell=True)
+            if progress_callback:
+                progress_callback(1.0)
+
             if done_callback:
-                done_callback(True, tmp)
+                done_callback(True, tmp_path)
+
         except Exception as e:
             if done_callback:
                 done_callback(False, str(e))
@@ -105,7 +126,37 @@ def download_and_install(url: str, progress_callback=None, done_callback=None):
     t.start()
 
 
+def apply_update(new_exe_path: str):
+    """
+    Self-replace the current exe with the downloaded one.
+    Creates a bat script that waits for this process to exit, copies the new exe,
+    then relaunches it. Works only for frozen (PyInstaller) builds.
+    """
+    if getattr(sys, "frozen", False):
+        current_exe = sys.executable
+    else:
+        # Running from source — just launch the new exe directly
+        subprocess.Popen([new_exe_path])
+        return
+
+    bat_path = os.path.join(tempfile.gettempdir(), "zeddihub_updater.bat")
+    with open(bat_path, "w", encoding="utf-8") as f:
+        f.write(
+            f"@echo off\r\n"
+            f"ping -n 3 127.0.0.1 > nul\r\n"
+            f"copy /y \"{new_exe_path}\" \"{current_exe}\"\r\n"
+            f"start \"\" \"{current_exe}\"\r\n"
+            f"del \"{new_exe_path}\"\r\n"
+            f"del \"%~f0\"\r\n"
+        )
+
+    subprocess.Popen(
+        ["cmd", "/c", bat_path],
+        creationflags=subprocess.CREATE_NO_WINDOW,
+        close_fds=True,
+    )
+
+
 def open_release_page():
-    """Open GitHub releases page in browser."""
     import webbrowser
     webbrowser.open(GITHUB_RELEASES_URL)

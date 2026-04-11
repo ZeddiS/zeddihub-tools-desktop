@@ -1,10 +1,8 @@
 """Language/localization system for ZeddiHub Tools."""
 import json
-import os
 from pathlib import Path
 
 LOCALE_DIR = Path(__file__).parent.parent / "locale"
-SETTINGS_FILE = Path(os.environ.get("APPDATA", Path.home())) / "ZeddiHub" / "Tools" / "settings.json"
 
 _current_lang = "cs"
 _strings = {}
@@ -38,26 +36,32 @@ def get_lang() -> str:
 
 def set_lang(lang: str):
     _load(lang)
-    # Save to settings
     settings = load_settings()
     settings["language"] = lang
     save_settings(settings)
 
 
+def _settings_file() -> Path:
+    from .config import get_data_dir
+    return get_data_dir() / "settings.json"
+
+
 def load_settings() -> dict:
-    if SETTINGS_FILE.exists():
+    f = _settings_file()
+    if f.exists():
         try:
-            with open(SETTINGS_FILE, encoding="utf-8") as f:
-                return json.load(f)
+            with open(f, encoding="utf-8") as fh:
+                return json.load(fh)
         except Exception:
             pass
     return {}
 
 
 def save_settings(settings: dict):
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(settings, f, indent=2, ensure_ascii=False)
+    f = _settings_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with open(f, "w", encoding="utf-8") as fh:
+        json.dump(settings, fh, indent=2, ensure_ascii=False)
 
 
 def init():
@@ -69,4 +73,6 @@ def init():
 
 
 def is_first_launch() -> bool:
-    return not SETTINGS_FILE.exists()
+    """Delegate to config bootstrap check."""
+    from .config import is_first_launch as _bootstrap_first
+    return _bootstrap_first()
