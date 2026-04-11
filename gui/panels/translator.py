@@ -50,9 +50,10 @@ ENGINES = {
 
 
 class TranslatorPanel(ctk.CTkFrame):
-    def __init__(self, parent, theme: dict, **kwargs):
+    def __init__(self, parent, theme: dict, nav_callback=None, **kwargs):
         super().__init__(parent, fg_color=theme["content_bg"], **kwargs)
         self.theme = theme
+        self._nav_callback = nav_callback
         self._running = False
         self._lang_vars: dict[str, ctk.BooleanVar] = {}
         self._config = self._load_config()
