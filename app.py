@@ -1,6 +1,6 @@
 """
 ZeddiHub Tools Desktop - Main GUI entry point.
-v1.2.0
+v1.3.0
 
 Usage:
     python app.py

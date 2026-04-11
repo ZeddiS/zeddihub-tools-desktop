@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/verze-v1.2.0-orange?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/verze-v1.3.0-orange?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey?style=flat-square&logo=windows" alt="Platform">
   <img src="https://img.shields.io/badge/jazyk-CZ%20%2F%20EN-green?style=flat-square" alt="Language">
 </p>
@@ -82,7 +82,8 @@ Pokud je dostupná, nabídne stažení a instalaci přímo v aplikaci — bez po
 
 | Verze | Popis |
 |-------|-------|
-| **v1.2.0** | Auto-update wizard, výběr složky s daty, GitHub API update check, čistší repo |
+| **v1.3.0** | Systémová lišta (tray icon), webový PHP admin panel, konfigurovatelné tray položky |
+| v1.2.0 | Auto-update wizard, výběr složky s daty, GitHub API update check |
 | v1.1.0 | Redesign UI, PC Nástroje, jazykový systém CZ/EN, reálný server status |
 | v1.0.0 | První customtkinter GUI, splash screen, auth systém |
 | v0.1.0 | První GUI pokus (tkinter frameless) |

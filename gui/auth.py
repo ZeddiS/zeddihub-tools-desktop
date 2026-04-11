@@ -121,7 +121,7 @@ def verify_access(username: str, password: str, callback=None) -> bool:
         try:
             req = urllib.request.Request(
                 AUTH_API_URL,
-                headers={"User-Agent": "ZeddiHubTools/1.2.0"}
+                headers={"User-Agent": "ZeddiHubTools/1.3.0"}
             )
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())

@@ -238,6 +238,11 @@ class MainWindow(ctk.CTk):
             verify_access(saved[0], saved[1],
                           callback=lambda s, m: self.after(100, self._update_auth_ui) if s else None)
 
+        # System tray
+        self._tray = None
+        self.after(500, self._start_tray)
+        self.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
+
     def _setup_window(self):
         self.title("ZeddiHub Tools")
         w, h = 1280, 820
@@ -721,6 +726,30 @@ class MainWindow(ctk.CTk):
         flag = "🇬🇧" if lang == "en" else "🇨🇿"
         name = "English" if lang == "en" else "Česky"
         self._lang_btn.configure(text=f"{flag} {name}")
+
+    def _start_tray(self):
+        try:
+            from .tray import TrayIcon
+            self._tray = TrayIcon(self)
+            self._tray.start()
+        except Exception:
+            pass
+
+    def _minimize_to_tray(self):
+        """Hide window to tray instead of closing."""
+        if self._tray is not None:
+            self.withdraw()
+        else:
+            self._quit_app()
+
+    def _quit_app(self):
+        """Full shutdown: stop tray then destroy window."""
+        if self._tray is not None:
+            self._tray.stop()
+        try:
+            self.destroy()
+        except Exception:
+            pass
 
     def _on_update_check(self, result):
         if result and result.get("available"):

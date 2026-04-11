@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ZeddiHub Tools Desktop
-v1.2.0
+v1.3.0
 """
 
 import sys
