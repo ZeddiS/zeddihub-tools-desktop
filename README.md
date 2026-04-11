@@ -20,8 +20,14 @@
 </p>
 
 <p align="center">
+  <a href="https://zeddihub.eu/tools/" style="font-size:18px">
+    <strong>🌐 zeddihub.eu/tools/</strong>
+  </a>
+</p>
+
+<p align="center">
   <a href="https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest">
-    <strong>Download latest release</strong>
+    <strong>⬇ Download latest release</strong>
   </a>
   &nbsp;&middot;&nbsp;
   <a href="https://zeddihub.eu">zeddihub.eu</a>
@@ -37,9 +43,6 @@
 2. Run it — no installation, no Python required
 3. On first launch, choose your language and data folder location
 4. Done
-
-> **Windows SmartScreen warning** may appear on the first run — this is normal for unsigned applications.
-> Click **"More info"** then **"Run anyway"** to proceed.
 
 ---
 
@@ -135,12 +138,6 @@ python -m PyInstaller --onefile --windowed --name "ZeddiHub.Tools" ^
   app.py
 ```
 
-### Windows Defender / SmartScreen note
-
-Unsigned PyInstaller executables are flagged as unknown on first run — reputation builds over time.
-For production use, a code-signing certificate (OV/EV) is recommended.
-Alternatively, submit the exe to Microsoft for analysis at [aka.ms/submitmalware](https://aka.ms/submitmalware).
-
 </details>
 
 ---
@@ -170,8 +167,6 @@ Requires PHP 7.4+ and write permissions on the `data/` directory.
 2. Spusť — žádná instalace, žádný Python
 3. Při prvním spuštění zvol jazyk a složku pro data aplikace
 4. Hotovo
-
-> **Windows SmartScreen** může zobrazit upozornění při prvním spuštění — klikni na **"Další informace"** a pak **"Přesto spustit"**.
 
 ### Funkce
 

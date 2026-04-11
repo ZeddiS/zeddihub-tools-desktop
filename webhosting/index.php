@@ -504,10 +504,6 @@ footer a:hover { color: var(--primary); text-decoration: none; }
     </div>
   </div>
 
-  <div style="margin-top:32px;padding:16px 20px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text-dim)">
-    ⚠️ Windows SmartScreen může zobrazit upozornění při prvním spuštění — je to normální pro nepodepsané aplikace.
-    Klikněte na <strong>„Další informace"</strong> a <strong>„Přesto spustit"</strong>.
-  </div>
 </section>
 
 <!-- ── CTA ───────────────────────────────────────────────────────────────── -->
