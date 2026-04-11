@@ -26,6 +26,8 @@ try:
 except ImportError:
     def t(key, **kw): return key
 
+from .. import icons
+
 BANNER_PATH = Path(__file__).parent.parent.parent / "assets" / "banner.png"
 SERVER_STATUS_URL = "https://files.zeddihub.eu/tools/servers.json"
 RECOMMENDED_URL   = "https://files.zeddihub.eu/tools/recommended.json"
@@ -134,24 +136,31 @@ class HomePanel(ctk.CTkFrame):
         links_row.pack(padx=20, pady=(4, 16), anchor="w")
 
         quick_links = [
-            ("🌐 ZeddiHub.eu", "https://zeddihub.eu"),
-            ("📖 Wiki", "https://wiki.zeddihub.eu"),
-            ("💬 Discord", "https://dsc.gg/zeddihub"),
-            ("👨‍💻 ZeddiS.xyz", "https://zeddis.xyz"),
+            (" ZeddiHub.eu", "https://zeddihub.eu",    "globe",   14, "#cccccc"),
+            (" Wiki",        "https://wiki.zeddihub.eu", "book",  14, "#cccccc"),
+            (" Discord",     "https://dsc.gg/zeddihub", "discord", 14, "#7289da"),
+            (" ZeddiS.xyz",  "https://zeddis.xyz",      "globe",   14, "#cccccc"),
         ]
-        for label_text, url in quick_links:
+        for label_text, url, icon_name, icon_size, icon_color in quick_links:
+            btn_kw = {}
+            if icon_name:
+                btn_kw["image"] = icons.icon(icon_name, icon_size, icon_color)
+                btn_kw["compound"] = "left"
             ctk.CTkButton(links_row, text=label_text, height=30, width=140,
                           fg_color=th["secondary"], hover_color=th["primary"],
                           font=ctk.CTkFont("Segoe UI", 11),
-                          command=lambda u=url: __import__("webbrowser").open(u)
+                          command=lambda u=url: __import__("webbrowser").open(u),
+                          **btn_kw
                           ).pack(side="left", padx=4)
 
         # Server status section
         srv_header = ctk.CTkFrame(scroll, fg_color="transparent")
         srv_header.pack(fill="x", padx=20, pady=(12, 4))
 
-        _label(srv_header, "📡 " + t("server_status"), 16, bold=True,
-               color=th["primary"]).pack(side="left")
+        _label(srv_header, " " + t("server_status"), 16, bold=True,
+               color=th["primary"],
+               image=icons.icon("satellite-dish", 18, th["primary"]), compound="left"
+               ).pack(side="left")
 
         self.refresh_btn = ctk.CTkButton(
             srv_header, text="↻ " + t("refresh"), height=28, width=90,
@@ -173,8 +182,10 @@ class HomePanel(ctk.CTkFrame):
         # Recommended tools section
         rec_header = ctk.CTkFrame(scroll, fg_color="transparent")
         rec_header.pack(fill="x", padx=20, pady=(16, 4))
-        _label(rec_header, "⚡ " + t("recommended_tools"), 16, bold=True,
-               color=th["primary"]).pack(side="left")
+        _label(rec_header, " " + t("recommended_tools"), 16, bold=True,
+               color=th["primary"],
+               image=icons.icon("bolt", 18, th["primary"]), compound="left"
+               ).pack(side="left")
 
         self._rec_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         self._rec_frame.pack(fill="x", padx=20, pady=4)
@@ -202,19 +213,21 @@ class HomePanel(ctk.CTkFrame):
 
     def _build_tools_overview(self, parent):
         th = self.theme
-        _label(parent, "🛠 " + t("tools_overview"), 16, bold=True,
-               color=th["primary"]).pack(padx=20, pady=(16, 6), anchor="w")
+        _label(parent, " " + t("tools_overview"), 16, bold=True,
+               color=th["primary"],
+               image=icons.icon("tools", 18, th["primary"]), compound="left"
+               ).pack(padx=20, pady=(16, 6), anchor="w")
 
         grid_frame = ctk.CTkFrame(parent, fg_color="transparent")
         grid_frame.pack(padx=20, fill="x", pady=(0, 16))
 
         tools = [
-            ("🎯 CS2 Nástroje",       "Crosshair, Viewmodel, Autoexec,\nPractice, Server CFG", "#5b9cf6"),
-            ("🎮 CS:GO Nástroje",     "Crosshair, Viewmodel, Autoexec,\nServer CFG, RCON",     "#fbbf24"),
-            ("🦀 Rust Nástroje",      "Server Config, Plugin Manager,\nAnalyzér závislostí",   "#f97316"),
-            ("🌍 Translator",         "Hromadný překlad .json/.txt/.lang\ndo 20+ jazyků",       "#4ade80"),
-            ("⌨ Keybind Generátor",  "Vizuální klávesnice pro bind\nCS2, CS:GO, Rust",          "#a78bfa"),
-            ("💻 PC Nástroje",        "Systémové info, DNS flush,\nNetwork tools, Utility",     "#fb923c"),
+            ("CS2 Nástroje",       "Crosshair, Viewmodel, Autoexec,\nPractice, Server CFG", "#5b9cf6"),
+            ("CS:GO Nástroje",     "Crosshair, Viewmodel, Autoexec,\nServer CFG, RCON",     "#fbbf24"),
+            ("Rust Nástroje",      "Server Config, Plugin Manager,\nAnalyzér závislostí",   "#f97316"),
+            ("Translator",         "Hromadný překlad .json/.txt/.lang\ndo 20+ jazyků",       "#4ade80"),
+            ("Keybind Generátor",  "Vizuální klávesnice pro bind\nCS2, CS:GO, Rust",          "#a78bfa"),
+            ("PC Nástroje",        "Systémové info, DNS flush,\nNetwork tools, Utility",     "#fb923c"),
         ]
 
         cols = 3
@@ -347,16 +360,18 @@ class HomePanel(ctk.CTkFrame):
         btn_row = ctk.CTkFrame(card, fg_color="transparent")
         btn_row.pack(padx=12, pady=(2, 10), anchor="w")
 
-        ctk.CTkButton(btn_row, text="📋 " + t("copy_ip"), height=26, width=100,
+        ctk.CTkButton(btn_row, text=" " + t("copy_ip"), height=26, width=100,
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 9),
+                      image=icons.icon("copy", 13, "#cccccc"), compound="left",
                       command=lambda ip=ip_port: self._copy_ip(ip)
                       ).pack(side="left", padx=(0, 6))
 
-        ctk.CTkButton(btn_row, text="▶ Steam", height=26, width=80,
+        ctk.CTkButton(btn_row, text=" Steam", height=26, width=80,
                       fg_color="#1a3a1a", hover_color="#4ade80",
                       text_color="#4ade80",
                       font=ctk.CTkFont("Segoe UI", 9, "bold"),
+                      image=icons.icon("steam", 13, "#4ade80"), compound="left",
                       command=lambda ip=ip_port: self._steam_connect(ip)
                       ).pack(side="left")
 

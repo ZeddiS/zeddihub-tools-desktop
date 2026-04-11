@@ -20,6 +20,7 @@ try:
     from ..auth import is_authenticated, get_current_user, logout, clear_credentials
     from ..updater import check_for_update, CURRENT_VERSION
     from ..config import get_data_dir, set_data_dir
+    from .. import icons
 except ImportError:
     def t(key, **kw): return key
     def get_lang(): return "cs"
@@ -34,6 +35,9 @@ except ImportError:
     def get_data_dir(): from pathlib import Path; return Path.home()
     def set_data_dir(p): pass
     CURRENT_VERSION = "1.0.0"
+    class icons:  # noqa: E306
+        @staticmethod
+        def icon(name, size=16, color=None): return None
 
 ASSETS_DIR = Path(__file__).parent.parent.parent / "assets"
 LOGO_PATH = ASSETS_DIR / "logo.png"
@@ -57,13 +61,13 @@ class SettingsPanel(ctk.CTkFrame):
         tab = ctk.CTkTabview(self, fg_color=th["sidebar_bg"])
         tab.pack(fill="both", expand=True, padx=12, pady=12)
 
-        tab.add("⚙ " + t("general"))
-        tab.add("👤 " + t("account"))
-        tab.add("ℹ " + t("about"))
+        tab.add(t("general"))
+        tab.add(t("account"))
+        tab.add(t("about"))
 
-        self._build_general(tab.tab("⚙ " + t("general")))
-        self._build_account(tab.tab("👤 " + t("account")))
-        self._build_about(tab.tab("ℹ " + t("about")))
+        self._build_general(tab.tab(t("general")))
+        self._build_account(tab.tab(t("account")))
+        self._build_about(tab.tab(t("about")))
 
     # ─── GENERAL ──────────────────────────────────────────────────────────────
 
@@ -72,14 +76,16 @@ class SettingsPanel(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
-        _label(scroll, "⚙ " + t("settings_title"), 16, bold=True, color=th["primary"]
+        _label(scroll, " " + t("settings_title"), 16, bold=True, color=th["primary"],
+               image=icons.icon("cog", 18, th["primary"]), compound="left"
                ).pack(padx=4, pady=(4, 12), anchor="w")
 
         # Language section
         lang_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         lang_card.pack(fill="x", pady=6)
 
-        _label(lang_card, "🗣 " + t("settings_language"), 13, bold=True, color=th["primary"]
+        _label(lang_card, " " + t("settings_language"), 13, bold=True, color=th["primary"],
+               image=icons.icon("language", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 6), anchor="w")
         _label(lang_card, t("choose_language"),
                10, color=th["text_dim"]).pack(padx=14, pady=(0, 10), anchor="w")
@@ -90,7 +96,7 @@ class SettingsPanel(ctk.CTkFrame):
         current_lang = get_lang()
 
         self._cs_btn = ctk.CTkButton(
-            lang_row, text="🇨🇿 Česky",
+            lang_row, text="Česky",
             fg_color=th["primary"] if current_lang == "cs" else th["secondary"],
             hover_color=th["primary_hover"],
             font=ctk.CTkFont("Segoe UI", 13, "bold" if current_lang == "cs" else "normal"),
@@ -100,7 +106,7 @@ class SettingsPanel(ctk.CTkFrame):
         self._cs_btn.pack(side="left", padx=(0, 10))
 
         self._en_btn = ctk.CTkButton(
-            lang_row, text="🇬🇧 English",
+            lang_row, text="English",
             fg_color=th["primary"] if current_lang == "en" else th["secondary"],
             hover_color=th["primary_hover"],
             font=ctk.CTkFont("Segoe UI", 13, "bold" if current_lang == "en" else "normal"),
@@ -116,9 +122,10 @@ class SettingsPanel(ctk.CTkFrame):
         mode_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         mode_card.pack(fill="x", pady=6)
 
-        _label(mode_card, "🌙 Vzhled / Barevný režim", 13, bold=True, color=th["primary"]
+        _label(mode_card, " Vzhled / Barevný režim", 13, bold=True, color=th["primary"],
+               image=icons.icon("moon", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 6), anchor="w")
-        _label(mode_card, "Volba se použije okamžitě. Tlačítko ☀/🌙 je také v záhlaví.",
+        _label(mode_card, "Volba se použije okamžitě. Tlačítko slunce/měsíc je také v záhlaví.",
                10, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
 
         import customtkinter as ctk_ref
@@ -129,7 +136,7 @@ class SettingsPanel(ctk.CTkFrame):
         mode_row = ctk.CTkFrame(mode_card, fg_color="transparent")
         mode_row.pack(padx=14, pady=(0, 14), anchor="w")
 
-        for mode_id, mode_label in [("dark", "🌙 Tmavý"), ("light", "☀ Světlý"), ("system", "⚙ Systém")]:
+        for mode_id, mode_label in [("dark", "Tmavý"), ("light", "Světlý"), ("system", "Systém")]:
             is_active = (saved_mode == mode_id)
             ctk.CTkButton(
                 mode_row, text=mode_label, width=110, height=36,
@@ -143,14 +150,16 @@ class SettingsPanel(ctk.CTkFrame):
         update_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         update_card.pack(fill="x", pady=6)
 
-        _label(update_card, "🔄 Aktualizace", 13, bold=True, color=th["primary"]
+        _label(update_card, " Aktualizace", 13, bold=True, color=th["primary"],
+               image=icons.icon("sync-alt", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 6), anchor="w")
 
         self._update_status = _label(update_card, f"Aktuální verze: v{CURRENT_VERSION}",
                                       10, color=th["text_dim"])
         self._update_status.pack(padx=14, pady=(0, 8), anchor="w")
 
-        ctk.CTkButton(update_card, text="🔍 " + t("check_updates"),
+        ctk.CTkButton(update_card, text=" " + t("check_updates"),
+                      image=icons.icon("search", 13, th["text"]), compound="left",
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._check_updates
@@ -160,7 +169,8 @@ class SettingsPanel(ctk.CTkFrame):
         data_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         data_card.pack(fill="x", pady=6)
 
-        _label(data_card, "📁 Složka s daty / Data folder", 13, bold=True, color=th["primary"]
+        _label(data_card, " Složka s daty / Data folder", 13, bold=True, color=th["primary"],
+               image=icons.icon("folder", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 4), anchor="w")
         _label(data_card, "Nastavení, přihlašovací údaje a cache aplikace.",
                10, color=th["text_dim"]).pack(padx=14, pady=(0, 6), anchor="w")
@@ -168,7 +178,8 @@ class SettingsPanel(ctk.CTkFrame):
         self._data_dir_label = _label(data_card, str(get_data_dir()), 9, color=th["text_dim"])
         self._data_dir_label.pack(padx=14, pady=(0, 8), anchor="w")
 
-        ctk.CTkButton(data_card, text="📂 Změnit složku",
+        ctk.CTkButton(data_card, text=" Změnit složku",
+                      image=icons.icon("folder-open", 13, th["text"]), compound="left",
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._change_data_dir
@@ -178,7 +189,8 @@ class SettingsPanel(ctk.CTkFrame):
         reset_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         reset_card.pack(fill="x", pady=6)
 
-        _label(reset_card, "🔒 Záloha a reset", 13, bold=True, color=th["primary"]
+        _label(reset_card, " Záloha a reset", 13, bold=True, color=th["primary"],
+               image=icons.icon("lock", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 4), anchor="w")
         _label(reset_card, "Záloha uloží nastavení do ZeddiHub.Tools.Data/backup_YYYYMMDD.json.",
                10, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
@@ -189,19 +201,22 @@ class SettingsPanel(ctk.CTkFrame):
         backup_row = ctk.CTkFrame(reset_card, fg_color="transparent")
         backup_row.pack(padx=14, pady=(0, 6), anchor="w")
 
-        ctk.CTkButton(backup_row, text="💾 Zálohovat nastavení",
+        ctk.CTkButton(backup_row, text=" Zálohovat nastavení",
+                      image=icons.icon("save", 13, th["text"]), compound="left",
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._backup_settings
                       ).pack(side="left", padx=(0, 8))
 
-        ctk.CTkButton(backup_row, text="📂 Obnovit ze zálohy",
+        ctk.CTkButton(backup_row, text=" Obnovit ze zálohy",
+                      image=icons.icon("folder-open", 13, th["text"]), compound="left",
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._restore_settings
                       ).pack(side="left")
 
-        ctk.CTkButton(reset_card, text="⚠ Tovární reset (smazat vše)",
+        ctk.CTkButton(reset_card, text=" Tovární reset (smazat vše)",
+                      image=icons.icon("exclamation-triangle", 13, "#ffffff"), compound="left",
                       fg_color="#8b2020", hover_color="#6b1818",
                       text_color="#ffffff",
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
@@ -343,7 +358,8 @@ class SettingsPanel(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
-        _label(scroll, "👤 " + t("account"), 16, bold=True, color=th["primary"]
+        _label(scroll, " " + t("account"), 16, bold=True, color=th["primary"],
+               image=icons.icon("user", 18, th["primary"]), compound="left"
                ).pack(padx=4, pady=(4, 12), anchor="w")
 
         auth_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
@@ -357,13 +373,15 @@ class SettingsPanel(ctk.CTkFrame):
             _label(auth_card, f"✅ {t('logged_in_as', user=user)}",
                    12, color=th["success"]).pack(padx=14, pady=(0, 10), anchor="w")
 
-            ctk.CTkButton(auth_card, text="🔒 " + t("logout"),
+            ctk.CTkButton(auth_card, text=" " + t("logout"),
+                          image=icons.icon("lock", 13, "#ffffff"), compound="left",
                           fg_color="#8b2020", hover_color="#6b1818",
                           font=ctk.CTkFont("Segoe UI", 12), height=36,
                           command=self._do_logout
                           ).pack(padx=14, pady=(0, 14), anchor="w")
         else:
-            _label(auth_card, "🔓 " + t("not_logged_in"),
+            _label(auth_card, " " + t("not_logged_in"),
+                   image=icons.icon("unlock", 13, th["text_dim"]), compound="left",
                    12, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
             _label(auth_card, t("server_tools_locked"),
                    10, color=th["text_dim"]).pack(padx=14, pady=(0, 10), anchor="w")
@@ -373,14 +391,16 @@ class SettingsPanel(ctk.CTkFrame):
         creds_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         creds_card.pack(fill="x", pady=6)
 
-        _label(creds_card, "🔐 " + t("remember_me"), 13, bold=True, color=th["primary"]
+        _label(creds_card, " " + t("remember_me"), 13, bold=True, color=th["primary"],
+               image=icons.icon("key", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 6), anchor="w")
 
         self._creds_status = _label(creds_card, "", 10, color=th["text_dim"])
         self._creds_status.pack(padx=14, pady=(0, 8), anchor="w")
         self._refresh_cred_status()
 
-        ctk.CTkButton(creds_card, text="🗑 " + t("clear_credentials"),
+        ctk.CTkButton(creds_card, text=" " + t("clear_credentials"),
+                      image=icons.icon("trash", 13, th["text"]), compound="left",
                       fg_color=th["secondary"], hover_color="#8b2020",
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._clear_creds
@@ -390,13 +410,15 @@ class SettingsPanel(ctk.CTkFrame):
         reg_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         reg_card.pack(fill="x", pady=6)
 
-        _label(reg_card, "📋 " + t("register"), 13, bold=True, color=th["primary"]
+        _label(reg_card, " " + t("register"), 13, bold=True, color=th["primary"],
+               image=icons.icon("clipboard-list", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 6), anchor="w")
         _label(reg_card, t("register_info"),
                10, color=th["text_dim"], wraplength=500, justify="left"
                ).pack(padx=14, pady=(0, 10), anchor="w")
 
-        ctk.CTkButton(reg_card, text="💬 " + t("open_discord") + " → dsc.gg/zeddihub",
+        ctk.CTkButton(reg_card, text=" " + t("open_discord") + " → dsc.gg/zeddihub",
+                      image=icons.icon("discord", 13, "#7289da"), compound="left",
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=lambda: webbrowser.open("https://dsc.gg/zeddihub")
@@ -454,9 +476,9 @@ class SettingsPanel(ctk.CTkFrame):
         info_card.pack(fill="x", pady=6, padx=40)
 
         info_lines = [
-            ("📦 " + t("about_version"), f"v{CURRENT_VERSION}"),
-            ("🎮 Platform", "Windows (customtkinter)"),
-            ("👨‍💻 " + t("about_github"), "github.com/ZeddiS"),
+            (t("about_version"), f"v{CURRENT_VERSION}"),
+            ("Platform", "Windows (customtkinter)"),
+            (t("about_github"), "github.com/ZeddiS"),
         ]
         for label_text, value in info_lines:
             row = ctk.CTkFrame(info_card, fg_color="transparent")
@@ -468,19 +490,21 @@ class SettingsPanel(ctk.CTkFrame):
         links_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         links_card.pack(fill="x", pady=6, padx=40)
 
-        _label(links_card, "🔗 Odkazy", 12, bold=True, color=th["primary"]
+        _label(links_card, " Odkazy", 12, bold=True, color=th["primary"],
+               image=icons.icon("link", 14, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 6), anchor="w")
 
         links = [
-            ("🐙 GitHub", "https://github.com/ZeddiS/zeddihub-tools-desktop"),
-            ("💬 Discord", "https://dsc.gg/zeddihub"),
-            ("🌐 ZeddiHub.eu", "https://zeddihub.eu"),
-            ("👨‍💻 ZeddiS.xyz", "https://zeddis.xyz"),
+            (" GitHub", "https://github.com/ZeddiS/zeddihub-tools-desktop", "github"),
+            (" Discord", "https://dsc.gg/zeddihub", "discord"),
+            (" ZeddiHub.eu", "https://zeddihub.eu", "globe"),
+            (" ZeddiS.xyz", "https://zeddis.xyz", "user"),
         ]
-        for lbl, url in links:
+        for lbl, url, icon_name in links:
             ctk.CTkButton(links_card, text=lbl, height=34,
                           fg_color=th["secondary"], hover_color=th["primary"],
                           font=ctk.CTkFont("Segoe UI", 11), anchor="w",
+                          image=icons.icon(icon_name, 13, th["text_dim"]), compound="left",
                           command=lambda u=url: webbrowser.open(u)
                           ).pack(fill="x", padx=14, pady=3)
 

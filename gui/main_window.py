@@ -21,6 +21,7 @@ from .themes import get_theme, GAME_THEMES
 from .auth import is_authenticated, load_credentials, verify_access, save_credentials, clear_credentials, logout, get_current_user
 from .updater import check_for_update, download_update, apply_update, open_release_page, CURRENT_VERSION
 from .locale import t, get_lang, set_lang, init as locale_init, load_settings, save_settings
+from . import icons
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 LOGO_PATH = ASSETS_DIR / "logo2.png"          # header / sidebar logo
@@ -30,29 +31,29 @@ LOGO_ICON_PATH = ASSETS_DIR / "logo_icon.png" # fallback
 SIDEBAR_W = 240
 HEADER_H = 54
 
-# Section definitions: (section_id, label, icon, game, items)
-# items: [(nav_id, label, icon, requires_auth), ...]
+# Section definitions: (section_id, label, fa_icon, game, items)
+# items: [(nav_id, label, fa_icon, requires_auth), ...]
 NAV_SECTIONS = [
-    ("home",     None,    "🏠", None,   None, False),   # top-level item, no section
-    ("pc_tools", None,    "💻", None,   None, False),   # top-level item
-    ("watchdog", None,    "🔔", None,   None, False),   # top-level item
-    ("sec_cs2",  "CS2",   "🎯", "cs2",  [
-        ("cs2_player",  "Hráčské nástroje",  "👤", False),
-        ("cs2_server",  "Serverové nástroje", "🖥", True),
-        ("cs2_keybind", "Keybind Generátor",  "⌨", False),
+    ("home",     None,    "house",        None,   None, False),
+    ("pc_tools", None,    "laptop",       None,   None, False),
+    ("watchdog", None,    "bell",         None,   None, False),
+    ("sec_cs2",  "CS2",   "crosshairs",   "cs2",  [
+        ("cs2_player",  "Hráčské nástroje",  "user",     False),
+        ("cs2_server",  "Serverové nástroje", "server",   True),
+        ("cs2_keybind", "Keybind Generátor",  "keyboard", False),
     ], None),
-    ("sec_csgo", "CS:GO", "🎮", "csgo", [
-        ("csgo_player",  "Hráčské nástroje",  "👤", False),
-        ("csgo_server",  "Serverové nástroje", "🖥", True),
-        ("csgo_keybind", "Keybind Generátor",  "⌨", False),
+    ("sec_csgo", "CS:GO", "gamepad",      "csgo", [
+        ("csgo_player",  "Hráčské nástroje",  "user",     False),
+        ("csgo_server",  "Serverové nástroje", "server",   True),
+        ("csgo_keybind", "Keybind Generátor",  "keyboard", False),
     ], None),
-    ("sec_rust", "Rust",  "🦀", "rust", [
-        ("rust_player",  "Hráčské nástroje",  "👤", False),
-        ("rust_server",  "Serverové nástroje", "🖥", True),
-        ("rust_keybind", "Keybind Generátor",  "⌨", False),
+    ("sec_rust", "Rust",  "puzzle-piece", "rust", [
+        ("rust_player",  "Hráčské nástroje",  "user",     False),
+        ("rust_server",  "Serverové nástroje", "server",   True),
+        ("rust_keybind", "Keybind Generátor",  "keyboard", False),
     ], None),
-    ("sec_translator", "Translator", "🌍", None, [
-        ("translator", "Translator", "🌍", False),
+    ("sec_translator", "Translator", "globe", None, [
+        ("translator", "Translator", "globe", False),
     ], None),
 ]
 
@@ -104,7 +105,10 @@ class AuthDialog(ctk.CTkToplevel):
         self._build_register_tab(self._tab.tab(t("register")), th)
 
     def _build_login_tab(self, tab, th):
-        ctk.CTkLabel(tab, text="🔒  " + t("login_title"),
+        ctk.CTkLabel(tab,
+                     image=icons.icon("lock", 18, th["primary"]),
+                     text="  " + t("login_title"),
+                     compound="left",
                      font=ctk.CTkFont("Segoe UI", 16, "bold"),
                      text_color=th["primary"]).pack(pady=(16, 4), padx=20, anchor="w")
         ctk.CTkLabel(tab, text=t("login_subtitle"),
@@ -146,7 +150,10 @@ class AuthDialog(ctk.CTkToplevel):
         btn_row = ctk.CTkFrame(tab, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=10)
 
-        ctk.CTkButton(btn_row, text="🔓 " + t("login_btn"),
+        ctk.CTkButton(btn_row,
+                      image=icons.icon("right-to-bracket", 16, "#ffffff"),
+                      text=" " + t("login_btn"),
+                      compound="left",
                       fg_color=th["primary"], hover_color=th["primary_hover"],
                       font=ctk.CTkFont("Segoe UI", 13, "bold"), height=38,
                       command=self._login).pack(side="left", fill="x", expand=True, padx=(0, 8))
@@ -157,7 +164,10 @@ class AuthDialog(ctk.CTkToplevel):
                       command=self.destroy).pack(side="left", width=100)
 
     def _build_register_tab(self, tab, th):
-        ctk.CTkLabel(tab, text="📋  " + t("register"),
+        ctk.CTkLabel(tab,
+                     image=icons.icon("address-card", 18, th["primary"]),
+                     text="  " + t("register"),
+                     compound="left",
                      font=ctk.CTkFont("Segoe UI", 16, "bold"),
                      text_color=th["primary"]).pack(pady=(20, 8), padx=20, anchor="w")
 
@@ -169,13 +179,19 @@ class AuthDialog(ctk.CTkToplevel):
                      font=ctk.CTkFont("Segoe UI", 12), text_color=th["text_dim"],
                      justify="left").pack(padx=16, pady=16, anchor="w")
 
-        ctk.CTkButton(info_frame, text="💬 Otevřít Discord → dsc.gg/zeddihub",
+        ctk.CTkButton(info_frame,
+                      image=icons.icon("discord", 16, "#7289da"),
+                      text=" Otevřít Discord → dsc.gg/zeddihub",
+                      compound="left",
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 12), height=36,
                       command=lambda: webbrowser.open("https://dsc.gg/zeddihub")
                       ).pack(padx=16, pady=(0, 8), fill="x")
 
-        ctk.CTkButton(info_frame, text="🌐 ZeddiS.xyz",
+        ctk.CTkButton(info_frame,
+                      image=icons.icon("globe", 16, "#cccccc"),
+                      text=" ZeddiS.xyz",
+                      compound="left",
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 12), height=36,
                       command=lambda: webbrowser.open("https://zeddis.xyz")
@@ -221,7 +237,9 @@ class MainWindow(ctk.CTk):
         self._section_btns: dict[str, ctk.CTkButton] = {}
         self._current_game: str = "default"
         self._current_nav_id: str = "home"
+        self._locked_navs: set = set()
 
+        icons.preload()
         self._setup_window()
         self._setup_icon()
         self._build_layout()
@@ -336,7 +354,10 @@ class MainWindow(ctk.CTk):
                                             text_color="#444444")
         self._version_label.pack(side="right", padx=(4, 0))
 
-        self._auth_label = ctk.CTkLabel(right, text="🔓 " + t("not_logged_in"),
+        self._auth_label = ctk.CTkLabel(right,
+                                         image=icons.icon("lock-open", 13, "#666666"),
+                                         text=" " + t("not_logged_in"),
+                                         compound="left",
                                          font=ctk.CTkFont("Segoe UI", 10),
                                          text_color="#666666")
         self._auth_label.pack(side="right", padx=8)
@@ -348,9 +369,9 @@ class MainWindow(ctk.CTk):
 
         # Dark/light mode toggle
         self._mode_btn = ctk.CTkButton(
-            right, text="☀", width=30, height=24,
+            right, image=icons.icon("sun", 15, "#666666"), text="",
+            width=34, height=28,
             fg_color="transparent", hover_color="#2a2a2a",
-            text_color="#666666", font=ctk.CTkFont("Segoe UI", 14),
             command=self._toggle_appearance_mode
         )
         self._mode_btn.pack(side="right", padx=4)
@@ -406,7 +427,10 @@ class MainWindow(ctk.CTk):
         self._lang_btn.pack(fill="x", padx=4, pady=(2, 2), side="bottom")
 
         self._auth_btn = ctk.CTkButton(
-            self._sidebar, text="🔐 " + t("login"),
+            self._sidebar,
+            image=icons.icon("right-to-bracket", 15, "#888888"),
+            text=" " + t("login"),
+            compound="left",
             fg_color="transparent", hover_color="#1a1a1a",
             text_color="#888888", anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
@@ -415,7 +439,10 @@ class MainWindow(ctk.CTk):
         self._auth_btn.pack(fill="x", padx=4, pady=2, side="bottom")
 
         self._settings_btn = ctk.CTkButton(
-            self._sidebar, text="⚙  " + t("settings"),
+            self._sidebar,
+            image=icons.icon("gear", 15, "#aaaaaa"),
+            text="  " + t("settings"),
+            compound="left",
             fg_color="transparent", hover_color="#1a1a1a",
             text_color="#aaaaaa", anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
@@ -424,7 +451,10 @@ class MainWindow(ctk.CTk):
         self._settings_btn.pack(fill="x", padx=4, pady=2, side="bottom")
 
         self._links_btn = ctk.CTkButton(
-            self._sidebar, text="🔗  " + t("links"),
+            self._sidebar,
+            image=icons.icon("link", 15, "#aaaaaa"),
+            text="  " + t("links"),
+            compound="left",
             fg_color="transparent", hover_color="#1a1a1a",
             text_color="#aaaaaa", anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
@@ -444,16 +474,18 @@ class MainWindow(ctk.CTk):
                 continue
 
             if children is None:
-                # Top-level nav button (home, pc_tools)
+                # Top-level nav button (home, pc_tools, watchdog)
                 nav_id = sec_id
                 display_label = {
                     "home": t("home"),
                     "pc_tools": t("pc_tools"),
-                    "watchdog": "🔔 Watchdog",
+                    "watchdog": "Watchdog",
                 }.get(nav_id, nav_id)
                 btn = ctk.CTkButton(
                     self._nav_scroll,
-                    text=f"  {icon}  {display_label}",
+                    image=icons.icon(icon, 16, "#cccccc"),
+                    text=f"  {display_label}",
+                    compound="left",
                     fg_color="transparent",
                     hover_color="#1a1a1a",
                     text_color="#cccccc",
@@ -478,7 +510,9 @@ class MainWindow(ctk.CTk):
                 arrow = "▼" if is_expanded else "▶"
                 section_btn = ctk.CTkButton(
                     outer,
-                    text=f"  {icon}  {label}  {arrow}",
+                    image=icons.icon(icon, 14, "#888888"),
+                    text=f"  {label}  {arrow}",
+                    compound="left",
                     fg_color="transparent",
                     hover_color="#1a1a1a",
                     text_color="#888888",
@@ -500,14 +534,17 @@ class MainWindow(ctk.CTk):
 
                 for nav_id, child_label, child_icon, requires_auth in children:
                     locked = requires_auth and not is_authenticated()
-                    lock_suffix = " 🔒" if locked else ""
+                    if locked:
+                        self._locked_navs.add(nav_id)
+                    child_img = icons.icon("lock", 14, "#555555") if locked else icons.icon(child_icon, 14, "#cccccc")
                     tc = "#555555" if locked else "#cccccc"
                     fg = "#161616" if locked else "transparent"
-                    lock_border = "#2a1a1a" if locked else "transparent"
 
                     btn = ctk.CTkButton(
                         children_frame,
-                        text=f"    {child_icon}  {child_label}{lock_suffix}",
+                        image=child_img,
+                        text=f"   {child_label}",
+                        compound="left",
                         fg_color=fg,
                         hover_color="#1a1a1a",
                         text_color=tc,
@@ -585,9 +622,9 @@ class MainWindow(ctk.CTk):
                               hover_color=th["primary_hover"])
             else:
                 # Preserve lock styling
-                locked_text = "🔒" in btn.cget("text")
-                tc = "#555555" if locked_text else "#cccccc"
-                fg = "#161616" if locked_text else "transparent"
+                is_locked = nid in self._locked_navs
+                tc = "#555555" if is_locked else "#cccccc"
+                fg = "#161616" if is_locked else "transparent"
                 btn.configure(fg_color=fg, text_color=tc, hover_color="#1a1a1a")
 
         # Update settings / links button highlights
@@ -690,9 +727,11 @@ class MainWindow(ctk.CTk):
         if is_authenticated():
             user = get_current_user() or "?"
             self._auth_label.configure(
-                text=f"🔓 {user}", text_color="#4ade80")
+                image=icons.icon("user", 13, "#4ade80"),
+                text=f" {user}", text_color="#4ade80")
             self._auth_btn.configure(
-                text=f"✓ {t('logged_in_as', user=user)}", text_color="#4ade80")
+                image=icons.icon("check", 15, "#4ade80"),
+                text=f"  {t('logged_in_as', user=user)}", text_color="#4ade80")
 
             # Unlock locked nav items
             for entry in NAV_SECTIONS:
@@ -703,20 +742,26 @@ class MainWindow(ctk.CTk):
                     continue
                 for nav_id, child_label, child_icon, requires_auth in children:
                     if requires_auth and nav_id in self._nav_buttons:
+                        self._locked_navs.discard(nav_id)
                         btn = self._nav_buttons[nav_id]
-                        # Remove lock icon, restore normal styling
-                        new_text = f"    {child_icon}  {child_label}"
-                        # If currently selected, keep primary color; else normal
                         if nav_id == self._current_nav_id:
                             th = get_theme(NAV_GAME_MAP.get(nav_id, "default"))
-                            btn.configure(text=new_text, fg_color=th["primary"],
-                                         text_color="#ffffff")
+                            btn.configure(
+                                image=icons.icon(child_icon, 14, "#ffffff"),
+                                text=f"   {child_label}",
+                                fg_color=th["primary"], text_color="#ffffff")
                         else:
-                            btn.configure(text=new_text, fg_color="transparent",
-                                         text_color="#cccccc")
+                            btn.configure(
+                                image=icons.icon(child_icon, 14, "#cccccc"),
+                                text=f"   {child_label}",
+                                fg_color="transparent", text_color="#cccccc")
         else:
-            self._auth_label.configure(text="🔓 " + t("not_logged_in"), text_color="#666666")
-            self._auth_btn.configure(text="🔐 " + t("login"), text_color="#888888")
+            self._auth_label.configure(
+                image=icons.icon("lock-open", 13, "#666666"),
+                text=" " + t("not_logged_in"), text_color="#666666")
+            self._auth_btn.configure(
+                image=icons.icon("right-to-bracket", 15, "#888888"),
+                text=" " + t("login"), text_color="#888888")
 
             # Re-lock nav items
             for entry in NAV_SECTIONS:
@@ -727,11 +772,12 @@ class MainWindow(ctk.CTk):
                     continue
                 for nav_id, child_label, child_icon, requires_auth in children:
                     if requires_auth and nav_id in self._nav_buttons:
+                        self._locked_navs.add(nav_id)
                         btn = self._nav_buttons[nav_id]
                         btn.configure(
-                            text=f"    {child_icon}  {child_label} 🔒",
-                            fg_color="#161616",
-                            text_color="#555555"
+                            image=icons.icon("lock", 14, "#555555"),
+                            text=f"   {child_label}",
+                            fg_color="#161616", text_color="#555555"
                         )
 
     def _toggle_appearance_mode(self):
@@ -745,8 +791,8 @@ class MainWindow(ctk.CTk):
 
     def _update_mode_btn(self):
         mode = ctk.get_appearance_mode().lower()
-        icon = "🌙" if mode == "dark" else "☀"
-        self._mode_btn.configure(text=icon)
+        ic = icons.icon("moon", 15, "#666666") if mode == "dark" else icons.icon("sun", 15, "#666666")
+        self._mode_btn.configure(image=ic, text="")
 
     def _toggle_language(self):
         current = get_lang()
@@ -803,7 +849,9 @@ class MainWindow(ctk.CTk):
         if result and result.get("available"):
             latest = result.get("latest", "?")
             self._update_label.configure(
-                text=f"⬆ v{latest}",
+                image=icons.icon("arrow-up", 12, "#fb923c"),
+                compound="left",
+                text=f" v{latest}",
                 text_color="#fb923c",
                 cursor="hand2"
             )
@@ -834,7 +882,10 @@ class MainWindow(ctk.CTk):
             f.pack(fill="both", expand=True, padx=24, pady=16)
 
         # Frame 1 — Info
-        ctk.CTkLabel(frame1, text=f"⬆ Nová verze: v{latest}",
+        ctk.CTkLabel(frame1,
+                     image=icons.icon("arrow-up", 20, "#fb923c"),
+                     text=f"  Nová verze: v{latest}",
+                     compound="left",
                      font=ctk.CTkFont("Segoe UI", 17, "bold"),
                      text_color="#fb923c").pack(anchor="w", pady=(0, 2))
         ctk.CTkLabel(frame1, text=f"Aktuální verze: v{CURRENT_VERSION}",
@@ -852,7 +903,10 @@ class MainWindow(ctk.CTk):
         btn_row1 = ctk.CTkFrame(frame1, fg_color="transparent")
         btn_row1.pack(fill="x")
 
-        ctk.CTkButton(btn_row1, text="📥 Stáhnout a nainstalovat",
+        ctk.CTkButton(btn_row1,
+                      image=icons.icon("download", 16, "#ffffff"),
+                      text=" Stáhnout a nainstalovat",
+                      compound="left",
                       fg_color="#fb923c", hover_color="#e07b20",
                       font=ctk.CTkFont("Segoe UI", 12, "bold"), height=40,
                       command=lambda: _start_download()
@@ -863,7 +917,10 @@ class MainWindow(ctk.CTk):
                       command=d.destroy).pack(side="left", width=100)
 
         # Frame 2 — Downloading
-        ctk.CTkLabel(frame2, text="📥 Stahuji aktualizaci...",
+        ctk.CTkLabel(frame2,
+                     image=icons.icon("download", 18, "#fb923c"),
+                     text="  Stahuji aktualizaci...",
+                     compound="left",
                      font=ctk.CTkFont("Segoe UI", 15, "bold"),
                      text_color="#fb923c").pack(anchor="w", pady=(0, 8))
         _dl_status = ctk.CTkLabel(frame2, text="Připravuji stahování...",
@@ -880,7 +937,10 @@ class MainWindow(ctk.CTk):
         _pct_label.pack(anchor="e")
 
         # Frame 3 — Done
-        ctk.CTkLabel(frame3, text="✓ Aktualizace stažena!",
+        ctk.CTkLabel(frame3,
+                     image=icons.icon("circle-check", 20, "#22c55e"),
+                     text="  Aktualizace stažena!",
+                     compound="left",
                      font=ctk.CTkFont("Segoe UI", 17, "bold"),
                      text_color="#22c55e").pack(anchor="w", pady=(0, 8))
         ctk.CTkLabel(frame3,
@@ -898,7 +958,10 @@ class MainWindow(ctk.CTk):
             d.destroy()
             self.destroy()
 
-        ctk.CTkButton(frame3, text="🔄 Restartovat a nainstalovat",
+        ctk.CTkButton(frame3,
+                      image=icons.icon("arrows-rotate", 16, "#ffffff"),
+                      text=" Restartovat a nainstalovat",
+                      compound="left",
                       fg_color="#22c55e", hover_color="#16a34a",
                       font=ctk.CTkFont("Segoe UI", 13, "bold"), height=44,
                       command=_restart).pack(fill="x")
@@ -954,7 +1017,10 @@ class _LogoutDialog(ctk.CTkToplevel):
         row = ctk.CTkFrame(self, fg_color="transparent")
         row.pack(fill="x", padx=20, pady=16)
 
-        ctk.CTkButton(row, text="🔒 " + t("logout"),
+        ctk.CTkButton(row,
+                      image=icons.icon("right-from-bracket", 16, "#ffffff"),
+                      text=" " + t("logout"),
+                      compound="left",
                       fg_color="#8b2020", hover_color="#6b1818",
                       height=40, command=self._logout
                       ).pack(side="left", fill="x", expand=True, padx=(0, 8))

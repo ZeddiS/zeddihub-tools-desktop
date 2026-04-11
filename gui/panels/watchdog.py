@@ -18,6 +18,8 @@ try:
 except ImportError:
     def t(key, **kw): return key
 
+from .. import icons
+
 A2S_INFO = b"\xFF\xFF\xFF\xFFTSource Engine Query\x00"
 SERVER_STATUS_URL = "https://files.zeddihub.eu/tools/servers.json"
 
@@ -75,8 +77,9 @@ class WatchdogPanel(ctk.CTkFrame):
         header_row = ctk.CTkFrame(scroll, fg_color="transparent")
         header_row.pack(fill="x", padx=20, pady=(16, 8))
 
-        _label(header_row, "🔔 Server Watchdog", 20, bold=True,
-               color=th["primary"]).pack(side="left")
+        _label(header_row, "Server Watchdog", 20, bold=True,
+               color=th["primary"],
+               image=icons.icon("bell", 22, th["primary"]), compound="left").pack(side="left")
 
         self._status_dot = _label(header_row, "⬤ Neaktivní", 11,
                                    color=th["text_dim"])
@@ -103,17 +106,19 @@ class WatchdogPanel(ctk.CTkFrame):
         btn_row.pack(padx=14, pady=(0, 14), anchor="w")
 
         self._start_btn = ctk.CTkButton(
-            btn_row, text="▶ Spustit monitoring",
+            btn_row, text=" Spustit monitoring",
             fg_color=th["primary"], hover_color=th["primary_hover"],
             font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36,
+            image=icons.icon("play", 14, "#ffffff"), compound="left",
             command=self._start_monitoring
         )
         self._start_btn.pack(side="left", padx=(0, 8))
 
         self._stop_btn = ctk.CTkButton(
-            btn_row, text="⏹ Zastavit",
+            btn_row, text=" Zastavit",
             fg_color=th["secondary"], hover_color="#6b1818",
             font=ctk.CTkFont("Segoe UI", 12), height=36,
+            image=icons.icon("stop", 14, "#f87171"), compound="left",
             state="disabled",
             command=self._stop_monitoring
         )
@@ -123,7 +128,8 @@ class WatchdogPanel(ctk.CTkFrame):
         add_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         add_card.pack(fill="x", padx=20, pady=6)
 
-        _label(add_card, "➕ Přidat server", 13, bold=True, color=th["primary"]
+        _label(add_card, " Přidat server", 13, bold=True, color=th["primary"],
+               image=icons.icon("plus-circle", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 6), anchor="w")
 
         add_row = ctk.CTkFrame(add_card, fg_color="transparent")
@@ -145,21 +151,25 @@ class WatchdogPanel(ctk.CTkFrame):
         self._add_port.pack(side="left", padx=(0, 6))
         self._add_port.insert(0, "27015")
 
-        ctk.CTkButton(add_row, text="➕",
+        ctk.CTkButton(add_row, text="",
                       fg_color=th["primary"], hover_color=th["primary_hover"],
                       font=ctk.CTkFont("Segoe UI", 12, "bold"), height=32, width=40,
+                      image=icons.icon("plus", 14, "#ffffff"), compound="left",
                       command=self._add_server
                       ).pack(side="left")
 
         # Servers list
-        _label(scroll, "📡 Monitorované servery", 15, bold=True,
-               color=th["primary"]).pack(padx=20, pady=(12, 4), anchor="w")
+        _label(scroll, " Monitorované servery", 15, bold=True,
+               color=th["primary"],
+               image=icons.icon("satellite-dish", 17, th["primary"]), compound="left"
+               ).pack(padx=20, pady=(12, 4), anchor="w")
 
         self._servers_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         self._servers_frame.pack(fill="x", padx=20, pady=4)
 
         # Log
-        _label(scroll, "📋 Log", 13, bold=True, color=th["primary"]
+        _label(scroll, "Log", 13, bold=True, color=th["primary"],
+               image=icons.icon("clipboard-list", 15, th["primary"]), compound="left"
                ).pack(padx=20, pady=(12, 4), anchor="w")
 
         self._log_box = ctk.CTkTextbox(scroll, height=150,
@@ -270,9 +280,10 @@ class WatchdogPanel(ctk.CTkFrame):
         ping_lbl.pack(anchor="w")
         mon["_ping_lbl"] = ping_lbl
 
-        ctk.CTkButton(row, text="✕", width=28, height=28,
+        ctk.CTkButton(row, text="", width=28, height=28,
                       fg_color=th["secondary"], hover_color="#6b1818",
                       font=ctk.CTkFont("Segoe UI", 11), text_color="#888888",
+                      image=icons.icon("times", 11, "#888888"), compound="left",
                       command=lambda i=idx: self._remove_server(i)
                       ).pack(side="right")
 

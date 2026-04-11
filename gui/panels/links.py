@@ -15,6 +15,8 @@ except ImportError:
 
 from pathlib import Path
 
+from .. import icons
+
 LOGO_PATH = Path(__file__).parent.parent.parent / "assets" / "logo.png"
 
 
@@ -24,9 +26,11 @@ def _label(parent, text, font_size=12, bold=False, color=None, **kw):
                         text_color=color or "#ffffff", **kw)
 
 
-def _link_btn(parent, text, url, theme, icon="🌐", width=240):
+def _link_btn(parent, text, url, theme, icon="globe", width=240):
+    _img = icons.icon(icon, 14, theme["text_dim"]) if icon else None
     return ctk.CTkButton(
-        parent, text=f"{icon}  {text}",
+        parent, text=f"  {text}",
+        **( {"image": _img, "compound": "left"} if _img else {} ),
         command=lambda: webbrowser.open(url),
         fg_color=theme["secondary"], hover_color=theme["primary"],
         text_color=theme["text"], anchor="w",
@@ -47,13 +51,13 @@ class LinksPanel(ctk.CTkFrame):
         tab = ctk.CTkTabview(self, fg_color=t["sidebar_bg"])
         tab.pack(fill="both", expand=True, padx=16, pady=16)
 
-        tab.add("🔗 Rychlé odkazy")
-        tab.add("🌐 DNS Správa")
+        tab.add("Rychlé odkazy")
+        tab.add("DNS Správa")
         tab.add("📁 File Uploader")
         tab.add("ℹ Credits")
 
-        self._build_links(tab.tab("🔗 Rychlé odkazy"))
-        self._build_dns(tab.tab("🌐 DNS Správa"))
+        self._build_links(tab.tab("Rychlé odkazy"))
+        self._build_dns(tab.tab("DNS Správa"))
         self._build_uploader(tab.tab("📁 File Uploader"))
         self._build_credits(tab.tab("ℹ Credits"))
 
@@ -65,33 +69,35 @@ class LinksPanel(ctk.CTkFrame):
         _label(scroll, "Rychlé Odkazy", 18, bold=True, color=t["primary"]).pack(anchor="w", pady=(0, 16))
 
         sections = {
-            "🏠  ZeddiHub Komunita": [
-                ("ZeddiHub Web",          "https://zeddihub.eu",              "🌐"),
-                ("ZeddiWiki – Návody",    "https://wiki.zeddihub.eu",         "📖"),
-                ("Discord Server",         "https://dsc.gg/zeddihub",          "💬"),
-                ("GitHub Organizace",      "https://github.com/ZeddiS",        "🐙"),
+            ("ZeddiHub Komunita", "house"): [
+                ("ZeddiHub Web",          "https://zeddihub.eu",              "globe"),
+                ("ZeddiWiki – Návody",    "https://wiki.zeddihub.eu",         "book"),
+                ("Discord Server",         "https://dsc.gg/zeddihub",          "discord"),
+                ("GitHub Organizace",      "https://github.com/ZeddiS",        "github"),
             ],
-            "👨‍💻  ZeddiS – Autor": [
-                ("Portfolio / Web",        "https://zeddis.xyz",               "👨‍💻"),
-                ("Steam Profil",           "https://steamcommunity.com/profiles/76561198085060456", "🎮"),
-                ("GitHub Profil",          "https://github.com/ZeddiS",        "🐙"),
+            ("ZeddiS – Autor", "user"): [
+                ("Portfolio / Web",        "https://zeddis.xyz",               "user"),
+                ("Steam Profil",           "https://steamcommunity.com/profiles/76561198085060456", "gamepad"),
+                ("GitHub Profil",          "https://github.com/ZeddiS",        "github"),
             ],
-            "🛠  Nástroje a Soubory": [
-                ("File Uploader",          "https://files.zeddihub.eu/uploader/", "📁"),
-                ("Files CDN",              "https://files.zeddihub.eu",        "💾"),
-                ("ZeddiHub Tools Releases","https://github.com/ZeddiS/zeddihub-tools-desktop/releases", "📦"),
+            ("Nástroje a Soubory", "tools"): [
+                ("File Uploader",          "https://files.zeddihub.eu/uploader/", "upload"),
+                ("Files CDN",              "https://files.zeddihub.eu",        "hdd"),
+                ("ZeddiHub Tools Releases","https://github.com/ZeddiS/zeddihub-tools-desktop/releases", "box-open"),
             ],
-            "🎮  Herní Servery": [
-                ("Rust Server – connect",  "steam://connect/rust1.zeddihub.eu:28015", "🦀"),
-                ("CS2 Server – connect",   "steam://connect/cs2.zeddihub.eu:27015",   "🎯"),
+            ("Herní Servery", "gamepad"): [
+                ("Rust Server – connect",  "steam://connect/rust1.zeddihub.eu:28015", "puzzle-piece"),
+                ("CS2 Server – connect",   "steam://connect/cs2.zeddihub.eu:27015",   "crosshairs"),
             ],
         }
 
-        for section_name, links in sections.items():
+        for (section_name, section_icon), links in sections.items():
             sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
             sec.pack(fill="x", pady=6)
-            _label(sec, section_name, 13, bold=True, color=t["primary"]).pack(
-                padx=14, pady=(10, 6), anchor="w")
+            sec_icon_img = icons.icon(section_icon, 15, t["primary"])
+            _label(sec, section_name, 13, bold=True, color=t["primary"],
+                   **({"image": sec_icon_img, "compound": "left"} if sec_icon_img else {})
+                   ).pack(padx=14, pady=(10, 6), anchor="w")
 
             for label, url, icon in links:
                 _link_btn(sec, label, url, t, icon=icon, width=380).pack(
@@ -110,7 +116,8 @@ class LinksPanel(ctk.CTkFrame):
         # DNS Lookup tool
         lookup_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
         lookup_frame.pack(fill="x", pady=6)
-        _label(lookup_frame, "🔍 DNS Lookup", 13, bold=True, color=t["text_dim"]).pack(
+        _label(lookup_frame, " DNS Lookup", 13, bold=True, color=t["text_dim"],
+               image=icons.icon("search", 15, t["text_dim"]), compound="left").pack(
             padx=12, pady=(10, 6), anchor="w")
 
         row = ctk.CTkFrame(lookup_frame, fg_color="transparent")
@@ -122,7 +129,8 @@ class LinksPanel(ctk.CTkFrame):
         self.dns_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.dns_entry.bind("<Return>", lambda _: self._dns_lookup())
 
-        ctk.CTkButton(row, text="🔍 Vyhledat", height=36, width=110,
+        ctk.CTkButton(row, text=" Vyhledat", height=36, width=110,
+                      image=icons.icon("search", 13, "#ffffff"), compound="left",
                       fg_color=t["primary"], hover_color=t["primary_hover"],
                       command=self._dns_lookup).pack(side="left")
 
@@ -135,7 +143,8 @@ class LinksPanel(ctk.CTkFrame):
         # Ping tool
         ping_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
         ping_frame.pack(fill="x", pady=6)
-        _label(ping_frame, "📡 Port Checker / Ping", 13, bold=True, color=t["text_dim"]).pack(
+        _label(ping_frame, " Port Checker / Ping", 13, bold=True, color=t["text_dim"],
+               image=icons.icon("satellite-dish", 15, t["text_dim"]), compound="left").pack(
             padx=12, pady=(10, 6), anchor="w")
 
         ping_row = ctk.CTkFrame(ping_frame, fg_color="transparent")
@@ -161,7 +170,8 @@ class LinksPanel(ctk.CTkFrame):
         # Common ZeddiHub DNS
         dns_quick = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
         dns_quick.pack(fill="x", pady=6)
-        _label(dns_quick, "⚡ Rychlé vyhledávání ZeddiHub domén", 12, bold=True, color=t["text_dim"]
+        _label(dns_quick, " Rychlé vyhledávání ZeddiHub domén", 12, bold=True, color=t["text_dim"],
+               image=icons.icon("bolt", 14, t["text_dim"]), compound="left"
                ).pack(padx=12, pady=(10, 6), anchor="w")
 
         for domain in ["zeddihub.eu", "wiki.zeddihub.eu", "files.zeddihub.eu", "zeddis.xyz"]:
@@ -253,11 +263,13 @@ class LinksPanel(ctk.CTkFrame):
         card = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
         card.pack(fill="x", pady=6)
 
-        _label(card, "🌐 Webový uploader", 14, bold=True, color=t["text"]).pack(
+        _label(card, " Webový uploader", 14, bold=True, color=t["text"],
+               image=icons.icon("globe", 16, t["text"]), compound="left").pack(
             padx=16, pady=(16, 4), anchor="w")
         _label(card, "Otevře se webová stránka nahrávání souborů ve vašem prohlížeči.",
                11, color=t["text_dim"]).pack(padx=16, pady=(0, 8), anchor="w")
-        ctk.CTkButton(card, text="🚀 Otevřít File Uploader",
+        ctk.CTkButton(card, text=" Otevřít File Uploader",
+                      image=icons.icon("external-link-alt", 14, "#ffffff"), compound="left",
                       fg_color=t["primary"], hover_color=t["primary_hover"],
                       font=ctk.CTkFont("Segoe UI", 13, "bold"), height=42,
                       command=lambda: webbrowser.open("https://files.zeddihub.eu/uploader/")
@@ -266,7 +278,8 @@ class LinksPanel(ctk.CTkFrame):
         # Info
         info = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
         info.pack(fill="x", pady=6)
-        _label(info, "ℹ Informace o CDN", 13, bold=True, color=t["text_dim"]).pack(
+        _label(info, " Informace o CDN", 13, bold=True, color=t["text_dim"],
+               image=icons.icon("info-circle", 15, t["text_dim"]), compound="left").pack(
             padx=12, pady=(10, 6), anchor="w")
 
         info_items = [
@@ -303,13 +316,13 @@ class LinksPanel(ctk.CTkFrame):
                color=t["text_dim"]).pack(pady=(2, 16), anchor="center")
 
         credits_data = [
-            ("👨‍💻 Autor",        "ZeddiS – https://zeddis.xyz"),
-            ("🏠 Komunita",      "ZeddiHub – https://zeddihub.eu"),
-            ("📖 Dokumentace",   "https://wiki.zeddihub.eu"),
-            ("💬 Discord",        "https://dsc.gg/zeddihub"),
-            ("🐙 GitHub",         "https://github.com/ZeddiS"),
-            ("🐍 Framework",     "Python 3 + customtkinter"),
-            ("📜 Licence",       "MIT License"),
+            ("Autor",        "ZeddiS – https://zeddis.xyz"),
+            ("Komunita",     "ZeddiHub – https://zeddihub.eu"),
+            ("Dokumentace",  "https://wiki.zeddihub.eu"),
+            ("Discord",      "https://dsc.gg/zeddihub"),
+            ("GitHub",       "https://github.com/ZeddiS"),
+            ("Framework",    "Python 3 + customtkinter"),
+            ("Licence",      "MIT License"),
         ]
 
         sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
@@ -323,8 +336,9 @@ class LinksPanel(ctk.CTkFrame):
 
         ctk.CTkFrame(sec, fg_color="transparent", height=10).pack()
 
-        ctk.CTkButton(scroll, text="🌐 Otevřít zeddihub.eu",
+        ctk.CTkButton(scroll, text=" Otevřít zeddihub.eu",
                       fg_color=t["primary"], hover_color=t["primary_hover"],
                       font=ctk.CTkFont("Segoe UI", 13, "bold"), height=42,
+                      image=icons.icon("globe", 14, "#cccccc"), compound="left",
                       command=lambda: webbrowser.open("https://zeddihub.eu")
                       ).pack(pady=12, fill="x")

@@ -6,6 +6,7 @@ import os
 import tkinter as tk
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+from .. import icons
 
 
 def _label(parent, text, font_size=12, bold=False, color=None, **kw):
@@ -56,16 +57,16 @@ class CSGOPlayerPanel(ctk.CTkFrame):
         tab = ctk.CTkTabview(self, fg_color=t["sidebar_bg"])
         tab.pack(fill="both", expand=True, padx=16, pady=16)
 
-        tab.add("🎯 Crosshair")
+        tab.add("Crosshair")
         tab.add("🔫 Viewmodel")
         tab.add("📝 Autoexec")
-        tab.add("🎮 Practice")
+        tab.add("Practice")
         tab.add("🛒 Buy Binds")
 
-        self._build_crosshair(tab.tab("🎯 Crosshair"))
+        self._build_crosshair(tab.tab("Crosshair"))
         self._build_viewmodel(tab.tab("🔫 Viewmodel"))
         self._build_autoexec(tab.tab("📝 Autoexec"))
-        self._build_practice(tab.tab("🎮 Practice"))
+        self._build_practice(tab.tab("Practice"))
         self._build_buybinds(tab.tab("🛒 Buy Binds"))
 
     def _build_crosshair(self, tab):
@@ -106,7 +107,8 @@ class CSGOPlayerPanel(ctk.CTkFrame):
             self._xhair_vars[k] = _entry_row(sec, lbl, default, t, i, hint)
 
         _btn(scroll, "💾 Uložit crosshair.cfg", self._save_crosshair, t).pack(padx=8, pady=10, fill="x")
-        ctk.CTkButton(scroll, text="📋 Kopírovat share kód",
+        ctk.CTkButton(scroll, text=" Kopírovat share kód",
+                      image=icons.icon("copy", 14, "#cccccc"), compound="left",
                       command=self._copy_code, fg_color=t["secondary"], hover_color="#3a3a4a",
                       font=ctk.CTkFont("Segoe UI", 11), height=32
                       ).pack(padx=8, pady=(0, 10), fill="x")
@@ -387,13 +389,13 @@ class CSGOServerPanel(ctk.CTkFrame):
         tab = ctk.CTkTabview(self, fg_color=t["sidebar_bg"])
         tab.pack(fill="both", expand=True, padx=16, pady=16)
 
-        tab.add("📋 Server.cfg")
+        tab.add("Server.cfg")
         tab.add("🗄 DB Editor")
-        tab.add("🖥 RCON Klient")
+        tab.add("RCON Klient")
 
-        self._build_servercfg(tab.tab("📋 Server.cfg"))
+        self._build_servercfg(tab.tab("Server.cfg"))
         self._build_db_editor(tab.tab("🗄 DB Editor"))
-        self._build_rcon(tab.tab("🖥 RCON Klient"))
+        self._build_rcon(tab.tab("RCON Klient"))
 
     def _build_servercfg(self, tab):
         t = self.theme

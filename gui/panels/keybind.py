@@ -8,6 +8,8 @@ import tkinter as tk
 import customtkinter as ctk
 from typing import Callable
 
+from .. import icons
+
 # ---- CS2 / CS:GO items ----
 CS_WEAPONS = [
     "ak47", "m4a1", "m4a1_silencer", "awp", "deagle", "glock", "usp_silencer",
@@ -121,10 +123,13 @@ class KeybindPanel(ctk.CTkFrame):
 
     def _build(self):
         # Title
+        th = self.theme
         title = ctk.CTkLabel(
-            self, text=f"⌨  Keybind Generátor – {self.game.upper()}",
+            self, text=f"  Keybind Generátor – {self.game.upper()}",
             font=ctk.CTkFont("Segoe UI", 18, "bold"),
-            text_color=self.theme["primary"]
+            text_color=th["primary"],
+            image=icons.icon("keyboard", 20, th["primary"]),
+            compound="left"
         )
         title.pack(pady=(16, 4), padx=20, anchor="w")
 
@@ -169,17 +174,19 @@ class KeybindPanel(ctk.CTkFrame):
         btn_row.pack(padx=20, pady=10, fill="x")
 
         ctk.CTkButton(
-            btn_row, text="💾 Uložit .cfg soubor",
+            btn_row, text=" Uložit .cfg soubor",
             fg_color=self.theme["primary"],
             hover_color=self.theme["primary_hover"],
+            image=icons.icon("save", 14, "#ffffff"), compound="left",
             command=self._save_cfg,
             font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36, width=200
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            btn_row, text="🗑 Vymazat vše",
+            btn_row, text=" Vymazat vše",
             fg_color=self.theme["secondary"],
             hover_color="#3a3a4a",
+            image=icons.icon("trash", 14, th["text_dim"]), compound="left",
             command=self._clear_all,
             font=ctk.CTkFont("Segoe UI", 12), height=36, width=140
         ).pack(side="left")
@@ -354,15 +361,17 @@ class _BindDialog(ctk.CTkToplevel):
 
         if current:
             ctk.CTkButton(
-                btn_row, text="🗑 Odebrat bind",
+                btn_row, text=" Odebrat bind",
                 fg_color="#8b2020", hover_color="#6b1818",
+                image=icons.icon("trash", 13, "#ffffff"), compound="left",
                 command=self._remove, height=34, width=130
             ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
-            btn_row, text="✕ Zrušit",
+            btn_row, text=" Zrušit",
             fg_color=self.theme["secondary"],
             hover_color="#3a3a4a",
+            image=icons.icon("times", 13, self.theme["text_dim"]), compound="left",
             command=self.destroy, height=34, width=100
         ).pack(side="right")
 
@@ -414,9 +423,10 @@ class _BindDialog(ctk.CTkToplevel):
             self.custom_entry.insert(0, current)
 
         ctk.CTkButton(
-            tab, text="✔ Potvrdit příkaz",
+            tab, text=" Potvrdit příkaz",
             fg_color=self.theme["primary"],
             hover_color=self.theme["primary_hover"],
+            image=icons.icon("check", 13, "#ffffff"), compound="left",
             command=self._confirm_custom,
             height=36
         ).pack(padx=10, pady=4, fill="x")

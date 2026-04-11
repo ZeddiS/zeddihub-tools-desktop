@@ -16,6 +16,7 @@ import tkinter as tk
 import customtkinter as ctk
 from tkinter import messagebox
 from pathlib import Path
+from .. import icons
 
 try:
     import psutil
@@ -52,15 +53,15 @@ class PCToolsPanel(ctk.CTkFrame):
         tab = ctk.CTkTabview(self, fg_color=t_theme["sidebar_bg"])
         tab.pack(fill="both", expand=True, padx=12, pady=12)
 
-        tab.add("💻 " + t("sys_info"))
-        tab.add("🌐 " + t("dns_temp"))
+        tab.add(t("sys_info"))
+        tab.add(t("dns_temp"))
         tab.add("📡 " + t("net_tools"))
-        tab.add("⚙ " + t("utility"))
+        tab.add(t("utility"))
 
-        self._build_sysinfo(tab.tab("💻 " + t("sys_info")))
-        self._build_dns_temp(tab.tab("🌐 " + t("dns_temp")))
+        self._build_sysinfo(tab.tab(t("sys_info")))
+        self._build_dns_temp(tab.tab(t("dns_temp")))
         self._build_nettools(tab.tab("📡 " + t("net_tools")))
-        self._build_utility(tab.tab("⚙ " + t("utility")))
+        self._build_utility(tab.tab(t("utility")))
 
     # ─── SYSTEM INFO ──────────────────────────────────────────────────────────
 
@@ -69,7 +70,8 @@ class PCToolsPanel(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
-        _label(scroll, "💻 " + t("sys_info"), 16, bold=True, color=th["primary"]
+        _label(scroll, t("sys_info"), 16, bold=True, color=th["primary"],
+               image=icons.icon("laptop", 18, th["primary"]), compound="left"
                ).pack(padx=4, pady=(4, 8), anchor="w")
 
         if not PSUTIL_OK:
@@ -237,14 +239,16 @@ class PCToolsPanel(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
-        _label(scroll, "🌐 " + t("dns_temp"), 16, bold=True, color=th["primary"]
+        _label(scroll, t("dns_temp"), 16, bold=True, color=th["primary"],
+               image=icons.icon("globe", 18, th["primary"]), compound="left"
                ).pack(padx=4, pady=(4, 10), anchor="w")
 
         # DNS Flush section
         dns_card = _card(scroll, th)
         dns_card.pack(fill="x", pady=6)
 
-        _label(dns_card, "🔄 " + t("dns_flush"), 13, bold=True, color=th["primary"]
+        _label(dns_card, t("dns_flush"), 13, bold=True, color=th["primary"],
+               image=icons.icon("arrows-rotate", 15, th["primary"]), compound="left"
                ).pack(padx=14, pady=(12, 6), anchor="w")
         _label(dns_card, "Vymaže DNS cache systému Windows (ipconfig /flushdns).",
                10, color=th["text_dim"]).pack(padx=14, anchor="w")
@@ -266,9 +270,11 @@ class PCToolsPanel(ctk.CTkFrame):
 
         hist_header = ctk.CTkFrame(hist_card, fg_color="transparent")
         hist_header.pack(fill="x", padx=14, pady=(12, 6))
-        _label(hist_header, "📋 Historie DNS flush", 13, bold=True, color=th["primary"]
+        _label(hist_header, "Historie DNS flush", 13, bold=True, color=th["primary"],
+               image=icons.icon("clipboard-list", 15, th["primary"]), compound="left"
                ).pack(side="left")
-        ctk.CTkButton(hist_header, text="🗑 Vymazat", height=26, width=80,
+        ctk.CTkButton(hist_header, text=" Vymazat", height=26, width=80,
+                      image=icons.icon("trash", 12, "#cccccc"), compound="left",
                       fg_color=th["secondary"], hover_color="#3a1a1a",
                       font=ctk.CTkFont("Segoe UI", 10),
                       command=self._clear_dns_history
@@ -317,13 +323,15 @@ class PCToolsPanel(ctk.CTkFrame):
         btn_row = ctk.CTkFrame(temp_card, fg_color="transparent")
         btn_row.pack(padx=14, pady=10, anchor="w")
 
-        ctk.CTkButton(btn_row, text="🔍 " + t("scan_temp"),
+        ctk.CTkButton(btn_row, text=" " + t("scan_temp"),
+                      image=icons.icon("magnifying-glass", 14, "#cccccc"), compound="left",
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._scan_temp
                       ).pack(side="left", padx=(0, 8))
 
-        ctk.CTkButton(btn_row, text="🗑 " + t("delete_temp"),
+        ctk.CTkButton(btn_row, text=" " + t("delete_temp"),
+                      image=icons.icon("trash", 14, "#cccccc"), compound="left",
                       fg_color="#8b2020", hover_color="#6b1818",
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._clean_temp
@@ -626,7 +634,8 @@ class PCToolsPanel(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
-        _label(scroll, "⚙ " + t("utility"), 16, bold=True, color=th["primary"]
+        _label(scroll, t("utility"), 16, bold=True, color=th["primary"],
+               image=icons.icon("wrench", 18, th["primary"]), compound="left"
                ).pack(padx=4, pady=(4, 10), anchor="w")
 
         # Shutdown timer
@@ -647,13 +656,15 @@ class PCToolsPanel(ctk.CTkFrame):
         self._shutdown_minutes.pack(side="left", padx=(0, 12))
         self._shutdown_minutes.insert(0, "30")
 
-        ctk.CTkButton(row, text="▶ " + t("run"),
+        ctk.CTkButton(row, text=" " + t("run"),
+                      image=icons.icon("play", 14, "#cccccc"), compound="left",
                       fg_color=th["primary"], hover_color=th["primary_hover"],
                       font=ctk.CTkFont("Segoe UI", 11, "bold"), height=34,
                       command=self._start_shutdown
                       ).pack(side="left", padx=(0, 8))
 
-        ctk.CTkButton(row, text="✕ " + t("shutdown_cancel"),
+        ctk.CTkButton(row, text=" " + t("shutdown_cancel"),
+                      image=icons.icon("xmark", 14, "#cccccc"), compound="left",
                       fg_color="#8b2020", hover_color="#6b1818",
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._cancel_shutdown
