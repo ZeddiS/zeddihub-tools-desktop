@@ -110,9 +110,10 @@ KEY_GAP = 4
 
 
 class KeybindPanel(ctk.CTkFrame):
-    def __init__(self, parent, game: str, theme: dict, **kwargs):
+    def __init__(self, parent, game: str, theme: dict, nav_callback=None, **kwargs):
         super().__init__(parent, fg_color=theme["content_bg"], **kwargs)
         self.game = game
+        self._nav_callback = nav_callback
         self.theme = theme
         self.binds: dict[str, str] = {}  # key_name → command string
         self._key_buttons: dict[str, ctk.CTkButton] = {}
