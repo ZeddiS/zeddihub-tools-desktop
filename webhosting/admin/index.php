@@ -8,12 +8,12 @@
  * Data soubory musí být v /data/ (o úroveň výše od /admin/)
  */
 
-// ── Session — works with mod_php AND FastCGI/php-fpm ─────────────────────────
-$_session_opts = [
-    'cookie_httponly' => true,
-    'cookie_samesite' => 'Strict',
-];
-if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+// ── Session — works with mod_php AND FastCGI/php-fpm, PHP 7.0+ ───────────────
+$_session_opts = ['cookie_httponly' => true];
+if (PHP_VERSION_ID >= 70300) {               // cookie_samesite added in PHP 7.3
+    $_session_opts['cookie_samesite'] = 'Strict';
+}
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
     $_session_opts['cookie_secure'] = true;
 }
 session_start($_session_opts);
@@ -216,7 +216,9 @@ function handle_clients(string $action): void {
             }
             $auth['users'] = array_values(array_filter(
                 $auth['users'],
-                fn($u) => strtolower($u['username'] ?? '') !== strtolower($del)
+                function($u) use ($del) {
+                    return strtolower($u['username'] ?? '') !== strtolower($del);
+                }
             ));
             if (write_json(FILE_AUTH, $auth)) {
                 flash('success', "Uživatel '$del' byl smazán.");
@@ -267,7 +269,7 @@ function handle_clients(string $action): void {
             $code = trim($_POST['code'] ?? '');
             $auth['access_codes'] = array_values(array_filter(
                 $auth['access_codes'],
-                fn($c) => $c !== $code
+                function($c) use ($code) { return $c !== $code; }
             ));
             if (write_json(FILE_AUTH, $auth)) {
                 flash('success', "Kód '$code' byl smazán.");
