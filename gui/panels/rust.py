@@ -496,24 +496,47 @@ class RustServerPanel(ctk.CTkFrame):
         self._pm_log(f"✓ Složka zvolena: {path}")
         self._pm_log(f"  Nalezeno {cs_count} .cs souborů")
 
+    _BULK_FIX_RULES = [
+        (r"Pool\.GetList<(.+?)>\(\)",       r"Pool.Get<List<\1>>()"),
+        (r"Pool\.FreeList\((.+?)\)",        r"Pool.FreeUnmanaged(\1)"),
+        (r"OnPlayerInit\s*\(",              r"OnPlayerConnected("),
+        (r"(\w+)\.SendConsoleCommand\(",    r"\1.Command("),
+        (r"(\w+)\.net\.connection",         r"\1.Connection"),
+        (r"(\s*)void\s+OnTick\s*\(",        r"\1// void OnTick("),
+        (r"([^/])(SendNotification\s*\()",  r"\1// \2"),
+    ]
+
     def _bulk_fix(self):
         if not self._pm_source_dir:
             self._pm_log("! Nejprve zvolte složku se soubory .cs"); return
         self._pm_log("→ Hromadná oprava - kontrola pluginů...")
 
-        # Call the existing logic from the module if available
-        try:
-            import sys
-            sys.path.insert(0, str(__file__).rsplit("gui", 1)[0])
-            from zeddihub_rust_editor.queue_tools import queue_bulk_fix
-            self._pm_log("  Načten modul oprav z terminálové verze.")
-        except Exception:
-            self._pm_log("  Simulace oprav (modul TUI nedostupný v GUI režimu).")
+        def _run():
             cs_files = [f for f in os.listdir(self._pm_source_dir) if f.endswith('.cs')]
-            self._pm_log(f"  Kontroluji {len(cs_files)} pluginů...")
+            self._pm_log(f"  Nalezeno {len(cs_files)} pluginů...")
+            fixed = 0
             for fname in cs_files:
-                self._pm_log(f"  [OK] {fname}")
-            self._pm_log("✓ Oprava dokončena.")
+                fpath = os.path.join(self._pm_source_dir, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                    new_content = content
+                    changes = 0
+                    for pat, rep in self._BULK_FIX_RULES:
+                        new_content, n = re.subn(pat, rep, new_content)
+                        changes += n
+                    if changes > 0:
+                        with open(fpath, "w", encoding="utf-8") as f:
+                            f.write(new_content)
+                        self._pm_log(f"  [OPRAVENO {changes}x] {fname}")
+                        fixed += 1
+                    else:
+                        self._pm_log(f"  [OK] {fname}")
+                except Exception as e:
+                    self._pm_log(f"  [CHYBA] {fname}: {e}")
+            self._pm_log(f"✓ Oprava dokončena. Upraveno {fixed}/{len(cs_files)} souborů.")
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def _edit_commands(self):
         if not self._pm_source_dir:
