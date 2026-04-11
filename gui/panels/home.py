@@ -7,6 +7,7 @@ import time
 import struct
 import socket
 import threading
+import webbrowser
 import urllib.request
 import urllib.error
 import tkinter as tk
@@ -178,8 +179,6 @@ class HomePanel(ctk.CTkFrame):
         self._rec_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         self._rec_frame.pack(fill="x", padx=20, pady=4)
 
-        # Tools overview at bottom
-        self._build_tools_overview(scroll)
 
     def _build_banner(self, parent):
         th = self.theme
@@ -345,11 +344,21 @@ class HomePanel(ctk.CTkFrame):
 
         card._srv_data = srv
 
-        ctk.CTkButton(card, text="📋 " + t("copy_ip"), height=26, width=120,
+        btn_row = ctk.CTkFrame(card, fg_color="transparent")
+        btn_row.pack(padx=12, pady=(2, 10), anchor="w")
+
+        ctk.CTkButton(btn_row, text="📋 " + t("copy_ip"), height=26, width=100,
                       fg_color=th["secondary"], hover_color=th["primary"],
                       font=ctk.CTkFont("Segoe UI", 9),
                       command=lambda ip=ip_port: self._copy_ip(ip)
-                      ).pack(padx=12, pady=(0, 10), anchor="w")
+                      ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(btn_row, text="▶ Steam", height=26, width=80,
+                      fg_color="#1a3a1a", hover_color="#4ade80",
+                      text_color="#4ade80",
+                      font=ctk.CTkFont("Segoe UI", 9, "bold"),
+                      command=lambda ip=ip_port: self._steam_connect(ip)
+                      ).pack(side="left")
 
         return card
 
@@ -400,6 +409,9 @@ class HomePanel(ctk.CTkFrame):
     def _copy_ip(self, ip: str):
         self.clipboard_clear()
         self.clipboard_append(ip)
+
+    def _steam_connect(self, ip_port: str):
+        webbrowser.open(f"steam://connect/{ip_port}")
 
     # ─── RECOMMENDED TOOLS ────────────────────────────────────────────────────
 

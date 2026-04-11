@@ -23,9 +23,9 @@ from .updater import check_for_update, download_update, apply_update, open_relea
 from .locale import t, get_lang, set_lang, init as locale_init, load_settings, save_settings
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
-LOGO_PATH = ASSETS_DIR / "logo.png"
-ICON_PATH = ASSETS_DIR / "icon.ico"
-LOGO_ICON_PATH = ASSETS_DIR / "logo_icon.png"
+LOGO_PATH = ASSETS_DIR / "logo2.png"          # header / sidebar logo
+ICON_PATH = ASSETS_DIR / "web_favicon.ico"    # window + tray icon
+LOGO_ICON_PATH = ASSETS_DIR / "logo_icon.png" # fallback
 
 SIDEBAR_W = 240
 HEADER_H = 54
@@ -35,6 +35,7 @@ HEADER_H = 54
 NAV_SECTIONS = [
     ("home",     None,    "🏠", None,   None, False),   # top-level item, no section
     ("pc_tools", None,    "💻", None,   None, False),   # top-level item
+    ("watchdog", None,    "🔔", None,   None, False),   # top-level item
     ("sec_cs2",  "CS2",   "🎯", "cs2",  [
         ("cs2_player",  "Hráčské nástroje",  "👤", False),
         ("cs2_server",  "Serverové nástroje", "🖥", True),
@@ -53,9 +54,6 @@ NAV_SECTIONS = [
     ("sec_translator", "Translator", "🌍", None, [
         ("translator", "Translator", "🌍", False),
     ], None),
-    ("sec_tools", "Nástroje", "🔗", None, [
-        ("links", "Odkazy a Klienti", "🔗", False),
-    ], None),
 ]
 
 # Map nav_id -> game for theme switching
@@ -64,11 +62,11 @@ NAV_GAME_MAP = {
     "csgo_player": "csgo", "csgo_server": "csgo", "csgo_keybind": "csgo",
     "rust_player": "rust", "rust_server": "rust", "rust_keybind": "rust",
     "home": "default", "pc_tools": "default", "translator": "default",
-    "links": "default", "settings": "default",
+    "links": "default", "settings": "default", "watchdog": "default",
 }
 
 # nav_ids that show NO game badge in header
-NO_BADGE_IDS = {"home", "pc_tools", "translator", "links", "settings"}
+NO_BADGE_IDS = {"home", "pc_tools", "translator", "links", "settings", "watchdog"}
 
 
 class AuthDialog(ctk.CTkToplevel):
@@ -250,7 +248,13 @@ class MainWindow(ctk.CTk):
         sh = self.winfo_screenheight()
         self.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
         self.minsize(960, 640)
-        ctk.set_appearance_mode("dark")
+
+        # Load appearance mode from settings
+        settings = load_settings()
+        mode = settings.get("appearance_mode", "dark")
+        if mode == "system":
+            mode = "dark"  # CTK handles system internally
+        ctk.set_appearance_mode(mode)
         ctk.set_default_color_theme("dark-blue")
         self.configure(fg_color="#0c0c0c")
 
@@ -342,6 +346,16 @@ class MainWindow(ctk.CTk):
                                            text_color="#f0a500")
         self._update_label.pack(side="right", padx=8)
 
+        # Dark/light mode toggle
+        self._mode_btn = ctk.CTkButton(
+            right, text="☀", width=30, height=24,
+            fg_color="transparent", hover_color="#2a2a2a",
+            text_color="#666666", font=ctk.CTkFont("Segoe UI", 14),
+            command=self._toggle_appearance_mode
+        )
+        self._mode_btn.pack(side="right", padx=4)
+        self._update_mode_btn()
+
     def _build_sidebar(self):
         # Top logo area
         logo_area = ctk.CTkFrame(self._sidebar, fg_color="#0c0c0c", height=60, corner_radius=0)
@@ -409,6 +423,15 @@ class MainWindow(ctk.CTk):
         )
         self._settings_btn.pack(fill="x", padx=4, pady=2, side="bottom")
 
+        self._links_btn = ctk.CTkButton(
+            self._sidebar, text="🔗  " + t("links"),
+            fg_color="transparent", hover_color="#1a1a1a",
+            text_color="#aaaaaa", anchor="w",
+            font=ctk.CTkFont("Segoe UI", 11),
+            height=36, command=lambda: self._navigate("links")
+        )
+        self._links_btn.pack(fill="x", padx=4, pady=2, side="bottom")
+
     def _build_nav_items(self):
         # Load saved section states
         settings = load_settings()
@@ -423,7 +446,11 @@ class MainWindow(ctk.CTk):
             if children is None:
                 # Top-level nav button (home, pc_tools)
                 nav_id = sec_id
-                display_label = {"home": t("home"), "pc_tools": t("pc_tools")}.get(nav_id, nav_id)
+                display_label = {
+                    "home": t("home"),
+                    "pc_tools": t("pc_tools"),
+                    "watchdog": "🔔 Watchdog",
+                }.get(nav_id, nav_id)
                 btn = ctk.CTkButton(
                     self._nav_scroll,
                     text=f"  {icon}  {display_label}",
@@ -439,15 +466,18 @@ class MainWindow(ctk.CTk):
                 btn.pack(fill="x", padx=6, pady=1)
                 self._nav_buttons[nav_id] = btn
             else:
-                # Section with children
-                # Default: cs2 expanded, others collapsed
+                # Wrapper keeps section header + children together so
+                # pack_forget/pack on children_frame never changes order.
+                outer = ctk.CTkFrame(self._nav_scroll, fg_color="transparent")
+                outer.pack(fill="x", padx=0, pady=0)
+
                 default_expanded = (sec_id == "sec_cs2")
                 is_expanded = saved_states.get(sec_id, default_expanded)
                 self._section_states[sec_id] = is_expanded
 
                 arrow = "▼" if is_expanded else "▶"
                 section_btn = ctk.CTkButton(
-                    self._nav_scroll,
+                    outer,
                     text=f"  {icon}  {label}  {arrow}",
                     fg_color="transparent",
                     hover_color="#1a1a1a",
@@ -461,19 +491,19 @@ class MainWindow(ctk.CTk):
                 section_btn.pack(fill="x", padx=4, pady=(6, 1))
                 self._section_btns[sec_id] = section_btn
 
-                # Children frame
-                children_frame = ctk.CTkFrame(self._nav_scroll, fg_color="transparent")
+                # Children frame lives inside outer — toggling it never reorders siblings
+                children_frame = ctk.CTkFrame(outer, fg_color="transparent")
                 self._section_frames[sec_id] = children_frame
 
                 if is_expanded:
                     children_frame.pack(fill="x", padx=0, pady=0)
-                # else: don't pack (hidden)
 
                 for nav_id, child_label, child_icon, requires_auth in children:
                     locked = requires_auth and not is_authenticated()
                     lock_suffix = " 🔒" if locked else ""
                     tc = "#555555" if locked else "#cccccc"
                     fg = "#161616" if locked else "transparent"
+                    lock_border = "#2a1a1a" if locked else "transparent"
 
                     btn = ctk.CTkButton(
                         children_frame,
@@ -495,14 +525,10 @@ class MainWindow(ctk.CTk):
         new_state = not is_expanded
         self._section_states[sec_id] = new_state
 
-        # Update arrow on button
         btn = self._section_btns.get(sec_id)
         if btn:
             text = btn.cget("text")
-            if new_state:
-                text = text.replace("▶", "▼")
-            else:
-                text = text.replace("▼", "▶")
+            text = text.replace("▶", "▼") if new_state else text.replace("▼", "▶")
             btn.configure(text=text)
 
         frame = self._section_frames.get(sec_id)
@@ -564,12 +590,17 @@ class MainWindow(ctk.CTk):
                 fg = "#161616" if locked_text else "transparent"
                 btn.configure(fg_color=fg, text_color=tc, hover_color="#1a1a1a")
 
-        # Update settings button highlight
+        # Update settings / links button highlights
         if nav_id == "settings":
-            self._settings_btn.configure(fg_color=get_theme("default")["primary"],
-                                          text_color="#ffffff")
+            self._settings_btn.configure(fg_color=get_theme("default")["primary"], text_color="#ffffff")
         else:
             self._settings_btn.configure(fg_color="transparent", text_color="#aaaaaa")
+
+        if hasattr(self, "_links_btn"):
+            if nav_id == "links":
+                self._links_btn.configure(fg_color=get_theme("default")["primary"], text_color="#ffffff")
+            else:
+                self._links_btn.configure(fg_color="transparent", text_color="#aaaaaa")
 
         self._show_panel(nav_id)
 
@@ -632,6 +663,9 @@ class MainWindow(ctk.CTk):
         elif nav_id == "links":
             from .panels.links import LinksPanel
             panel = LinksPanel(container, theme=get_theme("default"))
+        elif nav_id == "watchdog":
+            from .panels.watchdog import WatchdogPanel
+            panel = WatchdogPanel(container, theme=get_theme("default"))
 
         if panel:
             panel.pack(fill="both", expand=True)
@@ -699,6 +733,20 @@ class MainWindow(ctk.CTk):
                             fg_color="#161616",
                             text_color="#555555"
                         )
+
+    def _toggle_appearance_mode(self):
+        current = ctk.get_appearance_mode().lower()
+        new_mode = "light" if current == "dark" else "dark"
+        ctk.set_appearance_mode(new_mode)
+        settings = load_settings()
+        settings["appearance_mode"] = new_mode
+        save_settings(settings)
+        self._update_mode_btn()
+
+    def _update_mode_btn(self):
+        mode = ctk.get_appearance_mode().lower()
+        icon = "🌙" if mode == "dark" else "☀"
+        self._mode_btn.configure(text=icon)
 
     def _toggle_language(self):
         current = get_lang()

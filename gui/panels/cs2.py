@@ -88,12 +88,13 @@ class CS2PlayerPanel(ctk.CTkFrame):
         main = ctk.CTkFrame(tab, fg_color="transparent")
         main.pack(fill="both", expand=True)
 
-        left = ctk.CTkFrame(main, fg_color="transparent", width=420)
-        left.pack(side="left", fill="y", padx=(0, 8))
-        left.pack_propagate(False)
-
+        # Pack right first so left can fill remaining space
         right = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=10, width=260)
-        right.pack(side="left", fill="y")
+        right.pack(side="right", fill="y", padx=(8, 0))
+        right.pack_propagate(False)
+
+        left = ctk.CTkFrame(main, fg_color="transparent")
+        left.pack(side="left", fill="both", expand=True, padx=(0, 0))
 
         scroll = ctk.CTkScrollableFrame(left, fg_color="transparent")
         scroll.pack(fill="both", expand=True)
@@ -220,12 +221,12 @@ class CS2PlayerPanel(ctk.CTkFrame):
         main = ctk.CTkFrame(tab, fg_color="transparent")
         main.pack(fill="both", expand=True)
 
-        left = ctk.CTkFrame(main, fg_color="transparent", width=440)
-        left.pack(side="left", fill="y", padx=(0, 8))
-        left.pack_propagate(False)
-
         right = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=10, width=260)
-        right.pack(side="left", fill="y")
+        right.pack(side="right", fill="y", padx=(8, 0))
+        right.pack_propagate(False)
+
+        left = ctk.CTkFrame(main, fg_color="transparent")
+        left.pack(side="left", fill="both", expand=True)
 
         scroll = ctk.CTkScrollableFrame(left, fg_color="transparent")
         scroll.pack(fill="both", expand=True)
@@ -684,7 +685,8 @@ class CS2ServerPanel(ctk.CTkFrame):
 
         # Left: pools
         left = ctk.CTkFrame(row, fg_color=t["card_bg"], corner_radius=8, width=240)
-        left.pack(side="left", fill="y", padx=(0, 8))
+        left.pack(side="left", fill="both", padx=(0, 8))
+        left.pack_propagate(False)
         _label(left, "Map Pools", 12, bold=True, color=t["text_dim"]).pack(padx=10, pady=8)
 
         self._map_pools = {

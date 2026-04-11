@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.3.1-orange?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-v1.4.0-orange?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-blue?style=flat-square&logo=windows&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/language-EN%20%2F%20CZ-green?style=flat-square" alt="Language">
   <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="License">
@@ -58,6 +58,7 @@
 | Buy Binds | Purchase shortcuts for CS2 / CS:GO |
 | Rust Plugin Manager | Batch plugin repair, dependency analysis |
 | Translator | Translate JSON / TXT / LANG files into 20+ languages |
+| Server Watchdog | Background monitor that alerts when servers go offline/online |
 
 ### PC Tools
 
@@ -69,6 +70,7 @@
 ### Home Dashboard
 
 - Live server status via Steam A2S query (players, map, ping)
+- **Steam connect button** — opens `steam://connect/IP:PORT` directly
 - Quick links to Discord and website
 
 ### System Tray
@@ -97,7 +99,8 @@ If an update is available, it downloads and installs automatically — no browse
 
 | Version | Highlights |
 |---------|------------|
-| **v1.3.1** | Hotfix: web admin panel .htaccess compatibility with FastCGI |
+| **v1.4.0** | Navbar collapse fix, Steam connect button, dark/light mode, Server Watchdog, factory reset, DNS history, dual temp cleanup, landing page |
+| v1.3.1 | Hotfix: web admin panel .htaccess compatibility with FastCGI |
 | v1.3.0 | System tray icon, PHP web admin panel, configurable tray shortcuts |
 | v1.2.0 | Auto-update wizard, data folder selection on first launch |
 | v1.1.0 | UI redesign, PC Tools, CZ/EN language system, live server status |

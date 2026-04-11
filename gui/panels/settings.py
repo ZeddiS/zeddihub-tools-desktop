@@ -112,6 +112,33 @@ class SettingsPanel(ctk.CTkFrame):
         self._lang_notice = _label(lang_card, "", 10, color=th["warning"])
         self._lang_notice.pack(padx=14, pady=(0, 8), anchor="w")
 
+        # Appearance mode section
+        mode_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        mode_card.pack(fill="x", pady=6)
+
+        _label(mode_card, "🌙 Vzhled / Barevný režim", 13, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(12, 6), anchor="w")
+        _label(mode_card, "Volba se použije okamžitě. Tlačítko ☀/🌙 je také v záhlaví.",
+               10, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
+
+        import customtkinter as ctk_ref
+        current_mode = ctk_ref.get_appearance_mode().lower()
+        saved_settings = load_settings()
+        saved_mode = saved_settings.get("appearance_mode", "dark")
+
+        mode_row = ctk.CTkFrame(mode_card, fg_color="transparent")
+        mode_row.pack(padx=14, pady=(0, 14), anchor="w")
+
+        for mode_id, mode_label in [("dark", "🌙 Tmavý"), ("light", "☀ Světlý"), ("system", "⚙ Systém")]:
+            is_active = (saved_mode == mode_id)
+            ctk.CTkButton(
+                mode_row, text=mode_label, width=110, height=36,
+                fg_color=th["primary"] if is_active else th["secondary"],
+                hover_color=th["primary_hover"],
+                font=ctk.CTkFont("Segoe UI", 12, "bold" if is_active else "normal"),
+                command=lambda m=mode_id: self._set_appearance(m)
+            ).pack(side="left", padx=(0, 8))
+
         # Update section
         update_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         update_card.pack(fill="x", pady=6)
@@ -146,6 +173,107 @@ class SettingsPanel(ctk.CTkFrame):
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=self._change_data_dir
                       ).pack(padx=14, pady=(0, 14), anchor="w")
+
+        # Factory reset / backup section
+        reset_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        reset_card.pack(fill="x", pady=6)
+
+        _label(reset_card, "🔒 Záloha a reset", 13, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(reset_card, "Záloha uloží nastavení do ZeddiHub.Tools.Data/backup_YYYYMMDD.json.",
+               10, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
+
+        self._backup_status = _label(reset_card, "", 10, color=th["text_dim"])
+        self._backup_status.pack(padx=14, pady=(0, 6), anchor="w")
+
+        backup_row = ctk.CTkFrame(reset_card, fg_color="transparent")
+        backup_row.pack(padx=14, pady=(0, 6), anchor="w")
+
+        ctk.CTkButton(backup_row, text="💾 Zálohovat nastavení",
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=34,
+                      command=self._backup_settings
+                      ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(backup_row, text="📂 Obnovit ze zálohy",
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=34,
+                      command=self._restore_settings
+                      ).pack(side="left")
+
+        ctk.CTkButton(reset_card, text="⚠ Tovární reset (smazat vše)",
+                      fg_color="#8b2020", hover_color="#6b1818",
+                      text_color="#ffffff",
+                      font=ctk.CTkFont("Segoe UI", 11), height=34,
+                      command=self._factory_reset
+                      ).pack(padx=14, pady=(6, 14), anchor="w")
+
+    def _backup_settings(self):
+        import datetime, json as _json
+        from tkinter import messagebox as _mb
+        try:
+            data_dir = get_data_dir()
+            data_dir.mkdir(parents=True, exist_ok=True)
+            settings = load_settings()
+            date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = data_dir / f"backup_{date_str}.json"
+            backup_path.write_text(
+                _json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+            self._backup_status.configure(
+                text=f"✅ Záloha uložena: {backup_path.name}", text_color=self.theme["success"])
+        except Exception as e:
+            self._backup_status.configure(
+                text=f"✗ Chyba: {e}", text_color=self.theme["error"])
+
+    def _restore_settings(self):
+        import json as _json
+        from tkinter import filedialog, messagebox as _mb
+        data_dir = get_data_dir()
+        path = filedialog.askopenfilename(
+            title="Vyberte zálohu",
+            initialdir=str(data_dir),
+            filetypes=[("JSON", "*.json"), ("All", "*.*")]
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                restored = _json.load(f)
+            save_settings(restored)
+            self._backup_status.configure(
+                text=f"✅ Nastavení obnoveno. Restartujte aplikaci.",
+                text_color=self.theme["success"])
+        except Exception as e:
+            self._backup_status.configure(
+                text=f"✗ Chyba: {e}", text_color=self.theme["error"])
+
+    def _factory_reset(self):
+        from tkinter import messagebox as _mb
+        if not _mb.askyesno("Tovární reset",
+                             "Opravdu smazat VŠECHNA nastavení?\nZáloha nebude vytvořena. Tato akce nelze vrátit."):
+            return
+        try:
+            save_settings({})
+            self._backup_status.configure(
+                text="✅ Reset dokončen. Restartujte aplikaci.",
+                text_color=self.theme["success"])
+        except Exception as e:
+            self._backup_status.configure(
+                text=f"✗ Chyba: {e}", text_color=self.theme["error"])
+
+    def _set_appearance(self, mode: str):
+        import customtkinter as ctk_ref
+        if mode == "system":
+            ctk_ref.set_appearance_mode("system")
+        else:
+            ctk_ref.set_appearance_mode(mode)
+        settings = load_settings()
+        settings["appearance_mode"] = mode
+        save_settings(settings)
+        # Update toggle button in main window if accessible
+        parent = self.winfo_toplevel()
+        if hasattr(parent, "_update_mode_btn"):
+            parent._update_mode_btn()
 
     def _select_language(self, lang: str):
         th = self.theme

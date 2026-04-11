@@ -233,6 +233,7 @@ class PCToolsPanel(ctk.CTkFrame):
 
     def _build_dns_temp(self, tab):
         th = self.theme
+        self._dns_history: list[dict] = []  # {time, result, success}
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
@@ -259,14 +260,57 @@ class PCToolsPanel(ctk.CTkFrame):
                                            font=ctk.CTkFont("Courier New", 10), state="disabled")
         self._dns_output.pack(fill="x", padx=14, pady=(0, 14))
 
+        # DNS history
+        hist_card = _card(scroll, th)
+        hist_card.pack(fill="x", pady=6)
+
+        hist_header = ctk.CTkFrame(hist_card, fg_color="transparent")
+        hist_header.pack(fill="x", padx=14, pady=(12, 6))
+        _label(hist_header, "📋 Historie DNS flush", 13, bold=True, color=th["primary"]
+               ).pack(side="left")
+        ctk.CTkButton(hist_header, text="🗑 Vymazat", height=26, width=80,
+                      fg_color=th["secondary"], hover_color="#3a1a1a",
+                      font=ctk.CTkFont("Segoe UI", 10),
+                      command=self._clear_dns_history
+                      ).pack(side="right")
+
+        # Search + filter row
+        ctrl_row = ctk.CTkFrame(hist_card, fg_color="transparent")
+        ctrl_row.pack(fill="x", padx=14, pady=(0, 6))
+
+        self._dns_search_var = ctk.StringVar()
+        self._dns_search_var.trace_add("write", lambda *_: self._refresh_dns_history())
+        ctk.CTkEntry(ctrl_row, textvariable=self._dns_search_var,
+                     placeholder_text="🔍 Hledat...",
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 11), height=30
+                     ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        self._dns_filter_var = ctk.StringVar(value="Vše")
+        filter_menu = ctk.CTkOptionMenu(
+            ctrl_row, variable=self._dns_filter_var,
+            values=["Vše", "Úspěch", "Chyba"],
+            fg_color=th["secondary"], button_color=th["primary"],
+            font=ctk.CTkFont("Segoe UI", 11), height=30, width=100,
+            command=lambda _: self._refresh_dns_history()
+        )
+        filter_menu.pack(side="left")
+
+        self._dns_hist_box = ctk.CTkTextbox(hist_card, height=120,
+                                             fg_color=th["secondary"], text_color=th["text"],
+                                             font=ctk.CTkFont("Courier New", 9), state="disabled")
+        self._dns_hist_box.pack(fill="x", padx=14, pady=(0, 14))
+
         # Temp files section
         temp_card = _card(scroll, th)
         temp_card.pack(fill="x", pady=6)
 
         _label(temp_card, "🗑 " + t("temp_files"), 13, bold=True, color=th["primary"]
                ).pack(padx=14, pady=(12, 6), anchor="w")
+        _label(temp_card, "Čistí: %TEMP% (uživatelská) + C:\\Windows\\Temp (systémová)",
+               10, color=th["text_dim"]).pack(padx=14, anchor="w")
 
-        self._temp_info_var = ctk.StringVar(value="Klikněte na Skenovat pro analýzu temp složky.")
+        self._temp_info_var = ctk.StringVar(value="Klikněte na Skenovat pro analýzu temp složek.")
         _label(temp_card, "", 10, color=th["text_dim"], textvariable=self._temp_info_var
                ).pack(padx=14, anchor="w")
 
@@ -285,13 +329,15 @@ class PCToolsPanel(ctk.CTkFrame):
                       command=self._clean_temp
                       ).pack(side="left")
 
-        self._temp_log = ctk.CTkTextbox(temp_card, height=100,
+        self._temp_log = ctk.CTkTextbox(temp_card, height=120,
                                          fg_color=th["secondary"], text_color=th["text"],
                                          font=ctk.CTkFont("Courier New", 9), state="disabled")
         self._temp_log.pack(fill="x", padx=14, pady=(0, 14))
 
     def _flush_dns(self):
         def run():
+            import datetime
+            success = False
             try:
                 result = subprocess.run(
                     ["ipconfig", "/flushdns"],
@@ -299,56 +345,100 @@ class PCToolsPanel(ctk.CTkFrame):
                     encoding="cp852", errors="replace", timeout=15
                 )
                 output = result.stdout + result.stderr
+                success = result.returncode == 0
             except Exception as e:
                 output = f"Chyba: {e}"
+            ts = datetime.datetime.now().strftime("%H:%M:%S")
+            self._dns_history.append({"time": ts, "result": output.strip(), "success": success})
             self.after(0, self._set_textbox, self._dns_output, output)
+            self.after(0, self._refresh_dns_history)
 
         threading.Thread(target=run, daemon=True).start()
         self._set_textbox(self._dns_output, "Spouštím ipconfig /flushdns...")
 
+    def _refresh_dns_history(self):
+        search = self._dns_search_var.get().lower()
+        filt = self._dns_filter_var.get()
+        lines = []
+        for entry in reversed(self._dns_history):
+            if filt == "Úspěch" and not entry["success"]:
+                continue
+            if filt == "Chyba" and entry["success"]:
+                continue
+            summary = entry["result"].replace("\n", " ")[:80]
+            if search and search not in summary.lower() and search not in entry["time"]:
+                continue
+            status = "✓" if entry["success"] else "✗"
+            lines.append(f"[{entry['time']}] {status} {summary}")
+        text = "\n".join(lines) if lines else "(žádné záznamy)"
+        self._set_textbox(self._dns_hist_box, text)
+
+    def _clear_dns_history(self):
+        self._dns_history.clear()
+        self._refresh_dns_history()
+
+    def _get_temp_dirs(self) -> list:
+        dirs = []
+        user_temp = Path(os.environ.get("TEMP", os.environ.get("TMP", "")))
+        if user_temp and user_temp.exists():
+            dirs.append(user_temp)
+        win_temp = Path("C:/Windows/Temp")
+        if win_temp.exists() and win_temp not in dirs:
+            dirs.append(win_temp)
+        return dirs
+
     def _scan_temp(self):
         def run():
-            temp_dir = Path(os.environ.get("TEMP", "C:/Windows/Temp"))
-            try:
-                files = list(temp_dir.rglob("*"))
-                file_count = sum(1 for f in files if f.is_file())
-                total_size = sum(f.stat().st_size for f in files if f.is_file())
-                size_mb = total_size / 1e6
-                self.after(0, self._temp_info_var.set,
-                           f"Nalezeno: {file_count} souborů | Celkem: {size_mb:.1f} MB | Složka: {temp_dir}")
-                self.after(0, self._set_textbox, self._temp_log,
-                           f"Temp složka: {temp_dir}\nSouborů: {file_count}\nVelikost: {size_mb:.2f} MB")
-            except Exception as e:
-                self.after(0, self._temp_info_var.set, f"Chyba: {e}")
+            dirs = self._get_temp_dirs()
+            total_files = 0
+            total_size = 0
+            log_lines = []
+            for td in dirs:
+                try:
+                    files = [f for f in td.rglob("*") if f.is_file()]
+                    size = sum(f.stat().st_size for f in files)
+                    total_files += len(files)
+                    total_size += size
+                    log_lines.append(f"{td}")
+                    log_lines.append(f"  Souborů: {len(files)}  |  Velikost: {size/1e6:.1f} MB")
+                except Exception as e:
+                    log_lines.append(f"{td}: Chyba — {e}")
+            size_mb = total_size / 1e6
+            self.after(0, self._temp_info_var.set,
+                       f"Celkem: {total_files} souborů | {size_mb:.1f} MB ve {len(dirs)} složkách")
+            self.after(0, self._set_textbox, self._temp_log, "\n".join(log_lines))
 
         threading.Thread(target=run, daemon=True).start()
         self._temp_info_var.set("Skenuji...")
 
     def _clean_temp(self):
+        dirs = self._get_temp_dirs()
+        dir_list = "\n".join(f"  • {d}" for d in dirs)
         if not messagebox.askyesno("Smazat Temp soubory",
-                                    "Opravdu smazat všechny soubory v Temp složce?\nTato akce nelze vrátit."):
+                                    f"Opravdu smazat soubory v temp složkách?\n{dir_list}\n\nTato akce nelze vrátit."):
             return
 
         def run():
-            temp_dir = Path(os.environ.get("TEMP", "C:/Windows/Temp"))
+            import shutil
             deleted = 0
             errors = 0
-            log_lines = [f"Mažu temp soubory: {temp_dir}"]
-            try:
-                for item in temp_dir.iterdir():
-                    try:
-                        if item.is_file():
-                            item.unlink()
-                            deleted += 1
-                        elif item.is_dir():
-                            import shutil
-                            shutil.rmtree(item, ignore_errors=True)
-                            deleted += 1
-                    except Exception as e:
-                        errors += 1
-                        log_lines.append(f"  Skip: {item.name} ({e})")
-            except Exception as e:
-                log_lines.append(f"Chyba: {e}")
+            log_lines = []
+            for temp_dir in dirs:
+                log_lines.append(f"Mažu: {temp_dir}")
+                try:
+                    for item in temp_dir.iterdir():
+                        try:
+                            if item.is_file():
+                                item.unlink()
+                                deleted += 1
+                            elif item.is_dir():
+                                shutil.rmtree(item, ignore_errors=True)
+                                deleted += 1
+                        except Exception as e:
+                            errors += 1
+                            log_lines.append(f"  Skip: {item.name} ({e})")
+                except Exception as e:
+                    log_lines.append(f"  Chyba: {e}")
 
             log_lines.append(f"\nSmazáno: {deleted} položek | Chyby: {errors}")
             self.after(0, self._set_textbox, self._temp_log, "\n".join(log_lines))
