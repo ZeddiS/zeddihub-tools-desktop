@@ -36,9 +36,10 @@ def _link_btn(parent, text, url, theme, icon="🌐", width=240):
 
 
 class LinksPanel(ctk.CTkFrame):
-    def __init__(self, parent, theme: dict, **kwargs):
+    def __init__(self, parent, theme: dict, nav_callback=None, **kwargs):
         super().__init__(parent, fg_color=theme["content_bg"], **kwargs)
         self.theme = theme
+        self._nav_callback = nav_callback
         self._build()
 
     def _build(self):
