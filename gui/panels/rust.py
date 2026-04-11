@@ -52,9 +52,10 @@ def _entry_row(parent, label_text, default_val, theme, row, hint=""):
 # ─────────────────────────────────────────────
 
 class RustPlayerPanel(ctk.CTkFrame):
-    def __init__(self, parent, theme: dict, **kwargs):
+    def __init__(self, parent, theme: dict, nav_callback=None, **kwargs):
         super().__init__(parent, fg_color=theme["content_bg"], **kwargs)
         self.theme = theme
+        self._nav_callback = nav_callback
         self._build()
 
     def _build(self):
@@ -308,9 +309,10 @@ class RustPlayerPanel(ctk.CTkFrame):
 # ─────────────────────────────────────────────
 
 class RustServerPanel(ctk.CTkFrame):
-    def __init__(self, parent, theme: dict, **kwargs):
+    def __init__(self, parent, theme: dict, nav_callback=None, **kwargs):
         super().__init__(parent, fg_color=theme["content_bg"], **kwargs)
         self.theme = theme
+        self._nav_callback = nav_callback
         self._build()
 
     def _build(self):
