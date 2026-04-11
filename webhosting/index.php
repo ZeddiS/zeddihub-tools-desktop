@@ -8,20 +8,12 @@ define('GITHUB_REPO',    'ZeddiS/zeddihub-tools-desktop');
 define('GITHUB_RELEASE', 'https://github.com/' . GITHUB_REPO . '/releases/latest');
 define('GITHUB_DL',      'https://github.com/' . GITHUB_REPO . '/releases/latest/download/ZeddiHub.Tools.exe');
 
-// Fetch latest version — primary: local data/version.json, fallback: GitHub API
+// Fetch latest version from GitHub Releases (cached 10 min).
+// Automatically reflects every new release — no manual update needed.
 function get_latest_version(): string {
-    // 1. Local version.json — same server, always fast, no network needed
-    $local = __DIR__ . '/../data/version.json';
-    if (!file_exists($local)) {
-        $local = dirname(__DIR__) . '/data/version.json'; // alternative path
-    }
-    if (file_exists($local)) {
-        $data = json_decode(@file_get_contents($local), true);
-        if (!empty($data['version'])) return $data['version'];
-    }
-
-    // 2. GitHub API — cached 10 min
     $cache = sys_get_temp_dir() . '/zeddihub_version_cache.txt';
+
+    // Return cached value if fresh (< 10 min)
     if (file_exists($cache) && (time() - filemtime($cache)) < 600) {
         $v = trim(file_get_contents($cache));
         if ($v) return $v;
@@ -30,18 +22,8 @@ function get_latest_version(): string {
     $api_url = 'https://api.github.com/repos/' . GITHUB_REPO . '/releases/latest';
     $tag = null;
 
-    // Try file_get_contents (requires allow_url_fopen = On)
-    if (ini_get('allow_url_fopen')) {
-        $ctx = stream_context_create(['http' => [
-            'timeout' => 4, 'ignore_errors' => true,
-            'header'  => "User-Agent: ZeddiHubTools-landing\r\n",
-        ]]);
-        $json = @file_get_contents($api_url, false, $ctx);
-        if ($json) $tag = ltrim(json_decode($json, true)['tag_name'] ?? '', 'v') ?: null;
-    }
-
-    // Fallback: cURL (works even when allow_url_fopen = Off)
-    if (!$tag && function_exists('curl_init')) {
+    // 1. cURL — works even when allow_url_fopen = Off (most shared hosting)
+    if (function_exists('curl_init')) {
         $ch = curl_init($api_url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -54,7 +36,27 @@ function get_latest_version(): string {
         if ($json) $tag = ltrim(json_decode($json, true)['tag_name'] ?? '', 'v') ?: null;
     }
 
+    // 2. file_get_contents fallback (requires allow_url_fopen = On)
+    if (!$tag && ini_get('allow_url_fopen')) {
+        $ctx = stream_context_create(['http' => [
+            'timeout' => 4, 'ignore_errors' => true,
+            'header'  => "User-Agent: ZeddiHubTools-landing\r\n",
+        ]]);
+        $json = @file_get_contents($api_url, false, $ctx);
+        if ($json) $tag = ltrim(json_decode($json, true)['tag_name'] ?? '', 'v') ?: null;
+    }
+
+    // Cache successful result
     if ($tag) { @file_put_contents($cache, $tag); return $tag; }
+
+    // 3. Last resort: local data/version.json (stale but better than nothing)
+    foreach ([__DIR__ . '/../data/version.json', dirname(__DIR__) . '/data/version.json'] as $f) {
+        if (file_exists($f)) {
+            $data = json_decode(@file_get_contents($f), true);
+            if (!empty($data['version'])) return $data['version'];
+        }
+    }
+
     return '—';
 }
 
