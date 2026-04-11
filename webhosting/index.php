@@ -8,27 +8,53 @@ define('GITHUB_REPO',    'ZeddiS/zeddihub-tools-desktop');
 define('GITHUB_RELEASE', 'https://github.com/' . GITHUB_REPO . '/releases/latest');
 define('GITHUB_DL',      'https://github.com/' . GITHUB_REPO . '/releases/latest/download/ZeddiHub.Tools.exe');
 
-// Optionally fetch latest version from GitHub API (cached 10 min)
+// Fetch latest version — primary: local data/version.json, fallback: GitHub API
 function get_latest_version(): string {
-    $cache_file = sys_get_temp_dir() . '/zeddihub_version_cache.txt';
-    if (file_exists($cache_file) && (time() - filemtime($cache_file)) < 600) {
-        $cached = trim(file_get_contents($cache_file));
-        if ($cached) return $cached;
+    // 1. Local version.json — same server, always fast, no network needed
+    $local = __DIR__ . '/../data/version.json';
+    if (!file_exists($local)) {
+        $local = dirname(__DIR__) . '/data/version.json'; // alternative path
     }
-    $ctx = stream_context_create(['http' => [
-        'timeout'        => 4,
-        'ignore_errors'  => true,
-        'header'         => "User-Agent: ZeddiHubTools-landing\r\n",
-    ]]);
-    $json = @file_get_contents('https://api.github.com/repos/' . GITHUB_REPO . '/releases/latest', false, $ctx);
-    if ($json) {
-        $data = json_decode($json, true);
-        $tag  = ltrim($data['tag_name'] ?? '', 'v');
-        if ($tag) {
-            file_put_contents($cache_file, $tag);
-            return $tag;
-        }
+    if (file_exists($local)) {
+        $data = json_decode(@file_get_contents($local), true);
+        if (!empty($data['version'])) return $data['version'];
     }
+
+    // 2. GitHub API — cached 10 min
+    $cache = sys_get_temp_dir() . '/zeddihub_version_cache.txt';
+    if (file_exists($cache) && (time() - filemtime($cache)) < 600) {
+        $v = trim(file_get_contents($cache));
+        if ($v) return $v;
+    }
+
+    $api_url = 'https://api.github.com/repos/' . GITHUB_REPO . '/releases/latest';
+    $tag = null;
+
+    // Try file_get_contents (requires allow_url_fopen = On)
+    if (ini_get('allow_url_fopen')) {
+        $ctx = stream_context_create(['http' => [
+            'timeout' => 4, 'ignore_errors' => true,
+            'header'  => "User-Agent: ZeddiHubTools-landing\r\n",
+        ]]);
+        $json = @file_get_contents($api_url, false, $ctx);
+        if ($json) $tag = ltrim(json_decode($json, true)['tag_name'] ?? '', 'v') ?: null;
+    }
+
+    // Fallback: cURL (works even when allow_url_fopen = Off)
+    if (!$tag && function_exists('curl_init')) {
+        $ch = curl_init($api_url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 4,
+            CURLOPT_USERAGENT      => 'ZeddiHubTools-landing',
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+        $json = curl_exec($ch);
+        curl_close($ch);
+        if ($json) $tag = ltrim(json_decode($json, true)['tag_name'] ?? '', 'v') ?: null;
+    }
+
+    if ($tag) { @file_put_contents($cache, $tag); return $tag; }
     return '—';
 }
 
