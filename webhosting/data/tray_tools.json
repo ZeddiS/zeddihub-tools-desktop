@@ -1,0 +1,9 @@
+{
+  "tools": [
+    {"label": "CS2 Hráčské nástroje", "nav_id": "cs2_player"},
+    {"label": "CS2 Server CFG", "nav_id": "cs2_server"},
+    {"label": "Rust Plugin Manager", "nav_id": "rust_server"},
+    {"label": "PC Info", "nav_id": "pc_tools"},
+    {"label": "Translator", "nav_id": "translator"}
+  ]
+}

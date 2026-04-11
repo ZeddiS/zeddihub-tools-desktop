@@ -8,6 +8,13 @@
  * Data soubory musí být v /data/ (o úroveň výše od /admin/)
  */
 
+// Session security — works with both mod_php and FastCGI/php-fpm
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Strict');
+if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+    ini_set('session.cookie_secure', '1');
+}
+
 session_start();
 
 // ── Configuration ────────────────────────────────────────────────────────────

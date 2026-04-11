@@ -8,9 +8,8 @@ __pycache__/
 .idea/
 assets/banner.png
 assets/logo.png
-data/
+/data/
 *.enc
 Thumbs.db
-webhosting_files/
 .claude/
 assets/web_favicon.ico

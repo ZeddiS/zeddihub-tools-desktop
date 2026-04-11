@@ -1,0 +1,7 @@
+{
+  "version": "1.3.0",
+  "release_date": "2026-04-11",
+  "changelog": "Systémová lišta (tray icon), webový admin panel, správa klientů a nástrojů.",
+  "mandatory": false,
+  "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
+}
