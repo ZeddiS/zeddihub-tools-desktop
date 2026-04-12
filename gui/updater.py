@@ -13,7 +13,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
-CURRENT_VERSION = "1.6.2"
+CURRENT_VERSION = "1.6.3"
 GITHUB_API_URL = "https://api.github.com/repos/ZeddiS/zeddihub-tools-desktop/releases/latest"
 GITHUB_RELEASES_URL = "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 

@@ -53,9 +53,7 @@ NAV_SECTIONS = [
         ("rust_server",  "server_tools",  "server",   True),
         ("rust_keybind", "keybind",       "keyboard", False),
     ], None),
-    ("sec_game_tools", "game_tools_section", "gamepad", None, [
-        ("game_tools", "game_tools", "gamepad", False),
-    ], None),
+    ("game_tools", None, "gamepad", None, None, False),
 ]
 
 # Map nav_id -> game for theme switching
@@ -498,9 +496,10 @@ class MainWindow(ctk.CTk):
                 # Top-level nav button (home, pc_tools, watchdog)
                 nav_id = sec_id
                 display_label = {
-                    "home": t("home"),
-                    "pc_tools": t("pc_tools"),
-                    "watchdog": "Watchdog",
+                    "home":       t("home"),
+                    "pc_tools":   t("pc_tools"),
+                    "watchdog":   "Watchdog",
+                    "game_tools": t("game_tools"),
                 }.get(nav_id, nav_id)
                 btn = ctk.CTkButton(
                     self._nav_scroll,
@@ -585,6 +584,20 @@ class MainWindow(ctk.CTk):
     def _toggle_section(self, sec_id: str):
         is_expanded = self._section_states.get(sec_id, False)
         new_state = not is_expanded
+
+        # ── Accordion: opening a section closes all others ────────────────────
+        if new_state:
+            for other_id in list(self._section_states.keys()):
+                if other_id != sec_id and self._section_states.get(other_id, False):
+                    self._section_states[other_id] = False
+                    other_btn = self._section_btns.get(other_id)
+                    if other_btn:
+                        t = other_btn.cget("text")
+                        other_btn.configure(text=t.replace("▼", "▶"))
+                    other_frame = self._section_frames.get(other_id)
+                    if other_frame:
+                        other_frame.pack_forget()
+
         self._section_states[sec_id] = new_state
 
         btn = self._section_btns.get(sec_id)
@@ -600,11 +613,12 @@ class MainWindow(ctk.CTk):
             else:
                 frame.pack_forget()
 
-        # Save state
+        # Persist all section states
         settings = load_settings()
         if "sidebar_sections" not in settings:
             settings["sidebar_sections"] = {}
-        settings["sidebar_sections"][sec_id] = new_state
+        for sid, state in self._section_states.items():
+            settings["sidebar_sections"][sid] = state
         save_settings(settings)
 
     def _on_nav_click(self, nav_id: str, requires_auth: bool):

@@ -49,6 +49,100 @@ def _entry_row(parent, label_text, default_val, theme, row, hint=""):
     return var
 
 
+def _bool_row(parent, label_text, default_val, theme, row, hint=""):
+    """Dropdown row for boolean (0/1) values."""
+    ctk.CTkLabel(parent, text=label_text, font=ctk.CTkFont("Segoe UI", 11),
+                 text_color=theme["text_dim"], anchor="w", width=240
+                 ).grid(row=row, column=0, padx=(12, 4), pady=3, sticky="w")
+    var = ctk.StringVar(value=str(default_val))
+    ctk.CTkOptionMenu(parent, variable=var,
+                      values=["0", "1"],
+                      fg_color=theme["secondary"], button_color=theme["primary"],
+                      button_hover_color=theme["primary_hover"],
+                      text_color=theme["text"],
+                      font=ctk.CTkFont("Segoe UI", 11), width=80, height=28,
+                      ).grid(row=row, column=1, padx=4, pady=3, sticky="w")
+    if hint:
+        ctk.CTkLabel(parent, text=hint, font=ctk.CTkFont("Segoe UI", 9),
+                     text_color=theme["text_dim"]
+                     ).grid(row=row, column=2, padx=4, pady=3, sticky="w")
+    return var
+
+
+def _dropdown_row(parent, label_text, options: list, default_val, theme, row, hint=""):
+    """Dropdown row for discrete string/numeric values."""
+    ctk.CTkLabel(parent, text=label_text, font=ctk.CTkFont("Segoe UI", 11),
+                 text_color=theme["text_dim"], anchor="w", width=240
+                 ).grid(row=row, column=0, padx=(12, 4), pady=3, sticky="w")
+    var = ctk.StringVar(value=str(default_val))
+    ctk.CTkOptionMenu(parent, variable=var,
+                      values=[str(o) for o in options],
+                      fg_color=theme["secondary"], button_color=theme["primary"],
+                      button_hover_color=theme["primary_hover"],
+                      text_color=theme["text"],
+                      font=ctk.CTkFont("Segoe UI", 11), width=160, height=28,
+                      ).grid(row=row, column=1, padx=4, pady=3, sticky="w")
+    if hint:
+        ctk.CTkLabel(parent, text=hint, font=ctk.CTkFont("Segoe UI", 9),
+                     text_color=theme["text_dim"]
+                     ).grid(row=row, column=2, padx=4, pady=3, sticky="w")
+    return var
+
+
+def _stepper_row(parent, label_text, default_val, min_val, max_val, step, theme, row, hint=""):
+    """Numeric stepper row with – / + buttons."""
+    ctk.CTkLabel(parent, text=label_text, font=ctk.CTkFont("Segoe UI", 11),
+                 text_color=theme["text_dim"], anchor="w", width=240
+                 ).grid(row=row, column=0, padx=(12, 4), pady=3, sticky="w")
+    var = ctk.StringVar(value=str(default_val))
+    cell = ctk.CTkFrame(parent, fg_color="transparent")
+    cell.grid(row=row, column=1, padx=4, pady=3, sticky="w")
+
+    def _clamp(v):
+        try:
+            if isinstance(step, float) or isinstance(min_val, float):
+                val = round(max(float(min_val), min(float(max_val), float(v))), 4)
+                return str(int(val)) if val == int(val) else str(val)
+            else:
+                return str(max(int(min_val), min(int(max_val), int(float(v)))))
+        except (ValueError, TypeError):
+            return str(default_val)
+
+    def _dec():
+        try:
+            cur = float(var.get())
+            var.set(_clamp(cur - step))
+        except ValueError:
+            var.set(str(default_val))
+
+    def _inc():
+        try:
+            cur = float(var.get())
+            var.set(_clamp(cur + step))
+        except ValueError:
+            var.set(str(default_val))
+
+    ctk.CTkButton(cell, text="−", width=28, height=28,
+                  fg_color=theme["secondary"], hover_color=theme["primary"],
+                  font=ctk.CTkFont("Segoe UI", 13, "bold"),
+                  text_color=theme["text"], command=_dec
+                  ).pack(side="left")
+    ctk.CTkEntry(cell, textvariable=var, width=70,
+                 fg_color=theme["secondary"], text_color=theme["text"],
+                 font=ctk.CTkFont("Courier New", 11), justify="center"
+                 ).pack(side="left", padx=2)
+    ctk.CTkButton(cell, text="+", width=28, height=28,
+                  fg_color=theme["secondary"], hover_color=theme["primary"],
+                  font=ctk.CTkFont("Segoe UI", 13, "bold"),
+                  text_color=theme["text"], command=_inc
+                  ).pack(side="left")
+    if hint:
+        ctk.CTkLabel(parent, text=hint, font=ctk.CTkFont("Segoe UI", 9),
+                     text_color=theme["text_dim"]
+                     ).grid(row=row, column=2, padx=4, pady=3, sticky="w")
+    return var
+
+
 def _make_scrollable(parent, theme):
     scroll = ctk.CTkScrollableFrame(parent, fg_color=theme["content_bg"])
     scroll.pack(fill="both", expand=True, padx=0, pady=0)
@@ -109,21 +203,33 @@ class CS2PlayerPanel(ctk.CTkFrame):
         sec.pack(fill="x", padx=8, pady=4)
         sec.grid_columnconfigure(1, weight=1)
 
-        defs = {
-            "cl_crosshairstyle":          ("Styl (0-5)", "4",     "4=Statický"),
-            "cl_crosshairsize":           ("Velikost",  "2",     ""),
-            "cl_crosshairthickness":      ("Tloušťka",  "0.5",   ""),
-            "cl_crosshairgap":            ("Mezera",    "-1",    "záporná = menší mezera"),
-            "cl_crosshairdot":            ("Tečka (0/1)","0",    ""),
-            "cl_crosshaircolor":          ("Barva (0-5)","1",    "0=Čer,1=Zel,2=Žlu,3=Mod,4=Cyan"),
-            "cl_crosshair_drawoutline":   ("Obrys (0/1)","1",   ""),
-            "cl_crosshair_outlinethickness":("Tl. obrysu","1",  ""),
-            "cl_crosshairalpha":          ("Průhlednost","255",  "0-255"),
-            "cl_crosshair_t":             ("T-shape (0/1)","0", ""),
-        }
         self._xhair_vars = {}
-        for i, (k, (label, default, hint)) in enumerate(defs.items()):
-            self._xhair_vars[k] = _entry_row(sec, label, default, t, i, hint)
+        row = 0
+        # Discrete dropdowns
+        self._xhair_vars["cl_crosshairstyle"] = _dropdown_row(
+            sec, "Styl", ["0","1","2","3","4","5"], "4", t, row,
+            "0=Default,1=Static,2=Classic,3=CS:GO,4=Small,5=Tiny"); row += 1
+        self._xhair_vars["cl_crosshaircolor"] = _dropdown_row(
+            sec, "Barva", ["0","1","2","3","4","5"], "1", t, row,
+            "0=Červená,1=Zelená,2=Žlutá,3=Modrá,4=Cyan,5=Custom"); row += 1
+        # Steppers for numeric ranges
+        self._xhair_vars["cl_crosshairsize"] = _stepper_row(
+            sec, "Velikost", "2", 0, 10, 0.5, t, row, "0–10"); row += 1
+        self._xhair_vars["cl_crosshairthickness"] = _stepper_row(
+            sec, "Tloušťka", "0.5", 0, 3, 0.5, t, row, "0–3"); row += 1
+        self._xhair_vars["cl_crosshairgap"] = _stepper_row(
+            sec, "Mezera", "-1", -10, 10, 1, t, row, "záporná = menší"); row += 1
+        self._xhair_vars["cl_crosshair_outlinethickness"] = _stepper_row(
+            sec, "Tl. obrysu", "1", 0, 3, 0.5, t, row, "0–3"); row += 1
+        self._xhair_vars["cl_crosshairalpha"] = _stepper_row(
+            sec, "Průhlednost", "255", 0, 255, 10, t, row, "0–255"); row += 1
+        # Booleans
+        self._xhair_vars["cl_crosshairdot"] = _bool_row(
+            sec, "Tečka", "0", t, row, "0=Ne / 1=Ano"); row += 1
+        self._xhair_vars["cl_crosshair_drawoutline"] = _bool_row(
+            sec, "Obrys", "1", t, row, "0=Ne / 1=Ano"); row += 1
+        self._xhair_vars["cl_crosshair_t"] = _bool_row(
+            sec, "T-shape", "0", t, row, "0=Ne / 1=Ano"); row += 1
 
         _btn(scroll, "💾 Uložit crosshair.cfg", self._save_crosshair, t).pack(
             padx=8, pady=10, fill="x")
@@ -240,19 +346,25 @@ class CS2PlayerPanel(ctk.CTkFrame):
         sec.pack(fill="x", padx=8, pady=4)
         sec.grid_columnconfigure(1, weight=1)
 
-        vm_defs = {
-            "viewmodel_fov":          ("FOV",           "68",  "54-68"),
-            "viewmodel_offset_x":     ("Offset X",      "2.5", ""),
-            "viewmodel_offset_y":     ("Offset Y",      "0",   ""),
-            "viewmodel_offset_z":     ("Offset Z",      "-1.5",""),
-            "viewmodel_presetpos":    ("Preset",        "3",   "1=Desktop,2=Couch,3=Classic"),
-            "cl_bob_lower_amt":       ("Bob Lower",     "5",   ""),
-            "cl_bobamt_lat":          ("Bob Lat",       "0.1", ""),
-            "cl_bobamt_vert":         ("Bob Vert",      "0.1", ""),
-        }
         self._vm_vars = {}
-        for i, (k, (lbl, default, hint)) in enumerate(vm_defs.items()):
-            self._vm_vars[k] = _entry_row(sec, lbl, default, t, i, hint)
+        vrow = 0
+        self._vm_vars["viewmodel_fov"] = _stepper_row(
+            sec, "FOV", "68", 54, 68, 1, t, vrow, "54–68"); vrow += 1
+        self._vm_vars["viewmodel_offset_x"] = _stepper_row(
+            sec, "Offset X", "2.5", -2.5, 2.5, 0.5, t, vrow, "−2.5 – +2.5"); vrow += 1
+        self._vm_vars["viewmodel_offset_y"] = _stepper_row(
+            sec, "Offset Y", "0", -2.5, 2.5, 0.5, t, vrow, "−2.5 – +2.5"); vrow += 1
+        self._vm_vars["viewmodel_offset_z"] = _stepper_row(
+            sec, "Offset Z", "-1.5", -2.5, 2.5, 0.5, t, vrow, "−2.5 – +2.5"); vrow += 1
+        self._vm_vars["viewmodel_presetpos"] = _dropdown_row(
+            sec, "Preset", ["1","2","3"], "3", t, vrow,
+            "1=Desktop / 2=Couch / 3=Classic"); vrow += 1
+        self._vm_vars["cl_bob_lower_amt"] = _stepper_row(
+            sec, "Bob Lower", "5", 5, 30, 1, t, vrow, "5–30"); vrow += 1
+        self._vm_vars["cl_bobamt_lat"] = _stepper_row(
+            sec, "Bob Lat", "0.1", 0.0, 2.0, 0.1, t, vrow, "0–2"); vrow += 1
+        self._vm_vars["cl_bobamt_vert"] = _stepper_row(
+            sec, "Bob Vert", "0.1", 0.0, 2.0, 0.1, t, vrow, "0–2"); vrow += 1
 
         _btn(scroll, "💾 Uložit viewmodel.cfg", self._save_viewmodel, t).pack(
             padx=8, pady=10, fill="x")
@@ -273,10 +385,12 @@ class CS2PlayerPanel(ctk.CTkFrame):
             ).pack(padx=12, pady=3, fill="x")
 
         # Preview
-        _label(right, "Náhled (schéma)", 12, bold=True, color=t["text_dim"]).pack(pady=(14, 6))
-        self.vm_canvas = tk.Canvas(right, width=220, height=180,
+        _label(right, "Náhled zbraně", 12, bold=True, color=t["text_dim"]).pack(pady=(14, 4))
+        _label(right, "Boční pohled — přibližné umístění", 9, color=t["text_dark"]
+               ).pack(pady=(0, 6))
+        self.vm_canvas = tk.Canvas(right, width=260, height=200,
                                    bg=t["card_bg"], highlightthickness=0)
-        self.vm_canvas.pack(padx=10)
+        self.vm_canvas.pack(padx=4)
         self._draw_vm_preview()
         for var in self._vm_vars.values():
             var.trace_add("write", lambda *_: self.after(300, self._draw_vm_preview))
@@ -287,26 +401,102 @@ class CS2PlayerPanel(ctk.CTkFrame):
                 self._vm_vars[k].set(v)
 
     def _draw_vm_preview(self):
+        """Draw a top-down CS2-style rifle silhouette on the preview canvas."""
         try:
             c = self.vm_canvas
             c.delete("all")
-            w, h = 220, 180
+            W, H = 260, 200
+
             fov = float(self._vm_vars["viewmodel_fov"].get())
-            ox = float(self._vm_vars["viewmodel_offset_x"].get())
-            oz = float(self._vm_vars["viewmodel_offset_z"].get())
+            ox  = float(self._vm_vars["viewmodel_offset_x"].get())
+            oz  = float(self._vm_vars["viewmodel_offset_z"].get())
 
-            gx = int(w * 0.55 + ox * 6 - (fov - 68) * 1.5)
-            gy = int(h * 0.65 + oz * 6)
-            gx = max(30, min(w - 40, gx))
-            gy = max(30, min(h - 20, gy))
+            bg   = self.theme.get("card_bg", "#1a1a1a")
+            col  = self.theme["primary"]
+            dim  = self.theme.get("text_dark", "#444444")
+            xhair = "#22dd22"
 
-            col = self.theme["primary"]
-            c.create_line(gx - 30, gy, gx + 10, gy, fill=col, width=4)
-            c.create_rectangle(gx + 10, gy - 5, gx + 22, gy + 5, fill=col, outline="")
-            c.create_line(gx + 16, gy + 5, gx + 16, gy + 18, fill=col, width=3)
-            c.create_text(w // 2, 15, text=f"FOV:{fov:.0f}  X:{ox:+.1f}  Z:{oz:+.1f}",
-                          fill=self.theme["text_dim"], font=("Segoe UI", 9))
-            c.create_text(w // 2, h // 3, text="+", fill="#44ff44", font=("Segoe UI", 14))
+            c.configure(bg=bg)
+
+            # ── Screen border ──────────────────────────────────────────────
+            c.create_rectangle(2, 2, W-2, H-2, outline=dim, width=1)
+
+            # ── Crosshair (screen center) ────────��─────────────────────────
+            cx, cy = W // 2, H // 2
+            for dx, dy in [(-8,0),(8,0),(0,-8),(0,8)]:
+                c.create_line(cx+dx, cy+dy,
+                              cx+dx*2, cy+dy*2, fill=xhair, width=2)
+
+            # ── Weapon position on screen ──────────────────────────────────
+            # Base position: bottom-right of screen
+            # fov=68 → normal; lower fov → weapon appears closer (larger, higher)
+            # offset_x: positive = more right; offset_z: negative = lower
+            fov_scale = (68 - fov) * 0.8        # higher fov → weapon further away
+            gx = int(W * 0.72 - ox * 9 + fov_scale)
+            gy = int(H * 0.68 - oz * 9 + fov_scale * 0.3)
+            gx = max(60, min(W - 10, gx))
+            gy = max(40, min(H - 10, gy))
+
+            # Scale factor based on FOV (lower = bigger weapon)
+            scale = 1.0 + (68 - fov) * 0.03
+            s = scale
+
+            # ── AK-47 / M4 silhouette (side view, pointing left) ──────────
+            # Barrel (long horizontal tube)
+            bx, by = gx - int(90*s), gy
+            c.create_rectangle(bx,    by-3,  gx-int(30*s), by+3,
+                                fill=col, outline="")
+            # Muzzle brake
+            c.create_rectangle(bx-4, by-5, bx+2, by+5, fill=col, outline="")
+
+            # Upper receiver / body
+            rx1, ry1 = gx-int(30*s), by-int(8*s)
+            rx2, ry2 = gx+int(18*s), by+int(10*s)
+            c.create_rectangle(rx1, ry1, rx2, ry2, fill=col, outline="")
+
+            # Pistol grip
+            c.create_polygon(
+                gx+int(6*s),  by+int(10*s),
+                gx+int(18*s), by+int(10*s),
+                gx+int(20*s), by+int(28*s),
+                gx+int(8*s),  by+int(30*s),
+                fill=col, outline=""
+            )
+
+            # Stock
+            c.create_polygon(
+                gx+int(18*s), by-int(4*s),
+                gx+int(18*s), by+int(10*s),
+                gx+int(42*s), by+int(10*s),
+                gx+int(46*s), by+int(2*s),
+                gx+int(42*s), by-int(8*s),
+                fill=col, outline=""
+            )
+            # Stock butt plate
+            c.create_rectangle(gx+int(42*s), by-int(8*s),
+                                gx+int(48*s), by+int(10*s),
+                                fill=col, outline="")
+
+            # Magazine
+            mag_x = gx - int(8*s)
+            c.create_polygon(
+                mag_x-int(8*s),  by+int(10*s),
+                mag_x+int(8*s),  by+int(10*s),
+                mag_x+int(6*s),  by+int(32*s),
+                mag_x-int(6*s),  by+int(32*s),
+                fill=col, outline=""
+            )
+
+            # Scope / sights
+            c.create_rectangle(gx-int(40*s), by-int(12*s),
+                                gx-int(20*s), by-int(8*s),
+                                fill=col, outline="")
+
+            # ── Info text ─────────���───────────────────────────────────────
+            info = f"FOV: {fov:.0f}  X: {ox:+.1f}  Z: {oz:+.1f}"
+            c.create_text(W//2, H - 14, text=info,
+                          fill=self.theme.get("text_dim","#888888"),
+                          font=("Segoe UI", 8))
         except Exception:
             pass
 
@@ -567,58 +757,62 @@ class CS2ServerPanel(ctk.CTkFrame):
         _label(scroll, "CS2 – Server.cfg Generátor", 16, bold=True,
                color=t["primary"]).pack(padx=4, pady=(4, 8), anchor="w")
 
-        sections = {
-            "Základní": {
-                "hostname": ("Název serveru", "ZeddiHub CS2 Server"),
-                "sv_password": ("Heslo serveru", ""),
-                "rcon_password": ("RCON heslo", "changeme"),
-                "sv_cheats": ("SV Cheats", "0"),
-                "sv_lan": ("LAN only", "0"),
-            },
-            "Gamemode": {
-                "game_mode": ("Game mode", "1", "0=Casual,1=Comp,2=Wingman,3=DM"),
-                "game_type": ("Game type", "0", "0=Classic,1=GunGame,2=Training"),
-            },
-            "Network": {
-                "sv_maxrate": ("Max rate", "0"),
-                "sv_minrate": ("Min rate", "128000"),
-                "sv_maxcmdrate": ("Max cmdrate", "128"),
-                "sv_mincmdrate": ("Min cmdrate", "64"),
-                "sv_maxupdaterate": ("Max updaterate", "128"),
-                "sv_minupdaterate": ("Min updaterate", "64"),
-            },
-            "Gameplay": {
-                "mp_autoteambalance": ("Auto team balance", "1"),
-                "mp_limitteams": ("Limit teams", "1"),
-                "mp_friendlyfire": ("Friendly fire", "0"),
-                "mp_roundtime": ("Round time", "1.92"),
-                "mp_freezetime": ("Freeze time", "15"),
-                "mp_buytime": ("Buy time", "20"),
-                "mp_maxrounds": ("Max rounds", "24"),
-            },
-            "Komunikace": {
-                "sv_alltalk": ("All talk", "0"),
-                "sv_deadtalk": ("Dead talk", "1"),
-                "sv_allow_votes": ("Allow votes", "1"),
-            },
-            "GOTV": {
-                "tv_enable": ("GOTV enable", "1"),
-                "tv_delay": ("GOTV delay", "30"),
-            },
-        }
         self._srv_vars = {}
-        for sec_name, fields in sections.items():
+
+        def _srv_section(title):
             outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
             outer.pack(fill="x", padx=0, pady=6)
-            _label(outer, sec_name, 13, bold=True, color=t["primary"]).pack(
+            _label(outer, title, 13, bold=True, color=t["primary"]).pack(
                 padx=14, pady=(10, 6), anchor="w")
-            sec = ctk.CTkFrame(outer, fg_color="transparent")
-            sec.pack(fill="x", padx=0, pady=(0, 6))
-            sec.grid_columnconfigure(1, weight=1)
-            for i, (k, vals) in enumerate(fields.items()):
-                lbl, default = vals[0], vals[1]
-                hint = vals[2] if len(vals) > 2 else ""
-                self._srv_vars[k] = _entry_row(sec, lbl, default, t, i, hint)
+            inner = ctk.CTkFrame(outer, fg_color="transparent")
+            inner.pack(fill="x", padx=0, pady=(0, 6))
+            inner.grid_columnconfigure(1, weight=1)
+            return inner
+
+        # Základní
+        s = _srv_section("Základní")
+        self._srv_vars["hostname"]      = _entry_row(s, "Název serveru", "ZeddiHub CS2 Server", t, 0)
+        self._srv_vars["sv_password"]   = _entry_row(s, "Heslo serveru", "", t, 1)
+        self._srv_vars["rcon_password"] = _entry_row(s, "RCON heslo", "changeme", t, 2)
+        self._srv_vars["sv_cheats"]     = _bool_row(s, "SV Cheats", "0", t, 3)
+        self._srv_vars["sv_lan"]        = _bool_row(s, "LAN only", "0", t, 4)
+
+        # Gamemode
+        s = _srv_section("Gamemode")
+        self._srv_vars["game_type"] = _dropdown_row(
+            s, "Game type", ["0","1","2"], "0", t, 0, "0=Classic,1=GunGame,2=Training")
+        self._srv_vars["game_mode"] = _dropdown_row(
+            s, "Game mode", ["0","1","2","3"], "1", t, 1, "0=Casual,1=Comp,2=Wingman,3=DM")
+
+        # Network
+        s = _srv_section("Network")
+        self._srv_vars["sv_maxrate"]        = _stepper_row(s, "Max rate",        "0",      0, 2000000, 128000, t, 0)
+        self._srv_vars["sv_minrate"]        = _stepper_row(s, "Min rate",        "128000", 0, 786432,  64000,  t, 1)
+        self._srv_vars["sv_maxcmdrate"]     = _dropdown_row(s, "Max cmdrate",    ["64","100","128"], "128", t, 2)
+        self._srv_vars["sv_mincmdrate"]     = _dropdown_row(s, "Min cmdrate",    ["32","64","100","128"], "64", t, 3)
+        self._srv_vars["sv_maxupdaterate"]  = _dropdown_row(s, "Max updaterate", ["64","100","128"], "128", t, 4)
+        self._srv_vars["sv_minupdaterate"]  = _dropdown_row(s, "Min updaterate", ["32","64","100","128"], "64", t, 5)
+
+        # Gameplay
+        s = _srv_section("Gameplay")
+        self._srv_vars["mp_autoteambalance"] = _bool_row(s, "Auto team balance", "1", t, 0)
+        self._srv_vars["mp_limitteams"]      = _bool_row(s, "Limit teams",       "1", t, 1)
+        self._srv_vars["mp_friendlyfire"]    = _bool_row(s, "Friendly fire",     "0", t, 2)
+        self._srv_vars["mp_maxrounds"]       = _dropdown_row(s, "Max rounds", ["12","16","24","30"], "24", t, 3)
+        self._srv_vars["mp_roundtime"]       = _stepper_row(s, "Round time (min)", "1.92", 0.5, 10.0, 0.5, t, 4)
+        self._srv_vars["mp_freezetime"]      = _stepper_row(s, "Freeze time (s)",  "15",   0,   30,   1,   t, 5)
+        self._srv_vars["mp_buytime"]         = _stepper_row(s, "Buy time (s)",     "20",   0,   90,   5,   t, 6)
+
+        # Komunikace
+        s = _srv_section("Komunikace")
+        self._srv_vars["sv_alltalk"]    = _bool_row(s, "All talk",     "0", t, 0)
+        self._srv_vars["sv_deadtalk"]   = _bool_row(s, "Dead talk",    "1", t, 1)
+        self._srv_vars["sv_allow_votes"]= _bool_row(s, "Allow votes",  "1", t, 2)
+
+        # GOTV
+        s = _srv_section("GOTV")
+        self._srv_vars["tv_enable"] = _bool_row(s, "GOTV enable", "1", t, 0)
+        self._srv_vars["tv_delay"]  = _stepper_row(s, "GOTV delay (s)", "30", 0, 120, 10, t, 1)
 
         _btn(scroll, "💾 Uložit server.cfg", self._save_servercfg, t).pack(
             padx=4, pady=10, fill="x")
