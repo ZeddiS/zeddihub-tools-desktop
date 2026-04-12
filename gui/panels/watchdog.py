@@ -21,7 +21,7 @@ except ImportError:
 from .. import icons
 
 A2S_INFO = b"\xFF\xFF\xFF\xFFTSource Engine Query\x00"
-SERVER_STATUS_URL = "https://files.zeddihub.eu/tools/servers.json"
+SERVER_STATUS_URL = "https://zeddihub.eu/tools/data/servers.json"
 
 
 def _label(parent, text, font_size=12, bold=False, color=None, **kw):

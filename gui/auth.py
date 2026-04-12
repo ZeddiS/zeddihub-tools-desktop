@@ -21,7 +21,7 @@ import urllib.request
 import urllib.error
 
 # --- Config ---
-AUTH_API_URL = "https://files.zeddihub.eu/tools/auth.json"
+AUTH_API_URL = "https://zeddihub.eu/tools/data/auth.json"
 
 _cached_token: str | None = None
 _auth_verified: bool = False

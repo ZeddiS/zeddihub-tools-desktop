@@ -370,10 +370,16 @@ class CS2PlayerPanel(ctk.CTkFrame):
 
         self._ae_vars = {}
         for cat_name, fields in categories.items():
-            sec = _section(scroll, cat_name, t)
-            sec.grid_columnconfigure(1, weight=1)
+            # outer uses pack (title label), inner uses grid (entry rows) — never mix in one frame
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer.pack(fill="x", padx=0, pady=6)
+            _label(outer, cat_name, 13, bold=True, color=t["primary"]).pack(
+                padx=14, pady=(10, 6), anchor="w")
+            inner = ctk.CTkFrame(outer, fg_color="transparent")
+            inner.pack(fill="x", padx=0, pady=(0, 6))
+            inner.grid_columnconfigure(1, weight=1)
             for i, (k, (lbl, default)) in enumerate(fields.items()):
-                self._ae_vars[k] = _entry_row(sec, f"{lbl} ({k})", default, t, i)
+                self._ae_vars[k] = _entry_row(inner, f"{lbl} ({k})", default, t, i)
 
         # Custom commands
         _label(scroll, "Vlastní příkazy:", 12, bold=True, color=t["text"]).pack(
@@ -417,7 +423,12 @@ class CS2PlayerPanel(ctk.CTkFrame):
         _label(scroll, "Pro trénink granátů, nákupy kdekoliv, nekonečná munice...",
                11, color=t["text_dim"]).pack(padx=4, anchor="w")
 
-        sec = _section(scroll, "Nastavení", t)
+        outer_prac = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_prac.pack(fill="x", padx=0, pady=6)
+        _label(outer_prac, "Nastavení", 13, bold=True, color=t["primary"]).pack(
+            padx=14, pady=(10, 6), anchor="w")
+        sec = ctk.CTkFrame(outer_prac, fg_color="transparent")
+        sec.pack(fill="x", padx=0, pady=(0, 6))
         sec.grid_columnconfigure(1, weight=1)
 
         practice_defs = {
@@ -481,7 +492,12 @@ class CS2PlayerPanel(ctk.CTkFrame):
             "kp_pgup":      ("Full Buy",                    "buy ak47; buy m4a1; buy vesthelm; buy defuser; buy smokegrenade; buy flashbang; buy molotov; buy hegrenade;"),
         }
 
-        sec = _section(scroll, "Klávesy a příkazy", t)
+        outer_bb = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_bb.pack(fill="x", padx=0, pady=6)
+        _label(outer_bb, "Klávesy a příkazy", 13, bold=True, color=t["primary"]).pack(
+            padx=14, pady=(10, 6), anchor="w")
+        sec = ctk.CTkFrame(outer_bb, fg_color="transparent")
+        sec.pack(fill="x", padx=0, pady=(0, 6))
         sec.grid_columnconfigure(0, minsize=160)
         sec.grid_columnconfigure(1, minsize=160)
         sec.grid_columnconfigure(2, weight=1)
@@ -592,7 +608,12 @@ class CS2ServerPanel(ctk.CTkFrame):
         }
         self._srv_vars = {}
         for sec_name, fields in sections.items():
-            sec = _section(scroll, sec_name, t)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer.pack(fill="x", padx=0, pady=6)
+            _label(outer, sec_name, 13, bold=True, color=t["primary"]).pack(
+                padx=14, pady=(10, 6), anchor="w")
+            sec = ctk.CTkFrame(outer, fg_color="transparent")
+            sec.pack(fill="x", padx=0, pady=(0, 6))
             sec.grid_columnconfigure(1, weight=1)
             for i, (k, vals) in enumerate(fields.items()):
                 lbl, default = vals[0], vals[1]

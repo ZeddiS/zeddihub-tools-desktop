@@ -104,7 +104,12 @@ class RustPlayerPanel(ctk.CTkFrame):
 
         self._cfg_vars = {}
         for cat_name, fields in categories.items():
-            sec = _section(scroll, cat_name, t)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer.pack(fill="x", padx=0, pady=6)
+            _label(outer, cat_name, 13, bold=True, color=t["primary"]).pack(
+                padx=14, pady=(10, 6), anchor="w")
+            sec = ctk.CTkFrame(outer, fg_color="transparent")
+            sec.pack(fill="x", padx=0, pady=(0, 6))
             sec.grid_columnconfigure(1, weight=1)
             for i, (k, vals) in enumerate(fields.items()):
                 lbl, default, hint = vals
@@ -368,7 +373,12 @@ class RustServerPanel(ctk.CTkFrame):
 
         self._srv_vars = {}
         for sec_name, fields in server_defs.items():
-            sec = _section(scroll, sec_name, t)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer.pack(fill="x", padx=0, pady=6)
+            _label(outer, sec_name, 13, bold=True, color=t["primary"]).pack(
+                padx=14, pady=(10, 6), anchor="w")
+            sec = ctk.CTkFrame(outer, fg_color="transparent")
+            sec.pack(fill="x", padx=0, pady=(0, 6))
             sec.grid_columnconfigure(1, weight=1)
             for i, (k, vals) in enumerate(fields.items()):
                 lbl, default = vals

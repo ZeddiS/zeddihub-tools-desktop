@@ -94,13 +94,13 @@ class SplashScreen:
             fill="#666666", font=("Segoe UI", 9)
         )
 
-        # Status text
+        # Status text (centered above progress bar)
         self.status_var = tk.StringVar(value="Spouštění...")
         self.status_label = tk.Label(
             self.root, textvariable=self.status_var,
-            bg=SPLASH_BG, fg=SPLASH_TEXT, font=("Segoe UI", 9)
+            bg=SPLASH_BG, fg=SPLASH_TEXT, font=("Segoe UI", 10)
         )
-        self.status_label.place(x=20, y=h - 40)
+        self.status_label.place(relx=0.5, y=h - 42, anchor="center")
 
         # Progress bar background
         self.canvas.create_rectangle(20, h-22, w-20, h-10, fill="#1a1a2e", outline="#333333")

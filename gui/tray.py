@@ -17,7 +17,7 @@ try:
 except ImportError:
     TRAY_OK = False
 
-TRAY_TOOLS_URL = "https://files.zeddihub.eu/tools/tray_tools.json"
+TRAY_TOOLS_URL = "https://zeddihub.eu/tools/data/tray_tools.json"
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 
 

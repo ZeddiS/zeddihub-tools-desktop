@@ -29,8 +29,8 @@ except ImportError:
 from .. import icons
 
 BANNER_PATH = Path(__file__).parent.parent.parent / "assets" / "banner.png"
-SERVER_STATUS_URL = "https://files.zeddihub.eu/tools/servers.json"
-RECOMMENDED_URL   = "https://files.zeddihub.eu/tools/recommended.json"
+SERVER_STATUS_URL = "https://zeddihub.eu/tools/data/servers.json"
+RECOMMENDED_URL   = "https://zeddihub.eu/tools/data/recommended.json"
 
 A2S_INFO = b"\xFF\xFF\xFF\xFFTSource Engine Query\x00"
 

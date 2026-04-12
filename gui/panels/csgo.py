@@ -245,7 +245,12 @@ class CSGOPlayerPanel(ctk.CTkFrame):
             "mm_dedicated_search_maxping": ("Max ping", "50"),
         }
 
-        sec = _section(scroll, "Herní nastavení", t)
+        outer_ae = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_ae.pack(fill="x", padx=0, pady=6)
+        _label(outer_ae, "Herní nastavení", 13, bold=True, color=t["primary"]).pack(
+            padx=14, pady=(10, 6), anchor="w")
+        sec = ctk.CTkFrame(outer_ae, fg_color="transparent")
+        sec.pack(fill="x", padx=0, pady=(0, 6))
         sec.grid_columnconfigure(1, weight=1)
         self._ae_vars = {}
         for i, (k, (lbl, default)) in enumerate(defs.items()):
@@ -297,7 +302,12 @@ class CSGOPlayerPanel(ctk.CTkFrame):
             "sv_grenade_trajectory_prac_trailtime": ("Nade trail",   "4"),
             "cl_grenadepreview":   ("Grenade preview",   "1"),
         }
-        sec = _section(scroll, "Nastavení", t)
+        outer_pr = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_pr.pack(fill="x", padx=0, pady=6)
+        _label(outer_pr, "Nastavení", 13, bold=True, color=t["primary"]).pack(
+            padx=14, pady=(10, 6), anchor="w")
+        sec = ctk.CTkFrame(outer_pr, fg_color="transparent")
+        sec.pack(fill="x", padx=0, pady=(0, 6))
         sec.grid_columnconfigure(1, weight=1)
         self._prac_vars = {}
         for i, (k, (lbl, default)) in enumerate(defs.items()):
@@ -343,7 +353,12 @@ class CSGOPlayerPanel(ctk.CTkFrame):
         }
 
         self._bind_vars = {}
-        sec = _section(scroll, "Klávesy a příkazy", t)
+        outer_bb = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_bb.pack(fill="x", padx=0, pady=6)
+        _label(outer_bb, "Klávesy a příkazy", 13, bold=True, color=t["primary"]).pack(
+            padx=14, pady=(10, 6), anchor="w")
+        sec = ctk.CTkFrame(outer_bb, fg_color="transparent")
+        sec.pack(fill="x", padx=0, pady=(0, 6))
         sec.grid_columnconfigure(2, weight=1)
 
         for i, (key, (label, cmd)) in enumerate(binds_default.items()):

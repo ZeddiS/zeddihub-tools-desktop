@@ -22,6 +22,7 @@ from .auth import is_authenticated, load_credentials, verify_access, save_creden
 from .updater import check_for_update, download_update, apply_update, open_release_page, CURRENT_VERSION
 from .locale import t, get_lang, set_lang, init as locale_init, load_settings, save_settings
 from . import icons
+from . import telemetry
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 LOGO_PATH = ASSETS_DIR / "logo2.png"          # header / sidebar logo
@@ -214,8 +215,10 @@ class AuthDialog(ctk.CTkToplevel):
                 else:
                     clear_credentials()
                 self.result = True
+                from . import telemetry as _telem
+                _telem.on_login(user)
                 if self._on_success:
-                    self.after(0, self._on_success)
+                    self._on_success()
                 self.destroy()
             else:
                 self.status_var.set(f"✗ {msg}")
@@ -253,6 +256,9 @@ class MainWindow(ctk.CTk):
         if saved:
             verify_access(saved[0], saved[1],
                           callback=lambda s, m: self.after(100, self._update_auth_ui) if s else None)
+
+        # Telemetry: launch event (fire after a short delay so UI is ready)
+        self.after(2000, lambda: telemetry.on_launch(get_current_user()))
 
         # System tray
         self._tray = None
@@ -294,33 +300,36 @@ class MainWindow(ctk.CTk):
                     pass
 
     def _build_layout(self):
-        self._main = ctk.CTkFrame(self, fg_color="#0c0c0c", corner_radius=0)
+        th = self._get_current_theme()
+        self._main = ctk.CTkFrame(self, fg_color=th["bg"], corner_radius=0)
         self._main.pack(fill="both", expand=True)
 
         # Header
-        self._header = ctk.CTkFrame(self._main, fg_color="#0e0e0e", height=HEADER_H, corner_radius=0)
+        self._header = ctk.CTkFrame(self._main, fg_color=th["header_bg"], height=HEADER_H, corner_radius=0)
         self._header.pack(fill="x", side="top")
         self._header.pack_propagate(False)
         self._build_header()
 
         # Thin separator
-        ctk.CTkFrame(self._main, fg_color="#1a1a1a", height=1, corner_radius=0).pack(fill="x")
+        self._header_sep = ctk.CTkFrame(self._main, fg_color=th["border"], height=1, corner_radius=0)
+        self._header_sep.pack(fill="x")
 
         # Body
         body = ctk.CTkFrame(self._main, fg_color="transparent", corner_radius=0)
         body.pack(fill="both", expand=True)
 
         # Sidebar
-        self._sidebar = ctk.CTkFrame(body, fg_color="#111111", width=SIDEBAR_W, corner_radius=0)
+        self._sidebar = ctk.CTkFrame(body, fg_color=th["sidebar_bg"], width=SIDEBAR_W, corner_radius=0)
         self._sidebar.pack(fill="y", side="left")
         self._sidebar.pack_propagate(False)
         self._build_sidebar()
 
         # Thin vertical separator
-        ctk.CTkFrame(body, fg_color="#1a1a1a", width=1, corner_radius=0).pack(fill="y", side="left")
+        self._sidebar_sep = ctk.CTkFrame(body, fg_color=th["border"], width=1, corner_radius=0)
+        self._sidebar_sep.pack(fill="y", side="left")
 
         # Content
-        self._content_container = ctk.CTkFrame(body, fg_color="#0f0f0f", corner_radius=0)
+        self._content_container = ctk.CTkFrame(body, fg_color=th["content_bg"], corner_radius=0)
         self._content_container.pack(fill="both", expand=True, side="left")
 
     def _build_header(self):
@@ -378,8 +387,13 @@ class MainWindow(ctk.CTk):
         self._update_mode_btn()
 
     def _build_sidebar(self):
+        th = self._get_current_theme()
+        nav_text = th["text"]
+        nav_dim = th["text_dim"]
+        nav_hover = th["card_bg"]
+
         # Top logo area
-        logo_area = ctk.CTkFrame(self._sidebar, fg_color="#0c0c0c", height=60, corner_radius=0)
+        logo_area = ctk.CTkFrame(self._sidebar, fg_color=th["bg"], height=60, corner_radius=0)
         logo_area.pack(fill="x")
         logo_area.pack_propagate(False)
 
@@ -394,23 +408,23 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkLabel(logo_area, text="ZeddiHub\nTools",
                      font=ctk.CTkFont("Segoe UI", 11, "bold"),
-                     text_color="#f0a500", justify="left"
+                     text_color=th["primary"], justify="left"
                      ).pack(side="left", pady=12)
 
-        ctk.CTkFrame(self._sidebar, fg_color="#222222", height=1).pack(fill="x")
+        ctk.CTkFrame(self._sidebar, fg_color=th["border"], height=1).pack(fill="x")
 
         # Scrollable nav area
         self._nav_scroll = ctk.CTkScrollableFrame(
             self._sidebar, fg_color="transparent",
-            scrollbar_button_color="#2a2a2a",
-            scrollbar_button_hover_color="#333333"
+            scrollbar_button_color=th["border"],
+            scrollbar_button_hover_color=th["secondary"]
         )
         self._nav_scroll.pack(fill="both", expand=True, padx=0, pady=4)
 
         self._build_nav_items()
 
         # Bottom section: settings + language
-        ctk.CTkFrame(self._sidebar, fg_color="#222222", height=1).pack(fill="x", side="bottom")
+        ctk.CTkFrame(self._sidebar, fg_color=th["border"], height=1).pack(fill="x", side="bottom")
 
         lang = get_lang()
         lang_flag = "🇨🇿" if lang == "cs" else "🇬🇧"
@@ -418,8 +432,8 @@ class MainWindow(ctk.CTk):
         self._lang_btn = ctk.CTkButton(
             self._sidebar,
             text=f"{lang_flag} {lang_name}",
-            fg_color="transparent", hover_color="#1a1a1a",
-            text_color="#555555", anchor="w",
+            fg_color="transparent", hover_color=nav_hover,
+            text_color=nav_dim, anchor="w",
             font=ctk.CTkFont("Segoe UI", 10),
             height=30,
             command=self._toggle_language
@@ -428,11 +442,11 @@ class MainWindow(ctk.CTk):
 
         self._auth_btn = ctk.CTkButton(
             self._sidebar,
-            image=icons.icon("right-to-bracket", 15, "#888888"),
+            image=icons.icon("right-to-bracket", 15, nav_text),
             text=" " + t("login"),
             compound="left",
-            fg_color="transparent", hover_color="#1a1a1a",
-            text_color="#888888", anchor="w",
+            fg_color="transparent", hover_color=nav_hover,
+            text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
             height=36, command=self._show_auth_dialog
         )
@@ -440,11 +454,11 @@ class MainWindow(ctk.CTk):
 
         self._settings_btn = ctk.CTkButton(
             self._sidebar,
-            image=icons.icon("gear", 15, "#aaaaaa"),
+            image=icons.icon("gear", 15, nav_text),
             text="  " + t("settings"),
             compound="left",
-            fg_color="transparent", hover_color="#1a1a1a",
-            text_color="#aaaaaa", anchor="w",
+            fg_color="transparent", hover_color=nav_hover,
+            text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
             height=36, command=lambda: self._navigate("settings")
         )
@@ -452,17 +466,23 @@ class MainWindow(ctk.CTk):
 
         self._links_btn = ctk.CTkButton(
             self._sidebar,
-            image=icons.icon("link", 15, "#aaaaaa"),
+            image=icons.icon("link", 15, nav_text),
             text="  " + t("links"),
             compound="left",
-            fg_color="transparent", hover_color="#1a1a1a",
-            text_color="#aaaaaa", anchor="w",
+            fg_color="transparent", hover_color=nav_hover,
+            text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
             height=36, command=lambda: self._navigate("links")
         )
         self._links_btn.pack(fill="x", padx=4, pady=2, side="bottom")
 
     def _build_nav_items(self):
+        th = self._get_current_theme()
+        nav_text = th["text"]
+        nav_dim = th["text_dim"]
+        nav_dim2 = th["text_dark"]
+        nav_hover = th["card_bg"]
+
         # Load saved section states
         settings = load_settings()
         saved_states = settings.get("sidebar_sections", {})
@@ -483,12 +503,12 @@ class MainWindow(ctk.CTk):
                 }.get(nav_id, nav_id)
                 btn = ctk.CTkButton(
                     self._nav_scroll,
-                    image=icons.icon(icon, 16, "#cccccc"),
+                    image=icons.icon(icon, 16, nav_text),
                     text=f"  {display_label}",
                     compound="left",
                     fg_color="transparent",
-                    hover_color="#1a1a1a",
-                    text_color="#cccccc",
+                    hover_color=nav_hover,
+                    text_color=nav_text,
                     anchor="w",
                     font=ctk.CTkFont("Segoe UI", 12),
                     height=38,
@@ -510,12 +530,12 @@ class MainWindow(ctk.CTk):
                 arrow = "▼" if is_expanded else "▶"
                 section_btn = ctk.CTkButton(
                     outer,
-                    image=icons.icon(icon, 14, "#888888"),
+                    image=icons.icon(icon, 14, nav_dim),
                     text=f"  {label}  {arrow}",
                     compound="left",
                     fg_color="transparent",
-                    hover_color="#1a1a1a",
-                    text_color="#888888",
+                    hover_color=nav_hover,
+                    text_color=nav_dim,
                     anchor="w",
                     font=ctk.CTkFont("Segoe UI", 11, "bold"),
                     height=34,
@@ -536,9 +556,9 @@ class MainWindow(ctk.CTk):
                     locked = requires_auth and not is_authenticated()
                     if locked:
                         self._locked_navs.add(nav_id)
-                    child_img = icons.icon("lock", 14, "#555555") if locked else icons.icon(child_icon, 14, "#cccccc")
-                    tc = "#555555" if locked else "#cccccc"
-                    fg = "#161616" if locked else "transparent"
+                    child_img = icons.icon("lock", 14, nav_dim2) if locked else icons.icon(child_icon, 14, nav_text)
+                    tc = nav_dim2 if locked else nav_text
+                    fg = th["secondary"] if locked else "transparent"
 
                     btn = ctk.CTkButton(
                         children_frame,
@@ -546,7 +566,7 @@ class MainWindow(ctk.CTk):
                         text=f"   {child_label}",
                         compound="left",
                         fg_color=fg,
-                        hover_color="#1a1a1a",
+                        hover_color=nav_hover,
                         text_color=tc,
                         anchor="w",
                         font=ctk.CTkFont("Segoe UI", 11),
@@ -614,18 +634,19 @@ class MainWindow(ctk.CTk):
             )
 
         # Update nav button styles
+        mode = ctk.get_appearance_mode().lower()
         for nid, btn in self._nav_buttons.items():
             nid_game = NAV_GAME_MAP.get(nid, "default")
-            th = get_theme(nid_game)
+            btn_th = get_theme(nid_game, mode)
+            cur_th = get_theme(self._current_game, mode)
             if nid == nav_id:
-                btn.configure(fg_color=th["primary"], text_color="#ffffff",
-                              hover_color=th["primary_hover"])
+                btn.configure(fg_color=btn_th["primary"], text_color="#ffffff",
+                              hover_color=btn_th["primary_hover"])
             else:
-                # Preserve lock styling
                 is_locked = nid in self._locked_navs
-                tc = "#555555" if is_locked else "#cccccc"
-                fg = "#161616" if is_locked else "transparent"
-                btn.configure(fg_color=fg, text_color=tc, hover_color="#1a1a1a")
+                tc = cur_th["text_dark"] if is_locked else cur_th["text"]
+                fg = cur_th["secondary"] if is_locked else "transparent"
+                btn.configure(fg_color=fg, text_color=tc, hover_color=cur_th["card_bg"])
 
         # Update settings / links button highlights
         if nav_id == "settings":
@@ -641,11 +662,45 @@ class MainWindow(ctk.CTk):
 
         self._show_panel(nav_id)
 
+    def _get_current_theme(self) -> dict:
+        mode = ctk.get_appearance_mode().lower()
+        return get_theme(self._current_game if hasattr(self, "_current_game") else "default", mode)
+
     def _apply_theme(self):
-        th = get_theme(self._current_game)
+        th = self._get_current_theme()
         self._content_container.configure(fg_color=th["content_bg"])
         self._sidebar.configure(fg_color=th["sidebar_bg"])
-        self._header.configure(fg_color=th.get("header_bg", "#0e0e0e"))
+        self._header.configure(fg_color=th["header_bg"])
+        if hasattr(self, "_main"):
+            self._main.configure(fg_color=th["bg"])
+        if hasattr(self, "_header_sep"):
+            self._header_sep.configure(fg_color=th["border"])
+        if hasattr(self, "_sidebar_sep"):
+            self._sidebar_sep.configure(fg_color=th["border"])
+
+        # Update all nav button hover/inactive colors for new theme
+        nav_text = th["text"]
+        nav_dim = th["text_dark"]
+        nav_hover = th["card_bg"]
+        for nid, btn in self._nav_buttons.items():
+            if nid == self._current_nav_id:
+                continue  # keep active highlight
+            is_locked = nid in self._locked_navs
+            btn.configure(
+                text_color=nav_dim if is_locked else nav_text,
+                fg_color=th["secondary"] if is_locked else "transparent",
+                hover_color=nav_hover,
+            )
+
+        # Update section header buttons
+        for sid, sbtn in self._section_btns.items():
+            sbtn.configure(text_color=th["text_dim"], hover_color=nav_hover)
+
+        # Update bottom sidebar buttons
+        for attr in ("_settings_btn", "_links_btn", "_auth_btn", "_lang_btn"):
+            w = getattr(self, attr, None)
+            if w:
+                w.configure(hover_color=nav_hover)
 
     def _show_panel(self, nav_id: str):
         if self._current_panel:
@@ -707,6 +762,7 @@ class MainWindow(ctk.CTk):
         if panel:
             panel.pack(fill="both", expand=True)
             self._current_panel = panel
+            telemetry.on_panel_open(nav_id, get_current_user())
 
     def _show_auth_dialog(self):
         if is_authenticated():
@@ -764,6 +820,7 @@ class MainWindow(ctk.CTk):
                 text=" " + t("login"), text_color="#888888")
 
             # Re-lock nav items
+            th = self._get_current_theme()
             for entry in NAV_SECTIONS:
                 if len(entry) < 6:
                     continue
@@ -775,9 +832,9 @@ class MainWindow(ctk.CTk):
                         self._locked_navs.add(nav_id)
                         btn = self._nav_buttons[nav_id]
                         btn.configure(
-                            image=icons.icon("lock", 14, "#555555"),
+                            image=icons.icon("lock", 14, th["text_dark"]),
                             text=f"   {child_label}",
-                            fg_color="#161616", text_color="#555555"
+                            fg_color=th["secondary"], text_color=th["text_dark"]
                         )
 
     def _toggle_appearance_mode(self):
@@ -788,6 +845,7 @@ class MainWindow(ctk.CTk):
         settings["appearance_mode"] = new_mode
         save_settings(settings)
         self._update_mode_btn()
+        self.after(50, self._apply_theme)  # slight delay lets CTK finish its own recolor
 
     def _update_mode_btn(self):
         mode = ctk.get_appearance_mode().lower()
@@ -830,11 +888,53 @@ class MainWindow(ctk.CTk):
             pass
 
     def _minimize_to_tray(self):
-        """Hide window to tray instead of closing."""
+        """Hide window to tray on first close; show one-time info dialog."""
+        settings = load_settings()
         if self._tray is not None:
+            if not settings.get("tray_close_shown", False):
+                settings["tray_close_shown"] = True
+                save_settings(settings)
+                self._show_tray_notice()
+                return  # notice has its own close/minimize buttons
             self.withdraw()
         else:
             self._quit_app()
+
+    def _show_tray_notice(self):
+        """One-time dialog explaining app minimizes to tray."""
+        th = self._get_current_theme()
+        d = ctk.CTkToplevel(self)
+        d.title("Minimalizace do tray")
+        d.geometry("400x200")
+        d.configure(fg_color=th["content_bg"])
+        d.resizable(False, False)
+        d.grab_set()
+        d.protocol("WM_DELETE_WINDOW", lambda: (self.withdraw(), d.destroy()))
+
+        ctk.CTkLabel(d,
+                     image=icons.icon("circle-info", 22, th["primary"]),
+                     text="  Aplikace běží na pozadí",
+                     compound="left",
+                     font=ctk.CTkFont("Segoe UI", 15, "bold"),
+                     text_color=th["text"]).pack(pady=(20, 6), padx=20, anchor="w")
+        ctk.CTkLabel(d,
+                     text="Zavřením okna se aplikace minimalizuje do\nsystémové lišty. Pravým klikem na ikonu\nv trayi otevřeš menu pro úplné ukončení.",
+                     font=ctk.CTkFont("Segoe UI", 11),
+                     text_color=th["text_dim"],
+                     justify="left").pack(padx=20, pady=(0, 16), anchor="w")
+
+        row = ctk.CTkFrame(d, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=4)
+        ctk.CTkButton(row, text="Minimalizovat do tray",
+                      fg_color=th["primary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 12), height=36,
+                      command=lambda: (self.withdraw(), d.destroy())
+                      ).pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ctk.CTkButton(row, text="Ukončit",
+                      fg_color=th["secondary"], hover_color=th["error"],
+                      font=ctk.CTkFont("Segoe UI", 12), height=36,
+                      command=lambda: (d.destroy(), self._quit_app())
+                      ).pack(side="left", width=90)
 
     def _quit_app(self):
         """Full shutdown: stop tray then destroy window."""

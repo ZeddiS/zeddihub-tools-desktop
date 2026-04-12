@@ -77,10 +77,17 @@ class PCToolsPanel(ctk.CTkFrame):
         if not PSUTIL_OK:
             warn = _card(scroll, th)
             warn.pack(fill="x", pady=6)
-            _label(warn, "⚠ psutil není nainstalován.",
-                   12, color=th["warning"]).pack(padx=16, pady=(12, 4), anchor="w")
-            _label(warn, "Spusťte: pip install psutil",
-                   11, color=th["text_dim"]).pack(padx=16, pady=(0, 12), anchor="w")
+            _label(warn, "psutil není nainstalován — systémové info nedostupné.",
+                   12, color=th["warning"],
+                   image=icons.icon("triangle-exclamation", 14, th["warning"]),
+                   compound="left").pack(padx=16, pady=(12, 4), anchor="w")
+            _label(warn, "Klikni na tlačítko níže pro automatickou instalaci.",
+                   11, color=th["text_dim"]).pack(padx=16, pady=(0, 4), anchor="w")
+            ctk.CTkButton(warn, text="Nainstalovat psutil",
+                          fg_color=th["primary"], hover_color=th["primary_hover"],
+                          font=ctk.CTkFont("Segoe UI", 11), height=30,
+                          command=self._install_psutil
+                          ).pack(padx=16, pady=(0, 12), anchor="w")
 
         # Refresh button
         ctk.CTkButton(scroll, text="↻ " + t("refresh"),
@@ -93,6 +100,19 @@ class PCToolsPanel(ctk.CTkFrame):
         info_frame.pack(fill="x")
 
         self._load_sysinfo(info_frame)
+
+    def _install_psutil(self):
+        import subprocess as sp
+        import sys as _sys
+        try:
+            sp.check_call([_sys.executable, "-m", "pip", "install", "psutil"],
+                          creationflags=0x08000000)  # CREATE_NO_WINDOW on Windows
+            from tkinter import messagebox
+            messagebox.showinfo("psutil nainstalován",
+                                "psutil byl úspěšně nainstalován.\nRestartuj aplikaci pro aktivaci.")
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Chyba instalace", f"Nepodařilo se nainstalovat psutil:\n{e}")
 
     def _load_sysinfo(self, frame: ctk.CTkFrame):
         for w in frame.winfo_children():

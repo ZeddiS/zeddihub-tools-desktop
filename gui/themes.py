@@ -7,7 +7,7 @@ GAME_THEMES = {
         "primary": "#f0a500",
         "primary_hover": "#d99400",
         "bg": "#0c0c0c",
-        "sidebar_bg": "#111111",
+        "sidebar_bg": "#131313",
         "header_bg": "#0e0e0e",
         "content_bg": "#0f0f0f",
         "card_bg": "#1a1a1a",
@@ -23,12 +23,25 @@ GAME_THEMES = {
         "accent": "#f0a500",
         "button_fg": "#ffffff",
         "name": "Default",
+        # Light mode overrides
+        "light": {
+            "bg": "#f0f0f0",
+            "sidebar_bg": "#e0e0e0",
+            "header_bg": "#d8d8d8",
+            "content_bg": "#f5f5f5",
+            "card_bg": "#ffffff",
+            "secondary": "#e8e8e8",
+            "border": "#cccccc",
+            "text": "#1a1a1a",
+            "text_dim": "#666666",
+            "text_dark": "#999999",
+        },
     },
     "cs2": {
         "primary": "#5b9cf6",
         "primary_hover": "#4a8ae0",
         "bg": "#0c0c0f",
-        "sidebar_bg": "#10101a",
+        "sidebar_bg": "#12121e",
         "header_bg": "#0d0d15",
         "content_bg": "#0f0f18",
         "card_bg": "#181825",
@@ -44,12 +57,24 @@ GAME_THEMES = {
         "accent": "#5b9cf6",
         "button_fg": "#ffffff",
         "name": "Counter-Strike 2",
+        "light": {
+            "bg": "#eef2ff",
+            "sidebar_bg": "#dde4f8",
+            "header_bg": "#ccd4f0",
+            "content_bg": "#f0f4ff",
+            "card_bg": "#ffffff",
+            "secondary": "#e4eafc",
+            "border": "#b8c8f0",
+            "text": "#1a1a2e",
+            "text_dim": "#555577",
+            "text_dark": "#888899",
+        },
     },
     "csgo": {
         "primary": "#fbbf24",
         "primary_hover": "#e0aa10",
         "bg": "#0d0c00",
-        "sidebar_bg": "#141200",
+        "sidebar_bg": "#161400",
         "header_bg": "#110f00",
         "content_bg": "#111000",
         "card_bg": "#1e1b00",
@@ -65,12 +90,24 @@ GAME_THEMES = {
         "accent": "#fbbf24",
         "button_fg": "#ffffff",
         "name": "CS:GO",
+        "light": {
+            "bg": "#fffde8",
+            "sidebar_bg": "#f5f0cc",
+            "header_bg": "#ede8b8",
+            "content_bg": "#fefef0",
+            "card_bg": "#ffffff",
+            "secondary": "#f2edd8",
+            "border": "#d8d0a0",
+            "text": "#1a1800",
+            "text_dim": "#666540",
+            "text_dark": "#999870",
+        },
     },
     "rust": {
         "primary": "#f97316",
         "primary_hover": "#e06210",
         "bg": "#0f0a00",
-        "sidebar_bg": "#160e00",
+        "sidebar_bg": "#181000",
         "header_bg": "#120c00",
         "content_bg": "#110d00",
         "card_bg": "#1c1200",
@@ -86,9 +123,27 @@ GAME_THEMES = {
         "accent": "#f97316",
         "button_fg": "#ffffff",
         "name": "Rust",
+        "light": {
+            "bg": "#fff5ee",
+            "sidebar_bg": "#f0e0d0",
+            "header_bg": "#e8d4c0",
+            "content_bg": "#fdf5f0",
+            "card_bg": "#ffffff",
+            "secondary": "#f0e4d8",
+            "border": "#d8c0a8",
+            "text": "#1a0e00",
+            "text_dim": "#664432",
+            "text_dark": "#998870",
+        },
     },
 }
 
 
-def get_theme(game: str) -> dict:
-    return GAME_THEMES.get(game, GAME_THEMES["default"])
+def get_theme(game: str, mode: str = None) -> dict:
+    base = dict(GAME_THEMES.get(game, GAME_THEMES["default"]))
+    if mode == "light":
+        light_overrides = base.pop("light", {})
+        base.update(light_overrides)
+    else:
+        base.pop("light", None)
+    return base
