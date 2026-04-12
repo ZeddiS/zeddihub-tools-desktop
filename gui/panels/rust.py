@@ -63,13 +63,291 @@ class RustPlayerPanel(ctk.CTkFrame):
         tab = ctk.CTkTabview(self, fg_color=t["sidebar_bg"])
         tab.pack(fill="both", expand=True, padx=16, pady=16)
 
-        tab.add("⚙ Herní nastavení")
-        tab.add("📦 Plugin Info")
-        tab.add("🔍 Analýza pluginů")
+        tab.add("Sensitivity")
+        tab.add("Client CFG")
+        tab.add("Bindy")
+        tab.add("Tipy & Info")
 
-        self._build_settings(tab.tab("⚙ Herní nastavení"))
-        self._build_plugin_info(tab.tab("📦 Plugin Info"))
-        self._build_plugin_analyzer(tab.tab("🔍 Analýza pluginů"))
+        self._build_sensitivity(tab.tab("Sensitivity"))
+        self._build_settings(tab.tab("Client CFG"))
+        self._build_binds(tab.tab("Bindy"))
+        self._build_tips(tab.tab("Tipy & Info"))
+
+    # ─── SENSITIVITY CALCULATOR ──────────────────────────────────────────────
+
+    def _build_sensitivity(self, tab):
+        t = self.theme
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        _label(scroll, "Sensitivity Kalkulátor", 16, bold=True, color=t["primary"]
+               ).pack(padx=4, pady=(4, 4), anchor="w")
+        _label(scroll, "Převod sensitivity mezi CS2, CS:GO, Rust a dalšími hrami.",
+               11, color=t["text_dim"]).pack(padx=4, pady=(0, 12), anchor="w")
+
+        # Source game
+        src_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        src_card.pack(fill="x", pady=6)
+        _label(src_card, "Zdrojová hra", 13, bold=True, color=t["primary"]
+               ).pack(padx=14, pady=(10, 6), anchor="w")
+        src_inner = ctk.CTkFrame(src_card, fg_color="transparent")
+        src_inner.pack(fill="x", padx=14, pady=(0, 12))
+        src_inner.grid_columnconfigure(1, weight=1)
+
+        _label(src_inner, "Hra:", 11, color=t["text_dim"]).grid(
+            row=0, column=0, padx=(0, 8), pady=4, sticky="w")
+        self._src_game = ctk.StringVar(value="CS2 / CS:GO")
+        ctk.CTkOptionMenu(src_inner,
+                          values=["CS2 / CS:GO", "Rust", "Valorant", "Apex Legends", "Overwatch"],
+                          variable=self._src_game, fg_color=t["secondary"],
+                          button_color=t["primary"], text_color=t["text"],
+                          font=ctk.CTkFont("Segoe UI", 11),
+                          command=lambda _: self._recalc_sens()
+                          ).grid(row=0, column=1, sticky="ew", pady=4)
+
+        _label(src_inner, "Sensitivity:", 11, color=t["text_dim"]).grid(
+            row=1, column=0, padx=(0, 8), pady=4, sticky="w")
+        self._src_sens = ctk.StringVar(value="1.0")
+        ctk.CTkEntry(src_inner, textvariable=self._src_sens, width=120,
+                     fg_color=t["secondary"], text_color=t["text"],
+                     font=ctk.CTkFont("Courier New", 12)
+                     ).grid(row=1, column=1, sticky="w", pady=4)
+        self._src_sens.trace_add("write", lambda *_: self._recalc_sens())
+
+        _label(src_inner, "DPI:", 11, color=t["text_dim"]).grid(
+            row=2, column=0, padx=(0, 8), pady=4, sticky="w")
+        self._src_dpi = ctk.StringVar(value="800")
+        ctk.CTkEntry(src_inner, textvariable=self._src_dpi, width=120,
+                     fg_color=t["secondary"], text_color=t["text"],
+                     font=ctk.CTkFont("Courier New", 12)
+                     ).grid(row=2, column=1, sticky="w", pady=4)
+        self._src_dpi.trace_add("write", lambda *_: self._recalc_sens())
+
+        # Target game
+        dst_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        dst_card.pack(fill="x", pady=6)
+        _label(dst_card, "Cílová hra", 13, bold=True, color=t["primary"]
+               ).pack(padx=14, pady=(10, 6), anchor="w")
+        dst_inner = ctk.CTkFrame(dst_card, fg_color="transparent")
+        dst_inner.pack(fill="x", padx=14, pady=(0, 12))
+        dst_inner.grid_columnconfigure(1, weight=1)
+
+        _label(dst_inner, "Hra:", 11, color=t["text_dim"]).grid(
+            row=0, column=0, padx=(0, 8), pady=4, sticky="w")
+        self._dst_game = ctk.StringVar(value="Rust")
+        ctk.CTkOptionMenu(dst_inner,
+                          values=["Rust", "CS2 / CS:GO", "Valorant", "Apex Legends", "Overwatch"],
+                          variable=self._dst_game, fg_color=t["secondary"],
+                          button_color=t["primary"], text_color=t["text"],
+                          font=ctk.CTkFont("Segoe UI", 11),
+                          command=lambda _: self._recalc_sens()
+                          ).grid(row=0, column=1, sticky="ew", pady=4)
+
+        _label(dst_inner, "DPI:", 11, color=t["text_dim"]).grid(
+            row=1, column=0, padx=(0, 8), pady=4, sticky="w")
+        self._dst_dpi = ctk.StringVar(value="800")
+        ctk.CTkEntry(dst_inner, textvariable=self._dst_dpi, width=120,
+                     fg_color=t["secondary"], text_color=t["text"],
+                     font=ctk.CTkFont("Courier New", 12)
+                     ).grid(row=1, column=1, sticky="w", pady=4)
+        self._dst_dpi.trace_add("write", lambda *_: self._recalc_sens())
+
+        # Result
+        res_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        res_card.pack(fill="x", pady=6)
+        _label(res_card, "Výsledek", 13, bold=True, color=t["primary"]
+               ).pack(padx=14, pady=(10, 4), anchor="w")
+        self._sens_result = ctk.StringVar(value="—")
+        ctk.CTkLabel(res_card, textvariable=self._sens_result,
+                     font=ctk.CTkFont("Courier New", 22, "bold"),
+                     text_color=t["primary"]).pack(padx=14, pady=4, anchor="w")
+        self._edpi_label = ctk.StringVar(value="")
+        ctk.CTkLabel(res_card, textvariable=self._edpi_label,
+                     font=ctk.CTkFont("Segoe UI", 10),
+                     text_color=t["text_dim"]).pack(padx=14, pady=(0, 10), anchor="w")
+
+        # Reference table
+        ref_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        ref_card.pack(fill="x", pady=6)
+        _label(ref_card, "Referenční cm/360°", 13, bold=True, color=t["primary"]
+               ).pack(padx=14, pady=(10, 6), anchor="w")
+        for label_txt, edpi, cm in [
+            ("Nízká (sniperi)",      "200–400 eDPI",  "12–25 cm"),
+            ("Střední (universál)",  "400–800 eDPI",  "5–12 cm"),
+            ("Vysoká (CQC/stavba)", "800–1600 eDPI", "3–5 cm"),
+        ]:
+            row_f = ctk.CTkFrame(ref_card, fg_color="transparent")
+            row_f.pack(fill="x", padx=14, pady=1)
+            _label(row_f, f"• {label_txt}", 11, color=t["text"]).pack(side="left")
+            _label(row_f, f"  {edpi} / {cm}/360°", 11, color=t["text_dim"]).pack(side="left", padx=6)
+        ctk.CTkFrame(ref_card, fg_color="transparent", height=8).pack()
+        self._recalc_sens()
+
+    _SENS_MULT = {
+        "CS2 / CS:GO": 0.022, "Rust": 0.1, "Valorant": 0.07,
+        "Apex Legends": 0.022, "Overwatch": 0.0066,
+    }
+
+    def _recalc_sens(self):
+        try:
+            src = self._src_game.get()
+            dst = self._dst_game.get()
+            src_s = float(self._src_sens.get().replace(",", "."))
+            src_dpi = float(self._src_dpi.get())
+            dst_dpi = float(self._dst_dpi.get())
+            src_mult = self._SENS_MULT.get(src, 0.022)
+            dst_mult = self._SENS_MULT.get(dst, 0.1)
+            cm_per_360 = 36000.0 / (src_dpi * src_s * src_mult)
+            dst_s = 36000.0 / (dst_dpi * dst_mult * cm_per_360)
+            self._sens_result.set(f"{dst_s:.4f}".rstrip("0").rstrip("."))
+            self._edpi_label.set(f"eDPI: {int(dst_dpi * dst_s)}  ·  {cm_per_360:.1f} cm/360°")
+        except (ValueError, ZeroDivisionError):
+            self._sens_result.set("—")
+            self._edpi_label.set("Zadej platná čísla")
+
+    # ─── RUST BINDS ───────────────────────────────────────────────────────────
+
+    def _build_binds(self, tab):
+        t = self.theme
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        _label(scroll, "Rust Bindy", 16, bold=True, color=t["primary"]
+               ).pack(padx=4, pady=(4, 4), anchor="w")
+        _label(scroll, "Vygenerujte bind příkazy pro Rust konzoli (F1).",
+               11, color=t["text_dim"]).pack(padx=4, pady=(0, 10), anchor="w")
+
+        binds_defs = {
+            "Základní akce": {
+                "mouse1":       ("Levá myš",         "attack"),
+                "mouse2":       ("Pravá myš",        "attack2"),
+                "r":            ("Reload",            "reload"),
+                "f":            ("Svítilna",          "lighttoggle"),
+                "g":            ("Zahodit zbraň",    "drop"),
+            },
+            "Pohyb & Přežití": {
+                "space":        ("Skok",              "jump"),
+                "lshift":       ("Sprint",            "sprint"),
+                "lctrl":        ("Dřep",              "duck"),
+                "e":            ("Použít",            "use"),
+                "leftarrow":    ("Lean doleva",       "+lean_left"),
+                "rightarrow":   ("Lean doprava",      "+lean_right"),
+            },
+            "Chat & Info": {
+                "t":            ("Chat",              "chat.open"),
+                "backquote":    ("Konzole",           "consoletoggle"),
+                "tab":          ("Inventář",          "inventory.toggle"),
+                "m":            ("Mapa",              "map.toggle"),
+            },
+        }
+
+        self._bind_vars = {}
+        for cat_name, binds in binds_defs.items():
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer.pack(fill="x", padx=0, pady=6)
+            _label(outer, cat_name, 13, bold=True, color=t["primary"]).pack(
+                padx=14, pady=(10, 6), anchor="w")
+            inner = ctk.CTkFrame(outer, fg_color="transparent")
+            inner.pack(fill="x", padx=0, pady=(0, 6))
+            inner.grid_columnconfigure(0, minsize=120)
+            inner.grid_columnconfigure(1, minsize=160)
+            inner.grid_columnconfigure(2, weight=1)
+            for i, (key, (label_txt, default_cmd)) in enumerate(binds.items()):
+                ctk.CTkLabel(inner, text=f"[{key}]",
+                             font=ctk.CTkFont("Courier New", 11),
+                             text_color=t["primary"], width=110, anchor="w"
+                             ).grid(row=i, column=0, padx=(12, 4), pady=3, sticky="w")
+                ctk.CTkLabel(inner, text=label_txt,
+                             font=ctk.CTkFont("Segoe UI", 10),
+                             text_color=t["text_dim"], width=140, anchor="w"
+                             ).grid(row=i, column=1, padx=4, pady=3, sticky="w")
+                var = ctk.StringVar(value=default_cmd)
+                ctk.CTkEntry(inner, textvariable=var,
+                             fg_color=t["secondary"], text_color=t["text"],
+                             font=ctk.CTkFont("Courier New", 10)
+                             ).grid(row=i, column=2, padx=(4, 12), pady=3, sticky="ew")
+                self._bind_vars[key] = var
+
+        _btn(scroll, "Zkopírovat bindy do schránky", self._copy_binds, t).pack(
+            padx=4, pady=(10, 4), fill="x")
+        _btn(scroll, "Uložit binds.txt", self._save_binds, t).pack(
+            padx=4, pady=(0, 10), fill="x")
+
+    def _copy_binds(self):
+        lines = [f"bind {k} \"{v.get()}\"" for k, v in self._bind_vars.items() if v.get()]
+        text = "\n".join(lines)
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        messagebox.showinfo("Zkopírováno", f"Zkopírováno {len(lines)} bindů do schránky.\n\nVlož do Rust konzole (F1).")
+
+    def _save_binds(self):
+        path = filedialog.asksaveasfilename(
+            title="Uložit binds.txt", defaultextension=".txt",
+            initialfile="rust_binds.txt",
+            filetypes=[("Text", "*.txt"), ("Config", "*.cfg"), ("All", "*.*")]
+        )
+        if not path:
+            return
+        lines = [f"bind {k} \"{v.get()}\"" for k, v in self._bind_vars.items() if v.get()]
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("// Rust Bindy - Generated by ZeddiHub Tools\n")
+            f.write("// Vlož příkazy do Rust konzole (F1) nebo souboru binds.cfg\n\n")
+            f.write("\n".join(lines))
+        messagebox.showinfo("Uloženo", f"Uloženo {len(lines)} bindů:\n{path}")
+
+    # ─── TIPY & INFO ─────────────────────────────────────────────────────────
+
+    def _build_tips(self, tab):
+        t = self.theme
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        _label(scroll, "Rust – Tipy & Optimalizace", 16, bold=True, color=t["primary"]
+               ).pack(padx=4, pady=(4, 4), anchor="w")
+        _label(scroll, "Doporučené nastavení a tipy pro lepší výkon a hratelnost.",
+               11, color=t["text_dim"]).pack(padx=4, pady=(0, 12), anchor="w")
+
+        sections = [
+            ("Výkon (FPS)", [
+                ("graphics.quality 0–2", "Snížení grafiky pro vyšší FPS (0=nejnižší)"),
+                ("fps.limit 0", "Odstraní FPS omezení — nech GPU na max"),
+                ("grass.on false", "Vypnutí trávy = velký FPS boost ve venkovních oblastech"),
+                ("shadowmode 0", "Vypnutí stínů = výrazné zvýšení FPS"),
+                ("lodrange 100", "Nižší LOD vzdálenost = méně detailů = vyšší FPS"),
+                ("terrain.quality 50", "Snížení kvality terénu pro výkon"),
+            ]),
+            ("Hratelnost", [
+                ("audio.voice 0.5", "Ztlumení hlasů ostatních hráčů"),
+                ("audio.game 0.8", "Herní zvuky — nech slušitelné pro kroky"),
+                ("graphics.fov 90", "Field of View — vyšší = lepší přehled, více vidíš"),
+                ("net.connect <IP>:<PORT>", "Připojení k serveru přes konzoli"),
+                ("status", "Zobrazí info o aktuálním serveru a hráčích"),
+            ]),
+            ("Užitečné konzolové příkazy", [
+                ("kill", "Zabiješ vlastní postavu (rychlý restart)"),
+                ("respawn", "Respawn na náhodné místo"),
+                ("global.debugcamera", "Debug kamera (pro adminy)"),
+                ("quit", "Ukončení hry (alternativa k Alt+F4)"),
+                ("client.connect <IP>", "Přímé připojení k serveru"),
+            ]),
+        ]
+
+        for sec_title, tips in sections:
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer.pack(fill="x", pady=6)
+            _label(outer, sec_title, 13, bold=True, color=t["primary"]).pack(
+                padx=14, pady=(10, 6), anchor="w")
+            for cmd, desc in tips:
+                row_f = ctk.CTkFrame(outer, fg_color="transparent")
+                row_f.pack(fill="x", padx=14, pady=2)
+                ctk.CTkLabel(row_f, text=cmd,
+                             font=ctk.CTkFont("Courier New", 11),
+                             text_color=t["accent"], anchor="w", width=200
+                             ).pack(side="left")
+                _label(row_f, desc, 10, color=t["text_dim"]).pack(side="left", padx=8, fill="x", expand=True)
+            ctk.CTkFrame(outer, fg_color="transparent", height=6).pack()
+
+    # ─── CLIENT CFG ──────────────────────────────────────────────────────────
 
     def _build_settings(self, tab):
         t = self.theme

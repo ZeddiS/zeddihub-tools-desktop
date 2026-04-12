@@ -39,22 +39,22 @@ NAV_SECTIONS = [
     ("pc_tools", None,    "laptop",       None,   None, False),
     ("watchdog", None,    "bell",         None,   None, False),
     ("sec_cs2",  "CS2",   "crosshairs",   "cs2",  [
-        ("cs2_player",  "Hráčské nástroje",  "user",     False),
-        ("cs2_server",  "Serverové nástroje", "server",   True),
-        ("cs2_keybind", "Keybind Generátor",  "keyboard", False),
+        ("cs2_player",  "player_tools",  "user",     False),
+        ("cs2_server",  "server_tools",  "server",   True),
+        ("cs2_keybind", "keybind",       "keyboard", False),
     ], None),
     ("sec_csgo", "CS:GO", "gamepad",      "csgo", [
-        ("csgo_player",  "Hráčské nástroje",  "user",     False),
-        ("csgo_server",  "Serverové nástroje", "server",   True),
-        ("csgo_keybind", "Keybind Generátor",  "keyboard", False),
+        ("csgo_player",  "player_tools",  "user",     False),
+        ("csgo_server",  "server_tools",  "server",   True),
+        ("csgo_keybind", "keybind",       "keyboard", False),
     ], None),
     ("sec_rust", "Rust",  "puzzle-piece", "rust", [
-        ("rust_player",  "Hráčské nástroje",  "user",     False),
-        ("rust_server",  "Serverové nástroje", "server",   True),
-        ("rust_keybind", "Keybind Generátor",  "keyboard", False),
+        ("rust_player",  "player_tools",  "user",     False),
+        ("rust_server",  "server_tools",  "server",   True),
+        ("rust_keybind", "keybind",       "keyboard", False),
     ], None),
     ("sec_translator", "Translator", "globe", None, [
-        ("translator", "Translator", "globe", False),
+        ("translator", "translator", "globe", False),
     ], None),
 ]
 
@@ -552,7 +552,9 @@ class MainWindow(ctk.CTk):
                 if is_expanded:
                     children_frame.pack(fill="x", padx=0, pady=0)
 
-                for nav_id, child_label, child_icon, requires_auth in children:
+                for nav_id, child_label_key, child_icon, requires_auth in children:
+                    # child_label_key is a locale key → translate it
+                    child_label = t(child_label_key)
                     locked = requires_auth and not is_authenticated()
                     if locked:
                         self._locked_navs.add(nav_id)
@@ -796,7 +798,8 @@ class MainWindow(ctk.CTk):
                 sec_id, label, icon, game, children, _ = entry
                 if children is None:
                     continue
-                for nav_id, child_label, child_icon, requires_auth in children:
+                for nav_id, child_label_key, child_icon, requires_auth in children:
+                    child_label = t(child_label_key)
                     if requires_auth and nav_id in self._nav_buttons:
                         self._locked_navs.discard(nav_id)
                         btn = self._nav_buttons[nav_id]
@@ -807,10 +810,11 @@ class MainWindow(ctk.CTk):
                                 text=f"   {child_label}",
                                 fg_color=th["primary"], text_color="#ffffff")
                         else:
+                            cur_th = self._get_current_theme()
                             btn.configure(
-                                image=icons.icon(child_icon, 14, "#cccccc"),
+                                image=icons.icon(child_icon, 14, cur_th["text"]),
                                 text=f"   {child_label}",
-                                fg_color="transparent", text_color="#cccccc")
+                                fg_color="transparent", text_color=cur_th["text"])
         else:
             self._auth_label.configure(
                 image=icons.icon("lock-open", 13, "#666666"),
@@ -827,7 +831,8 @@ class MainWindow(ctk.CTk):
                 sec_id, label, icon, game, children, _ = entry
                 if children is None:
                     continue
-                for nav_id, child_label, child_icon, requires_auth in children:
+                for nav_id, child_label_key, child_icon, requires_auth in children:
+                    child_label = t(child_label_key)
                     if requires_auth and nav_id in self._nav_buttons:
                         self._locked_navs.add(nav_id)
                         btn = self._nav_buttons[nav_id]
@@ -956,6 +961,8 @@ class MainWindow(ctk.CTk):
                 cursor="hand2"
             )
             self._update_label.bind("<Button-1>", lambda _: self._show_update_dialog(result))
+            # Auto-show popup — small delay so main window finishes rendering
+            self.after(1200, lambda: self._show_update_dialog(result))
 
     def _show_update_dialog(self, update_info: dict):
         """Update download wizard — Step 1: info, Step 2: downloading, Step 3: done."""
@@ -1068,31 +1075,32 @@ class MainWindow(ctk.CTk):
 
         # ── Download logic ────────────────────────────────────────────────────
         def _start_download():
-            if not download_url or download_url.startswith("https://github.com") and download_url.endswith("/latest"):
-                # No direct asset URL — open GitHub page
+            # Only attempt direct download if URL points to a .exe file
+            url = download_url.strip() if download_url else ""
+            if not url or not url.lower().endswith(".exe"):
+                # Fallback: open GitHub releases page in browser
                 open_release_page()
                 d.destroy()
                 return
             _show(frame2)
 
             def _on_progress(pct: float):
-                d.after(0, _progress_bar.set, pct)
-                d.after(0, _pct_label.configure, {"text": f"{int(pct * 100)} %"})
-                mb_done = ""
-                d.after(0, _dl_status.configure,
-                        {"text": f"Stahování: {int(pct * 100)} %"})
+                # Called on main thread via d.after() — update UI directly
+                _progress_bar.set(pct)
+                _pct_label.configure(text=f"{int(pct * 100)} %")
+                _dl_status.configure(text=f"Stahování: {int(pct * 100)} %")
 
             def _on_done(success: bool, path_or_error: str):
                 if success:
                     _new_exe_path[0] = path_or_error
-                    d.after(0, _show, frame3)
+                    _show(frame3)
                 else:
-                    d.after(0, _dl_status.configure,
-                            {"text": f"Chyba stahování: {path_or_error}"})
-                    d.after(0, _progress_bar.configure, {"progress_color": "#ef4444"})
+                    _dl_status.configure(
+                        text=f"Chyba stahování: {path_or_error[:120]}")
+                    _progress_bar.configure(progress_color="#ef4444")
 
             download_update(
-                download_url,
+                url,
                 version=latest,
                 progress_callback=lambda p: d.after(0, _on_progress, p),
                 done_callback=lambda s, v: d.after(0, _on_done, s, v),

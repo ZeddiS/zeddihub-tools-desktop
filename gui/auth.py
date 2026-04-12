@@ -101,13 +101,11 @@ def load_credentials():
 
 
 def clear_credentials():
-    """Remove saved credentials."""
+    """Remove saved credentials FILE only. Does NOT affect current login session.
+    Use logout() to end the current session."""
     cf = _cred_file()
     if cf.exists():
         cf.unlink()
-    global _cached_token, _auth_verified
-    _cached_token = None
-    _auth_verified = False
 
 
 def verify_access(username: str, password: str, callback=None) -> bool:
