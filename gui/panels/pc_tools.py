@@ -1,14 +1,18 @@
 """
 ZeddiHub Tools - PC Tools panel.
 System info, DNS flush, network tools, shutdown timer.
+Uses only stdlib + optional psutil for extra metrics.
 """
 
 import os
 import sys
+import ctypes
+import ctypes.wintypes
 import platform
 import subprocess
 import threading
 import socket
+import time
 import json
 import urllib.request
 import urllib.error
@@ -31,10 +35,67 @@ except ImportError:
         return key
 
 
+# ── Native Windows memory/disk helpers (no psutil) ──────────────────────────
+
+class _MEMSTATUS(ctypes.Structure):
+    _fields_ = [
+        ("dwLength",                ctypes.c_ulong),
+        ("dwMemoryLoad",            ctypes.c_ulong),
+        ("ullTotalPhys",            ctypes.c_ulonglong),
+        ("ullAvailPhys",            ctypes.c_ulonglong),
+        ("ullTotalPageFile",        ctypes.c_ulonglong),
+        ("ullAvailPageFile",        ctypes.c_ulonglong),
+        ("ullTotalVirtual",         ctypes.c_ulonglong),
+        ("ullAvailVirtual",         ctypes.c_ulonglong),
+        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+    ]
+
+
+def _native_ram():
+    """Returns (total_gb, used_gb, pct) using kernel32 — no psutil."""
+    try:
+        ms = _MEMSTATUS()
+        ms.dwLength = ctypes.sizeof(_MEMSTATUS)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms))
+        total = ms.ullTotalPhys
+        avail = ms.ullAvailPhys
+        used  = total - avail
+        pct   = ms.dwMemoryLoad
+        return total / 1e9, used / 1e9, pct
+    except Exception:
+        return None, None, None
+
+
+def _native_disk(path: str = "C:\\"):
+    """Returns (total_gb, used_gb, free_gb, pct) using kernel32 — no psutil."""
+    try:
+        free_b  = ctypes.c_ulonglong(0)
+        total_b = ctypes.c_ulonglong(0)
+        ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+            path, None, ctypes.byref(total_b), ctypes.byref(free_b))
+        total = total_b.value
+        free  = free_b.value
+        used  = total - free
+        pct   = int(used / total * 100) if total else 0
+        return total / 1e9, used / 1e9, free / 1e9, pct
+    except Exception:
+        return None, None, None, None
+
+
 def _label(parent, text, font_size=12, bold=False, color=None, **kw):
     return ctk.CTkLabel(parent, text=text,
                         font=ctk.CTkFont("Segoe UI", font_size, "bold" if bold else "normal"),
                         text_color=color or "#f0f0f0", **kw)
+
+
+def _fmt_time(seconds: int) -> str:
+    """Format seconds as MM:SS or HH:MM:SS."""
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s   = divmod(rem, 60)
+    if h:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
 
 
 def _card(parent, theme):
@@ -73,21 +134,6 @@ class PCToolsPanel(ctk.CTkFrame):
         _label(scroll, t("sys_info"), 16, bold=True, color=th["primary"],
                image=icons.icon("laptop", 18, th["primary"]), compound="left"
                ).pack(padx=4, pady=(4, 8), anchor="w")
-
-        if not PSUTIL_OK:
-            warn = _card(scroll, th)
-            warn.pack(fill="x", pady=6)
-            _label(warn, "psutil není nainstalován — systémové info nedostupné.",
-                   12, color=th["warning"],
-                   image=icons.icon("triangle-exclamation", 14, th["warning"]),
-                   compound="left").pack(padx=16, pady=(12, 4), anchor="w")
-            _label(warn, "Klikni na tlačítko níže pro automatickou instalaci.",
-                   11, color=th["text_dim"]).pack(padx=16, pady=(0, 4), anchor="w")
-            ctk.CTkButton(warn, text="Nainstalovat psutil",
-                          fg_color=th["primary"], hover_color=th["primary_hover"],
-                          font=ctk.CTkFont("Segoe UI", 11), height=30,
-                          command=self._install_psutil
-                          ).pack(padx=16, pady=(0, 12), anchor="w")
 
         # Refresh button
         ctk.CTkButton(scroll, text="↻ " + t("refresh"),
@@ -151,16 +197,10 @@ class PCToolsPanel(ctk.CTkFrame):
             grid.grid_columnconfigure(c, weight=1)
 
     def _gather_sysinfo(self) -> dict:
-        data = {
-            "os": [],
-            "cpu": [],
-            "ram": [],
-            "disk": [],
-            "gpu": [],
-            "network": [],
-        }
+        """Gather system info using stdlib + optional psutil. No mandatory pip deps."""
+        data = {"os": [], "cpu": [], "ram": [], "disk": [], "gpu": [], "network": []}
 
-        # OS
+        # ── OS ───────────────────────────────────────────────────────────────
         try:
             data["os"] = [
                 f"System: {platform.system()} {platform.release()}",
@@ -171,81 +211,158 @@ class PCToolsPanel(ctk.CTkFrame):
         except Exception:
             data["os"] = ["N/A"]
 
-        # CPU
+        # ── CPU ──────────────────────────────────────────────────────────────
         try:
-            cpu_info = [
-                f"Name: {platform.processor()[:50] or 'N/A'}",
-                f"Cores: {psutil.cpu_count(logical=False)} physical / {psutil.cpu_count()} logical" if PSUTIL_OK else "N/A",
-                f"Usage: {psutil.cpu_percent(interval=0.1):.1f}%" if PSUTIL_OK else "N/A",
-            ]
-            # Try to get CPU freq
+            cpu_name = platform.processor() or "N/A"
+            # Try wmic for friendly name on Windows
+            try:
+                r = subprocess.run(
+                    ["wmic", "cpu", "get", "name,maxclockspeed,numberofcores,numberoflogicalprocessors"],
+                    capture_output=True, text=True, timeout=5)
+                wmic_lines = [l.strip() for l in r.stdout.splitlines()
+                              if l.strip() and not l.strip().startswith("Name")]
+                if wmic_lines:
+                    parts = wmic_lines[0].split()
+                    # Last 3 tokens are MaxClockSpeed, NumberOfCores, NumberOfLogicalProcessors
+                    # First tokens are the CPU name
+                    if len(parts) >= 3:
+                        try:
+                            log_proc = int(parts[-1])
+                            phys_core = int(parts[-2])
+                            max_mhz   = int(parts[-3])
+                            cpu_name  = " ".join(parts[:-3])
+                            data["cpu"] = [
+                                f"Name: {cpu_name[:55]}",
+                                f"Cores: {phys_core} fyzické / {log_proc} logické",
+                                f"Max: {max_mhz} MHz",
+                            ]
+                        except (ValueError, IndexError):
+                            data["cpu"] = [f"Name: {cpu_name[:55]}"]
+                    else:
+                        data["cpu"] = [f"Name: {cpu_name[:55]}"]
+                else:
+                    data["cpu"] = [f"Name: {cpu_name[:55]}"]
+            except Exception:
+                data["cpu"] = [f"Name: {cpu_name[:55]}"]
+
+            # Optionally add live usage from psutil
             if PSUTIL_OK:
                 try:
+                    usage = psutil.cpu_percent(interval=0.1)
                     freq = psutil.cpu_freq()
+                    data["cpu"].append(f"Usage: {usage:.1f}%")
                     if freq:
-                        cpu_info.append(f"Freq: {freq.current:.0f} MHz")
+                        data["cpu"].append(f"Freq now: {freq.current:.0f} MHz")
                 except Exception:
                     pass
-            data["cpu"] = cpu_info
         except Exception:
             data["cpu"] = ["N/A"]
 
-        # RAM
+        # ── RAM ──────────────────────────────────────────────────────────────
         try:
             if PSUTIL_OK:
                 mem = psutil.virtual_memory()
                 data["ram"] = [
-                    f"Total: {mem.total / 1e9:.2f} GB",
-                    f"Used: {mem.used / 1e9:.2f} GB ({mem.percent:.1f}%)",
-                    f"Free: {mem.available / 1e9:.2f} GB",
+                    f"Total: {mem.total/1e9:.2f} GB",
+                    f"Used:  {mem.used/1e9:.2f} GB ({mem.percent:.1f}%)",
+                    f"Free:  {mem.available/1e9:.2f} GB",
                 ]
             else:
-                data["ram"] = ["psutil required"]
+                total, used, pct = _native_ram()
+                if total is not None:
+                    free = total - used
+                    data["ram"] = [
+                        f"Total: {total:.2f} GB",
+                        f"Used:  {used:.2f} GB ({pct}%)",
+                        f"Free:  {free:.2f} GB",
+                    ]
+                else:
+                    data["ram"] = ["Nelze zjistit"]
         except Exception:
             data["ram"] = ["N/A"]
 
-        # Disk (C: on Windows)
+        # ── Disk ─────────────────────────────────────────────────────────────
         try:
+            drive = "C:\\" if sys.platform == "win32" else "/"
             if PSUTIL_OK:
-                drive = "C:\\" if sys.platform == "win32" else "/"
                 disk = psutil.disk_usage(drive)
                 data["disk"] = [
                     f"Drive: {drive}",
-                    f"Total: {disk.total / 1e9:.2f} GB",
-                    f"Used: {disk.used / 1e9:.2f} GB ({disk.percent:.1f}%)",
-                    f"Free: {disk.free / 1e9:.2f} GB",
+                    f"Total: {disk.total/1e9:.2f} GB",
+                    f"Used:  {disk.used/1e9:.2f} GB ({disk.percent:.1f}%)",
+                    f"Free:  {disk.free/1e9:.2f} GB",
                 ]
             else:
-                data["disk"] = ["psutil required"]
+                total, used, free, pct = _native_disk(drive)
+                if total is not None:
+                    data["disk"] = [
+                        f"Drive: {drive}",
+                        f"Total: {total:.2f} GB",
+                        f"Used:  {used:.2f} GB ({pct}%)",
+                        f"Free:  {free:.2f} GB",
+                    ]
+                else:
+                    data["disk"] = ["Nelze zjistit"]
         except Exception as e:
-            data["disk"] = [f"Error: {e}"]
+            data["disk"] = [f"Chyba: {e}"]
 
-        # GPU
+        # ── GPU ──────────────────────────────────────────────────────────────
         try:
-            result = subprocess.run(
-                ["wmic", "path", "win32_VideoController", "get", "name"],
-                capture_output=True, text=True, timeout=5
-            )
-            lines = [l.strip() for l in result.stdout.splitlines() if l.strip() and l.strip() != "Name"]
-            data["gpu"] = lines[:3] if lines else ["N/A"]
+            r = subprocess.run(
+                ["wmic", "path", "win32_VideoController", "get", "name,adapterram"],
+                capture_output=True, text=True, timeout=5)
+            lines = [l.strip() for l in r.stdout.splitlines()
+                     if l.strip() and not l.strip().lower().startswith(("name", "adapterram"))]
+            gpu_lines = []
+            for l in lines[:3]:
+                parts = l.rsplit(None, 1)
+                if len(parts) == 2:
+                    name = parts[0].strip()
+                    try:
+                        vram_mb = int(parts[1]) // (1024 * 1024)
+                        gpu_lines.append(f"{name} ({vram_mb} MB VRAM)")
+                    except (ValueError, ZeroDivisionError):
+                        gpu_lines.append(name)
+                else:
+                    gpu_lines.append(l)
+            data["gpu"] = gpu_lines if gpu_lines else ["N/A"]
         except Exception:
-            data["gpu"] = ["N/A (wmic not available)"]
+            data["gpu"] = ["N/A"]
 
-        # Network
+        # ── Network ──────────────────────────────────────────────────────────
         try:
+            net_lines = []
             if PSUTIL_OK:
-                net_lines = []
                 addrs = psutil.net_if_addrs()
-                for iface, addr_list in list(addrs.items())[:4]:
+                for iface, addr_list in list(addrs.items())[:5]:
                     for addr in addr_list:
                         if addr.family == socket.AF_INET:
                             net_lines.append(f"{iface}: {addr.address}")
                 counters = psutil.net_io_counters()
-                net_lines.append(f"Sent: {counters.bytes_sent / 1e6:.1f} MB")
-                net_lines.append(f"Recv: {counters.bytes_recv / 1e6:.1f} MB")
-                data["network"] = net_lines[:6] if net_lines else ["N/A"]
+                net_lines.append(f"Sent: {counters.bytes_sent/1e6:.1f} MB")
+                net_lines.append(f"Recv: {counters.bytes_recv/1e6:.1f} MB")
             else:
-                data["network"] = ["psutil required"]
+                # Fallback: socket + ipconfig
+                try:
+                    hostname = socket.gethostname()
+                    local_ip = socket.gethostbyname(hostname)
+                    net_lines.append(f"Host: {hostname}")
+                    net_lines.append(f"Local IP: {local_ip}")
+                except Exception:
+                    pass
+                try:
+                    r = subprocess.run(["ipconfig"], capture_output=True,
+                                       text=True, encoding="cp852", errors="replace", timeout=5)
+                    for line in r.stdout.splitlines():
+                        if "IPv4" in line or "IPv6" in line:
+                            parts = line.split(":")
+                            if len(parts) >= 2:
+                                net_lines.append(parts[-1].strip())
+                            if len(net_lines) >= 6:
+                                break
+                except Exception:
+                    pass
+            data["network"] = net_lines[:7] if net_lines else ["N/A"]
         except Exception:
             data["network"] = ["N/A"]
 
@@ -361,6 +478,81 @@ class PCToolsPanel(ctk.CTkFrame):
                                          fg_color=th["secondary"], text_color=th["text"],
                                          font=ctk.CTkFont("Courier New", 9), state="disabled")
         self._temp_log.pack(fill="x", padx=14, pady=(0, 14))
+
+        # ── DNS Scanner ───────────────────────────────────────────────────────
+        dns_scan_card = _card(scroll, th)
+        dns_scan_card.pack(fill="x", pady=6)
+
+        _label(dns_scan_card, "🔍 DNS Skener", 13, bold=True, color=th["primary"],
+               image=icons.icon("magnifying-glass", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(dns_scan_card, "Vypíše všechny nalezené DNS záznamy pro zadanou doménu (A, AAAA, MX, NS, TXT, CNAME, SOA).",
+               10, color=th["text_dim"], wraplength=580, justify="left"
+               ).pack(padx=14, pady=(0, 8), anchor="w")
+
+        dns_scan_row = ctk.CTkFrame(dns_scan_card, fg_color="transparent")
+        dns_scan_row.pack(fill="x", padx=14, pady=(0, 8))
+
+        self._dns_scan_entry = ctk.CTkEntry(
+            dns_scan_row, placeholder_text="doména (např. google.com)",
+            fg_color=th["secondary"], text_color=th["text"],
+            font=ctk.CTkFont("Segoe UI", 12), height=36)
+        self._dns_scan_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        ctk.CTkButton(
+            dns_scan_row, text=" Skenovat",
+            image=icons.icon("search", 14, "#cccccc"), compound="left",
+            fg_color=th["primary"], hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36, width=110,
+            command=self._run_dns_scan
+        ).pack(side="left")
+
+        self._dns_scan_output = ctk.CTkTextbox(
+            dns_scan_card, height=200,
+            fg_color=th["secondary"], text_color=th["text"],
+            font=ctk.CTkFont("Courier New", 10), state="disabled")
+        self._dns_scan_output.pack(fill="x", padx=14, pady=(0, 14))
+
+    def _run_dns_scan(self):
+        domain = self._dns_scan_entry.get().strip()
+        if not domain:
+            return
+        self._set_textbox(self._dns_scan_output, f"Skenuji DNS záznamy pro: {domain} ...")
+
+        def run():
+            results = []
+            record_types = ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA"]
+            for rtype in record_types:
+                try:
+                    r = subprocess.run(
+                        ["nslookup", f"-type={rtype}", domain],
+                        capture_output=True, text=True,
+                        encoding="cp852", errors="replace", timeout=8)
+                    output = r.stdout + r.stderr
+                    # Filter relevant lines
+                    relevant = []
+                    for line in output.splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        # Skip server/address header lines
+                        if line.startswith("Server:") or line.startswith("Address:"):
+                            continue
+                        if "Non-authoritative" in line or "Aliases:" in line:
+                            continue
+                        if domain.lower() in line.lower() or rtype.lower() in line.lower():
+                            relevant.append(line)
+                    if relevant:
+                        results.append(f"── {rtype} ──────────────────────────")
+                        results.extend(relevant[:8])
+                except Exception as e:
+                    results.append(f"── {rtype}: Chyba — {e}")
+
+            if not results:
+                results = [f"Žádné DNS záznamy nalezeny pro: {domain}"]
+            self.after(0, self._set_textbox, self._dns_scan_output, "\n".join(results))
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _flush_dns(self):
         def run():
@@ -571,6 +763,74 @@ class PCToolsPanel(ctk.CTkFrame):
                       command=self._check_port
                       ).pack(side="left")
 
+        # ── Speedtest ─────────────────────────────────────────────────────────
+        speed_card = _card(scroll, th)
+        speed_card.pack(fill="x", pady=6)
+
+        _label(speed_card, "⚡ Speedtest", 13, bold=True, color=th["primary"],
+               image=icons.icon("bolt", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(speed_card, "Změří rychlost stahování pomocí HTTP testu (bez externích balíčků).",
+               10, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
+
+        speed_row = ctk.CTkFrame(speed_card, fg_color="transparent")
+        speed_row.pack(fill="x", padx=14, pady=(0, 6))
+
+        self._speed_progress = ctk.CTkProgressBar(speed_card, height=10,
+                                                    progress_color=th["primary"])
+        self._speed_progress.pack(fill="x", padx=14, pady=(0, 4))
+        self._speed_progress.set(0)
+
+        self._speed_result = _label(speed_card, "Klikni Start pro zahájení testu.",
+                                     11, color=th["text_dim"])
+        self._speed_result.pack(padx=14, pady=(0, 14), anchor="w")
+
+        ctk.CTkButton(
+            speed_row, text=" Start",
+            image=icons.icon("play", 14, "#cccccc"), compound="left",
+            fg_color=th["primary"], hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36,
+            command=self._run_speedtest
+        ).pack(side="left")
+
+    def _run_speedtest(self):
+        """HTTP download speed test — no external pip package needed."""
+        self._speed_result.configure(text="Měřím rychlost...", text_color=self.theme["text_dim"])
+        self._speed_progress.set(0)
+
+        # 10 MB test file from Cloudflare (public, reliable)
+        TEST_URL = "https://speed.cloudflare.com/__down?bytes=10000000"
+        CHUNK = 65536
+
+        def run():
+            try:
+                req = urllib.request.Request(TEST_URL, headers={"User-Agent": "ZeddiHubTools/speedtest"})
+                start = time.perf_counter()
+                downloaded = 0
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    total = int(resp.headers.get("Content-Length", 10_000_000))
+                    while True:
+                        chunk = resp.read(CHUNK)
+                        if not chunk:
+                            break
+                        downloaded += len(chunk)
+                        pct = downloaded / total
+                        self.after(0, self._speed_progress.set, pct)
+                elapsed = time.perf_counter() - start
+                speed_mbps = (downloaded * 8) / (elapsed * 1_000_000)
+                speed_mbs  = downloaded / (elapsed * 1_000_000)
+                result_txt = (
+                    f"⬇  Download: {speed_mbps:.1f} Mbps  ({speed_mbs:.2f} MB/s)\n"
+                    f"   Staženo: {downloaded/1e6:.1f} MB za {elapsed:.1f}s"
+                )
+                self.after(0, self._speed_result.configure,
+                           {"text": result_txt, "text_color": self.theme["success"]})
+            except Exception as e:
+                self.after(0, self._speed_result.configure,
+                           {"text": f"Chyba: {e}", "text_color": self.theme["error"]})
+
+        threading.Thread(target=run, daemon=True).start()
+
     def _run_ping(self):
         host = self._ping_entry.get().strip()
         if not host:
@@ -658,11 +918,39 @@ class PCToolsPanel(ctk.CTkFrame):
                image=icons.icon("wrench", 18, th["primary"]), compound="left"
                ).pack(padx=4, pady=(4, 10), anchor="w")
 
-        # Shutdown timer
+        # ── Odpočet / Časovač ─────────────────────────────────────────────────
+        timer_card = _card(scroll, th)
+        timer_card.pack(fill="x", pady=6)
+
+        _label(timer_card, "⏱ Odpočet / Časovač", 13, bold=True, color=th["primary"],
+               image=icons.icon("clock", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 6), anchor="w")
+        _label(timer_card, "Spustí odpočet v novém okně s možností prodloužení a zastavení.",
+               10, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
+
+        timer_row = ctk.CTkFrame(timer_card, fg_color="transparent")
+        timer_row.pack(fill="x", padx=14, pady=(0, 14))
+
+        _label(timer_row, "Minut:", 11, color=th["text_dim"]).pack(side="left", padx=(0, 8))
+
+        self._timer_minutes = ctk.CTkEntry(timer_row,
+                                            fg_color=th["secondary"], text_color=th["text"],
+                                            font=ctk.CTkFont("Segoe UI", 13), height=36, width=80)
+        self._timer_minutes.pack(side="left", padx=(0, 12))
+        self._timer_minutes.insert(0, "5")
+
+        ctk.CTkButton(timer_row, text=" Spustit odpočet",
+                      image=icons.icon("play", 14, "#cccccc"), compound="left",
+                      fg_color=th["primary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36,
+                      command=self._open_timer_popup
+                      ).pack(side="left")
+
+        # ── Vypnutí PC ────────────────────────────────────────────────────────
         shutdown_card = _card(scroll, th)
         shutdown_card.pack(fill="x", pady=6)
 
-        _label(shutdown_card, "⏱ " + t("shutdown_timer"), 13, bold=True, color=th["primary"]
+        _label(shutdown_card, "🔴 " + t("shutdown_timer"), 13, bold=True, color=th["primary"]
                ).pack(padx=14, pady=(12, 6), anchor="w")
 
         row = ctk.CTkFrame(shutdown_card, fg_color="transparent")
@@ -712,6 +1000,118 @@ class PCToolsPanel(ctk.CTkFrame):
         proc_list.pack(fill="x", padx=14, pady=(0, 14))
 
         self._load_processes(proc_list)
+
+    def _open_timer_popup(self):
+        """Open a standalone countdown window."""
+        try:
+            total_seconds = int(self._timer_minutes.get().strip()) * 60
+            if total_seconds <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Časovač", "Zadejte platný počet minut (celé číslo > 0).")
+            return
+
+        th = self.theme
+
+        # Prevent multiple popups
+        if getattr(self, "_timer_popup", None) and self._timer_popup.winfo_exists():
+            self._timer_popup.focus()
+            return
+
+        popup = ctk.CTkToplevel(self)
+        self._timer_popup = popup
+        popup.title("⏱ Odpočet")
+        popup.geometry("360x260")
+        popup.configure(fg_color=th["content_bg"])
+        popup.resizable(False, False)
+        popup.attributes("-topmost", True)
+        popup.after(100, popup.lift)
+
+        # State
+        remaining = [total_seconds]
+        running = [True]
+        job = [None]
+
+        # Widgets
+        ctk.CTkLabel(popup, text="Odpočet",
+                     font=ctk.CTkFont("Segoe UI", 14, "bold"),
+                     text_color=th["text_dim"]).pack(pady=(20, 4))
+
+        time_var = ctk.StringVar(value=_fmt_time(total_seconds))
+        time_lbl = ctk.CTkLabel(popup, textvariable=time_var,
+                                font=ctk.CTkFont("Segoe UI", 52, "bold"),
+                                text_color=th["primary"])
+        time_lbl.pack(pady=(0, 10))
+
+        status_lbl = ctk.CTkLabel(popup, text="Probíhá...",
+                                   font=ctk.CTkFont("Segoe UI", 11),
+                                   text_color=th["text_dim"])
+        status_lbl.pack(pady=(0, 14))
+
+        btn_row = ctk.CTkFrame(popup, fg_color="transparent")
+        btn_row.pack(padx=20, fill="x")
+
+        def _tick():
+            if not running[0]:
+                return
+            remaining[0] -= 1
+            time_var.set(_fmt_time(remaining[0]))
+            if remaining[0] <= 0:
+                running[0] = False
+                time_lbl.configure(text_color=th["success"])
+                status_lbl.configure(text="✅ Čas vypršel!", text_color=th["success"])
+                try:
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                except Exception:
+                    pass
+                return
+            job[0] = popup.after(1000, _tick)
+
+        def _add_time(secs: int):
+            remaining[0] = max(1, remaining[0] + secs)
+            time_var.set(_fmt_time(remaining[0]))
+            if not running[0] and remaining[0] > 0:
+                running[0] = True
+                status_lbl.configure(text="Probíhá...", text_color=th["text_dim"])
+                time_lbl.configure(text_color=th["primary"])
+                _tick()
+
+        def _stop():
+            running[0] = False
+            if job[0]:
+                popup.after_cancel(job[0])
+                job[0] = None
+            status_lbl.configure(text="⏸ Zastaveno.", text_color=th["warning"])
+
+        def _on_close():
+            running[0] = False
+            if job[0]:
+                popup.after_cancel(job[0])
+            popup.destroy()
+
+        popup.protocol("WM_DELETE_WINDOW", _on_close)
+
+        ctk.CTkButton(btn_row, text="+1 min",
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 12), height=36, width=90,
+                      command=lambda: _add_time(60)
+                      ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(btn_row, text="+5 min",
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 12), height=36, width=90,
+                      command=lambda: _add_time(300)
+                      ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(btn_row, text="Zastavit",
+                      fg_color="#8b2020", hover_color="#6b1818",
+                      font=ctk.CTkFont("Segoe UI", 12), height=36, width=90,
+                      command=_stop
+                      ).pack(side="left")
+
+        # Start ticking
+        job[0] = popup.after(1000, _tick)
 
     def _start_shutdown(self):
         try:

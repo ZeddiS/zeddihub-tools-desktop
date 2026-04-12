@@ -53,8 +53,8 @@ NAV_SECTIONS = [
         ("rust_server",  "server_tools",  "server",   True),
         ("rust_keybind", "keybind",       "keyboard", False),
     ], None),
-    ("sec_translator", "Translator", "globe", None, [
-        ("translator", "translator", "globe", False),
+    ("sec_game_tools", "game_tools_section", "gamepad", None, [
+        ("game_tools", "game_tools", "gamepad", False),
     ], None),
 ]
 
@@ -64,11 +64,12 @@ NAV_GAME_MAP = {
     "csgo_player": "csgo", "csgo_server": "csgo", "csgo_keybind": "csgo",
     "rust_player": "rust", "rust_server": "rust", "rust_keybind": "rust",
     "home": "default", "pc_tools": "default", "translator": "default",
+    "game_tools": "default",
     "links": "default", "settings": "default", "watchdog": "default",
 }
 
 # nav_ids that show NO game badge in header
-NO_BADGE_IDS = {"home", "pc_tools", "translator", "links", "settings", "watchdog"}
+NO_BADGE_IDS = {"home", "pc_tools", "translator", "game_tools", "links", "settings", "watchdog"}
 
 
 class AuthDialog(ctk.CTkToplevel):
@@ -248,8 +249,8 @@ class MainWindow(ctk.CTk):
         self._build_layout()
         self._navigate("home")
 
-        # Check for updates in background
-        check_for_update(callback=self._on_update_check)
+        # Check for updates in background (callback safely scheduled on main thread)
+        check_for_update(callback=lambda r: self.after(0, self._on_update_check, r))
 
         # Try auto-login from saved credentials
         saved = load_credentials()
@@ -528,10 +529,12 @@ class MainWindow(ctk.CTk):
                 self._section_states[sec_id] = is_expanded
 
                 arrow = "▼" if is_expanded else "▶"
+                # Translate label if it's a locale key (contains underscore), else use as-is
+                display_sec_label = t(label) if label and "_" in label else (label or "")
                 section_btn = ctk.CTkButton(
                     outer,
                     image=icons.icon(icon, 14, nav_dim),
-                    text=f"  {label}  {arrow}",
+                    text=f"  {display_sec_label}  {arrow}",
                     compound="left",
                     fg_color="transparent",
                     hover_color=nav_hover,
@@ -709,20 +712,24 @@ class MainWindow(ctk.CTk):
             self._current_panel.destroy()
             self._current_panel = None
 
-        th = get_theme(self._current_game)
+        mode = ctk.get_appearance_mode().lower()
+        th   = get_theme(self._current_game, mode)
         container = self._content_container
+
+        def _th(game="default"):
+            return get_theme(game, mode)
 
         # Lazy imports to avoid circular deps
         panel = None
         if nav_id == "home":
             from .panels.home import HomePanel
-            panel = HomePanel(container, theme=get_theme("default"), nav_callback=self._navigate)
+            panel = HomePanel(container, theme=_th(), nav_callback=self._navigate)
         elif nav_id == "pc_tools":
             from .panels.pc_tools import PCToolsPanel
-            panel = PCToolsPanel(container, theme=get_theme("default"))
+            panel = PCToolsPanel(container, theme=_th())
         elif nav_id == "settings":
             from .panels.settings import SettingsPanel
-            panel = SettingsPanel(container, theme=get_theme("default"),
+            panel = SettingsPanel(container, theme=_th(),
                                    on_language_change=self._on_language_change)
         elif nav_id == "cs2_player":
             from .panels.cs2 import CS2PlayerPanel
@@ -751,15 +758,15 @@ class MainWindow(ctk.CTk):
         elif nav_id == "rust_keybind":
             from .panels.keybind import KeybindPanel
             panel = KeybindPanel(container, game="rust", theme=th)
-        elif nav_id == "translator":
-            from .panels.translator import TranslatorPanel
-            panel = TranslatorPanel(container, theme=get_theme("default"))
+        elif nav_id in ("translator", "game_tools"):
+            from .panels.game_tools import GameToolsPanel
+            panel = GameToolsPanel(container, theme=_th())
         elif nav_id == "links":
             from .panels.links import LinksPanel
-            panel = LinksPanel(container, theme=get_theme("default"))
+            panel = LinksPanel(container, theme=_th())
         elif nav_id == "watchdog":
             from .panels.watchdog import WatchdogPanel
-            panel = WatchdogPanel(container, theme=get_theme("default"))
+            panel = WatchdogPanel(container, theme=_th())
 
         if panel:
             panel.pack(fill="both", expand=True)
@@ -850,7 +857,10 @@ class MainWindow(ctk.CTk):
         settings["appearance_mode"] = new_mode
         save_settings(settings)
         self._update_mode_btn()
-        self.after(50, self._apply_theme)  # slight delay lets CTK finish its own recolor
+        # Slight delay lets CTK finish its own recolor, then re-apply our theme
+        # and reload the current panel so it picks up the new colors
+        self.after(80, self._apply_theme)
+        self.after(120, lambda: self._show_panel(self._current_nav_id))
 
     def _update_mode_btn(self):
         mode = ctk.get_appearance_mode().lower()
@@ -961,18 +971,21 @@ class MainWindow(ctk.CTk):
                 cursor="hand2"
             )
             self._update_label.bind("<Button-1>", lambda _: self._show_update_dialog(result))
-            # Auto-show popup — small delay so main window finishes rendering
-            self.after(1200, lambda: self._show_update_dialog(result))
+            # Auto-show popup once — delay ensures main window is fully rendered
+            if not getattr(self, "_update_dialog_shown", False):
+                self._update_dialog_shown = True
+                self.after(1500, lambda: self._show_update_dialog(result))
 
     def _show_update_dialog(self, update_info: dict):
         """Update download wizard — Step 1: info, Step 2: downloading, Step 3: done."""
         th = get_theme(self._current_game)
         d = ctk.CTkToplevel(self)
         d.title(t("update_available"))
-        d.geometry("480x340")
+        d.geometry("480x380")
         d.configure(fg_color=th["content_bg"])
-        d.grab_set()
         d.resizable(False, False)
+        # Delay grab_set so the window has time to fully render before grabbing input
+        d.after(200, d.grab_set)
 
         latest = update_info.get("latest", "?")
         changelog = update_info.get("changelog", "")
