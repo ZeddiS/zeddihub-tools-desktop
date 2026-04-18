@@ -3,7 +3,9 @@ ZeddiHub Tools - Links, Credits & ZeddiS-Client features panel.
 Includes: DNS management, file uploader, social links.
 """
 
+import os
 import webbrowser
+import threading
 import tkinter as tk
 import customtkinter as ctk
 
@@ -16,6 +18,10 @@ except ImportError:
 from pathlib import Path
 
 from .. import icons
+try:
+    from ..locale import t as _t
+except ImportError:
+    def _t(key, **kw): return key
 
 LOGO_PATH = Path(__file__).parent.parent.parent / "assets" / "logo.png"
 
@@ -259,7 +265,78 @@ class LinksPanel(ctk.CTkFrame):
         _label(main, "Nahrávání souborů na ZeddiHub CDN (files.zeddihub.eu).",
                11, color=t["text_dim"]).pack(anchor="w", pady=(0, 12))
 
-        # Quick open button
+        # ── N-07: Přímý file share feature (picker + upload → URL) ──────────
+        share = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        share.pack(fill="x", pady=6)
+
+        _label(share, " " + _t("file_share_section"), 14, bold=True, color=t["text"],
+               image=icons.icon("share-nodes", 16, t["primary"]), compound="left").pack(
+            padx=16, pady=(16, 4), anchor="w")
+        _label(share, _t("file_share_hint"),
+               11, color=t["text_dim"], wraplength=700, justify="left"
+               ).pack(padx=16, pady=(0, 8), anchor="w")
+
+        # Picker row
+        pick_row = ctk.CTkFrame(share, fg_color="transparent")
+        pick_row.pack(fill="x", padx=16, pady=(0, 8))
+
+        self._share_path_var = ctk.StringVar(value="")
+        ctk.CTkEntry(pick_row, textvariable=self._share_path_var,
+                     placeholder_text="C:\\path\\to\\file.zip",
+                     fg_color=t["secondary"], text_color=t["text"],
+                     font=ctk.CTkFont("Consolas", 11), height=34,
+                     ).pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        ctk.CTkButton(pick_row, text=" " + _t("file_share_pick"),
+                      image=icons.icon("folder-open", 13, "#ffffff"), compound="left",
+                      fg_color=t["secondary"], hover_color=t["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=34, width=120,
+                      command=self._share_pick_file,
+                      ).pack(side="left")
+
+        # Action row
+        act_row = ctk.CTkFrame(share, fg_color="transparent")
+        act_row.pack(fill="x", padx=16, pady=(0, 8))
+
+        self._share_btn = ctk.CTkButton(
+            act_row, text=" " + _t("file_share_upload"),
+            image=icons.icon("cloud-upload-alt", 14, "#ffffff"), compound="left",
+            fg_color=t["primary"], hover_color=t["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36,
+            command=self._share_upload,
+        )
+        self._share_btn.pack(side="left", padx=(0, 6))
+
+        self._share_progress = ctk.CTkProgressBar(
+            act_row, height=12,
+            fg_color=t["secondary"], progress_color=t["primary"],
+        )
+        self._share_progress.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._share_progress.set(0)
+
+        self._share_status = _label(share, "", 10, color=t["text_dim"])
+        self._share_status.pack(padx=16, pady=(0, 6), anchor="w")
+
+        self._share_url_var = ctk.StringVar(value="")
+        url_row = ctk.CTkFrame(share, fg_color="transparent")
+        url_row.pack(fill="x", padx=16, pady=(0, 16))
+
+        self._share_url_entry = ctk.CTkEntry(
+            url_row, textvariable=self._share_url_var,
+            placeholder_text="https://files.zeddihub.eu/…",
+            fg_color=t["secondary"], text_color=t["text"],
+            font=ctk.CTkFont("Consolas", 11), height=32,
+            state="readonly",
+        )
+        self._share_url_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ctk.CTkButton(url_row, text=" Copy",
+                      image=icons.icon("copy", 13, "#ffffff"), compound="left",
+                      fg_color=t["secondary"], hover_color=t["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=32, width=90,
+                      command=self._share_copy_url,
+                      ).pack(side="left")
+
+        # Quick open button (web uploader fallback)
         card = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
         card.pack(fill="x", pady=6)
 
@@ -274,6 +351,120 @@ class LinksPanel(ctk.CTkFrame):
                       font=ctk.CTkFont("Segoe UI", 13, "bold"), height=42,
                       command=lambda: webbrowser.open("https://files.zeddihub.eu/uploader/")
                       ).pack(padx=16, pady=(0, 16), fill="x")
+
+    # ─── File share implementation (N-07) ─────────────────────────────────────
+
+    FILE_SHARE_URL = "https://files.zeddihub.eu/uploader/upload.php"
+
+    def _share_pick_file(self):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(title="Vyberte soubor k nahrání")
+        if path:
+            self._share_path_var.set(path)
+
+    def _share_copy_url(self):
+        url = self._share_url_var.get().strip()
+        if not url:
+            return
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(url)
+        except Exception:
+            pass
+
+    def _share_upload(self):
+        path = self._share_path_var.get().strip()
+        if not path or not os.path.isfile(path):
+            self._share_status.configure(
+                text="! Nejprve vyberte existující soubor.",
+                text_color=self.theme["warning"],
+            )
+            return
+
+        self._share_btn.configure(state="disabled")
+        self._share_progress.set(0.05)
+        self._share_status.configure(
+            text="↑ Nahrávám…", text_color=self.theme["text_dim"],
+        )
+        threading.Thread(target=self._share_upload_worker,
+                         args=(path,), daemon=True).start()
+
+    def _share_upload_worker(self, path: str):
+        """Multipart/form-data upload using stdlib only."""
+        import uuid, mimetypes, urllib.request, urllib.error, json as _json
+
+        th = self.theme
+        try:
+            filename = os.path.basename(path)
+            with open(path, "rb") as f:
+                file_bytes = f.read()
+
+            ctype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            boundary = "----ZeddiHub" + uuid.uuid4().hex
+            body = (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+                f"Content-Type: {ctype}\r\n\r\n"
+            ).encode("utf-8")
+            body += file_bytes
+            body += f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+            req = urllib.request.Request(
+                self.FILE_SHARE_URL,
+                data=body,
+                method="POST",
+                headers={
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    "User-Agent":   "ZeddiHubTools/1.8.0",
+                    "Accept":       "application/json, text/plain;q=0.9, */*;q=0.5",
+                },
+            )
+            self.after(0, lambda: self._share_progress.set(0.5))
+
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                raw = resp.read().decode("utf-8", errors="replace").strip()
+
+            url = ""
+            try:
+                data = _json.loads(raw)
+                url = (data.get("url")
+                       or data.get("link")
+                       or data.get("file", {}).get("url", "")
+                       if isinstance(data.get("file"), dict)
+                       else data.get("file", ""))
+            except Exception:
+                # Fall back: look for a URL in the response body
+                import re as _re
+                m = _re.search(r"https?://\S+", raw)
+                if m:
+                    url = m.group(0)
+
+            if not url:
+                raise RuntimeError("Server nevrátil URL.")
+
+            def _done():
+                self._share_progress.set(1.0)
+                self._share_url_var.set(url)
+                self._share_status.configure(
+                    text="✅ " + _t("file_share_uploaded"),
+                    text_color=th["success"],
+                )
+                try:
+                    self.clipboard_clear()
+                    self.clipboard_append(url)
+                except Exception:
+                    pass
+                self._share_btn.configure(state="normal")
+            self.after(0, _done)
+
+        except Exception as e:
+            msg = f"✗ {_t('file_share_failed')}: {e}"
+
+            def _fail():
+                self._share_progress.set(0)
+                self._share_status.configure(text=msg, text_color=th["error"])
+                self._share_btn.configure(state="normal")
+            self.after(0, _fail)
 
         # Info
         info = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
@@ -309,10 +500,9 @@ class LinksPanel(ctk.CTkFrame):
                          bg=t["content_bg"]).pack(pady=(0, 16))
             except Exception:
                 pass
-
         _label(scroll, "ZeddiHub Tools Desktop", 22, bold=True,
                color=t["primary"]).pack(anchor="center")
-        _label(scroll, "v1.0.0  |  Developed by ZeddiS", 12,
+        _label(scroll, "v1.8.0  |  Developed by ZeddiS", 12,
                color=t["text_dim"]).pack(pady=(2, 16), anchor="center")
 
         credits_data = [

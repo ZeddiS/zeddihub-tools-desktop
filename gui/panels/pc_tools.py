@@ -49,6 +49,11 @@ except ImportError:
     def t(key, **kw):
         return key
 
+try:
+    from ..auth import is_authenticated
+except ImportError:
+    def is_authenticated(): return False
+
 
 # ── Native Windows memory/disk helpers (no psutil) ──────────────────────────
 
@@ -148,6 +153,8 @@ class PCToolsPanel(ctk.CTkFrame):
         tab.add("🖱 Autoclicker")
         tab.add("▶ YouTube DL")
         tab.add("📝 Sticky Notes")
+        tab.add("🎮 " + t("game_opt_section"))
+        tab.add("🔒 " + t("advanced_pc_tools"))
 
         self._build_sysinfo(tab.tab(t("sys_info")))
         self._build_dns_temp(tab.tab(t("dns_temp")))
@@ -156,6 +163,8 @@ class PCToolsPanel(ctk.CTkFrame):
         self._build_autoclicker(tab.tab("🖱 Autoclicker"))
         self._build_ytdl(tab.tab("▶ YouTube DL"))
         self._build_stickynotes(tab.tab("📝 Sticky Notes"))
+        self._build_game_opt(tab.tab("🎮 " + t("game_opt_section")))
+        self._build_advanced(tab.tab("🔒 " + t("advanced_pc_tools")))
 
     # ─── SYSTEM INFO ──────────────────────────────────────────────────────────
 
@@ -1903,3 +1912,404 @@ class PCToolsPanel(ctk.CTkFrame):
         textbox.delete("1.0", "end")
         textbox.insert("1.0", text)
         textbox.configure(state="disabled")
+
+    # ─── GAME OPTIMIZATION (N-02) ─────────────────────────────────────────────
+
+    def _build_game_opt(self, tab):
+        th = self.theme
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        _label(scroll, " " + t("game_opt_section"), 16, bold=True, color=th["primary"],
+               image=icons.icon("gamepad", 18, th["primary"]), compound="left"
+               ).pack(padx=4, pady=(4, 8), anchor="w")
+
+        _label(scroll, t("game_opt_hint"),
+               11, color=th["text_dim"], wraplength=720, justify="left"
+               ).pack(padx=4, pady=(0, 12), anchor="w")
+
+        # Current-state detection card
+        state_card = _card(scroll, th)
+        state_card.pack(fill="x", pady=6)
+
+        _label(state_card, " Aktuální stav / Current status", 13, bold=True,
+               color=th["primary"],
+               image=icons.icon("gauge-high", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 6), anchor="w")
+
+        self._gopt_status_rows = {}
+        self._gopt_status_body = ctk.CTkFrame(state_card, fg_color="transparent")
+        self._gopt_status_body.pack(fill="x", padx=14, pady=(0, 12))
+
+        items = [
+            ("gamemode",       t("game_opt_gamemode")),
+            ("hags",           t("game_opt_gpu_sched")),
+            ("gamebar",        t("game_opt_gamebar")),
+            ("fullscreen_opt", t("game_opt_fullscreen_opt")),
+            ("power",          t("game_opt_power")),
+            ("visual",         t("game_opt_visual")),
+        ]
+        for key, label in items:
+            row = ctk.CTkFrame(self._gopt_status_body, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+            _label(row, label, 11, color=th["text"]).pack(side="left")
+            lbl = _label(row, "…", 11, bold=True, color=th["text_dim"])
+            lbl.pack(side="right")
+            self._gopt_status_rows[key] = lbl
+
+        ctk.CTkButton(state_card, text="↻ " + t("refresh"),
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 10), height=28, width=110,
+                      command=self._gopt_refresh_status
+                      ).pack(padx=14, pady=(0, 12), anchor="e")
+
+        # Action buttons
+        action_card = _card(scroll, th)
+        action_card.pack(fill="x", pady=6)
+
+        _label(action_card, t("game_opt_restart_required"),
+               10, color=th["warning"], wraplength=700
+               ).pack(padx=14, pady=(12, 8), anchor="w")
+
+        btn_row = ctk.CTkFrame(action_card, fg_color="transparent")
+        btn_row.pack(padx=14, pady=(0, 12), anchor="w")
+
+        ctk.CTkButton(btn_row, text=" " + t("game_opt_apply"),
+                      image=icons.icon("bolt", 13, "#ffffff"), compound="left",
+                      fg_color=th["primary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 12, "bold"), height=38, width=240,
+                      command=self._gopt_apply
+                      ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(btn_row, text=" " + t("game_opt_revert"),
+                      image=icons.icon("rotate-left", 13, th["text"]), compound="left",
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=38, width=160,
+                      command=self._gopt_revert
+                      ).pack(side="left")
+
+        self._gopt_status = _label(action_card, "", 10, color=th["text_dim"],
+                                    wraplength=720, justify="left")
+        self._gopt_status.pack(padx=14, pady=(0, 12), anchor="w")
+
+        self._gopt_refresh_status()
+
+    # ── Game Optimization helpers (stdlib + winreg) ──────────────────────────
+
+    _GOPT_KEYS = {
+        # AutoGameMode: HKCU\Software\Microsoft\GameBar  AutoGameModeEnabled=1
+        "gamemode":       (r"Software\Microsoft\GameBar", "AutoGameModeEnabled", 1),
+        # HAGS: HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers HwSchMode=2
+        "hags":           (r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
+                           "HwSchMode", 2, "HKLM"),
+        # GameBar: HKCU\Software\Microsoft\GameBar  ShowStartupPanel=0
+        "gamebar":        (r"Software\Microsoft\GameBar", "ShowStartupPanel", 0),
+        # Fullscreen optimizations: HKCU\System\GameConfigStore GameDVR_FSEBehavior=2
+        "fullscreen_opt": (r"System\GameConfigStore", "GameDVR_FSEBehavior", 2),
+    }
+
+    def _gopt_reg_read(self, key, subkey, name, hive="HKCU"):
+        try:
+            import winreg
+            root = winreg.HKEY_LOCAL_MACHINE if hive == "HKLM" else winreg.HKEY_CURRENT_USER
+            with winreg.OpenKey(root, subkey) as k:
+                val, _ = winreg.QueryValueEx(k, name)
+                return val
+        except Exception:
+            return None
+
+    def _gopt_reg_write(self, subkey, name, value, hive="HKCU"):
+        try:
+            import winreg
+            root = winreg.HKEY_LOCAL_MACHINE if hive == "HKLM" else winreg.HKEY_CURRENT_USER
+            with winreg.CreateKey(root, subkey) as k:
+                winreg.SetValueEx(k, name, 0, winreg.REG_DWORD, int(value))
+            return True
+        except Exception as e:
+            return False
+
+    def _gopt_refresh_status(self):
+        """Read registry + power + visual effects state and colour-code rows."""
+        th = self.theme
+        # Game Mode
+        val = self._gopt_reg_read(None, r"Software\Microsoft\GameBar",
+                                  "AutoGameModeEnabled")
+        self._gopt_set_row("gamemode", val == 1)
+        # HAGS
+        val = self._gopt_reg_read(None,
+                                  r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
+                                  "HwSchMode", hive="HKLM")
+        self._gopt_set_row("hags", val == 2)
+        # Game Bar startup panel off
+        val = self._gopt_reg_read(None, r"Software\Microsoft\GameBar",
+                                  "ShowStartupPanel")
+        self._gopt_set_row("gamebar", val == 0)
+        # Fullscreen optimizations disabled
+        val = self._gopt_reg_read(None, r"System\GameConfigStore",
+                                  "GameDVR_FSEBehavior")
+        self._gopt_set_row("fullscreen_opt", val == 2)
+        # Power plan: check active
+        try:
+            import subprocess as _sp
+            out = _sp.run(["powercfg", "/getactivescheme"],
+                          capture_output=True, text=True, timeout=4,
+                          creationflags=getattr(_sp, "CREATE_NO_WINDOW", 0)).stdout
+            ultimate = "e9a42b02" in out.lower()
+            self._gopt_set_row("power", ultimate)
+        except Exception:
+            self._gopt_set_row("power", None)
+        # Visual effects: 2 = adjust for performance
+        val = self._gopt_reg_read(None,
+                                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects",
+                                  "VisualFXSetting")
+        self._gopt_set_row("visual", val == 2)
+
+    def _gopt_set_row(self, key: str, enabled):
+        th = self.theme
+        lbl = self._gopt_status_rows.get(key)
+        if not lbl:
+            return
+        if enabled is True:
+            lbl.configure(text="✅ Zapnuto", text_color=th["success"])
+        elif enabled is False:
+            lbl.configure(text="✗ Vypnuto", text_color=th["text_dim"])
+        else:
+            lbl.configure(text="?", text_color=th["warning"])
+
+    def _gopt_apply(self):
+        """Enable recommended game optimizations. Reversible via _gopt_revert."""
+        th = self.theme
+        results: list[str] = []
+
+        # Game Mode ON
+        results.append(("Game Mode",
+            self._gopt_reg_write(r"Software\Microsoft\GameBar", "AutoGameModeEnabled", 1)))
+        # HAGS ON (needs admin) — will likely fail without elevation
+        results.append(("HAGS (admin req.)",
+            self._gopt_reg_write(r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
+                                 "HwSchMode", 2, hive="HKLM")))
+        # Game Bar OFF
+        results.append(("Game Bar hidden",
+            self._gopt_reg_write(r"Software\Microsoft\GameBar", "ShowStartupPanel", 0)))
+        results.append(("Game DVR off",
+            self._gopt_reg_write(r"Software\Microsoft\GameBar", "GamePanelStartupTipIndex", 3)))
+        # Fullscreen Optimizations disabled
+        results.append(("Fullscreen Opt off",
+            self._gopt_reg_write(r"System\GameConfigStore", "GameDVR_FSEBehavior", 2)))
+        results.append(("Fullscreen Opt off (mode)",
+            self._gopt_reg_write(r"System\GameConfigStore", "GameDVR_FSEBehaviorMode", 2)))
+        # Visual effects: adjust for performance
+        results.append(("Visual effects = perf",
+            self._gopt_reg_write(
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects",
+                "VisualFXSetting", 2)))
+        # Power plan: Ultimate Performance
+        try:
+            import subprocess as _sp
+            cf = getattr(_sp, "CREATE_NO_WINDOW", 0)
+            # Duplicate & set
+            _sp.run(["powercfg", "-duplicatescheme",
+                     "e9a42b02-d5df-448d-aa00-03f14749eb61"],
+                    capture_output=True, text=True, timeout=4, creationflags=cf)
+            _sp.run(["powercfg", "/setactive",
+                     "e9a42b02-d5df-448d-aa00-03f14749eb61"],
+                    capture_output=True, text=True, timeout=4, creationflags=cf)
+            results.append(("Power: Ultimate Performance", True))
+        except Exception as e:
+            results.append((f"Power plan: {e}", False))
+
+        ok_count = sum(1 for _, ok in results if ok)
+        fail = [name for name, ok in results if not ok]
+        txt = f"✅ Aplikováno {ok_count}/{len(results)} optimalizací."
+        if fail:
+            txt += "  ⚠ Chyby: " + ", ".join(fail[:3])
+            if len(fail) > 3:
+                txt += f" a {len(fail) - 3} dalších"
+            txt += "  (některé kroky mohou vyžadovat administrátorská práva)."
+        self._gopt_status.configure(text=txt, text_color=th["text"])
+        self._gopt_refresh_status()
+
+    def _gopt_revert(self):
+        """Roll back to Windows defaults."""
+        th = self.theme
+        results = []
+        results.append(self._gopt_reg_write(r"Software\Microsoft\GameBar",
+                                            "AutoGameModeEnabled", 0))
+        results.append(self._gopt_reg_write(r"Software\Microsoft\GameBar",
+                                            "ShowStartupPanel", 1))
+        results.append(self._gopt_reg_write(r"System\GameConfigStore",
+                                            "GameDVR_FSEBehavior", 0))
+        results.append(self._gopt_reg_write(
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects",
+            "VisualFXSetting", 0))
+        # Power: balanced
+        try:
+            import subprocess as _sp
+            cf = getattr(_sp, "CREATE_NO_WINDOW", 0)
+            _sp.run(["powercfg", "/setactive",
+                     "381b4222-f694-41f0-9685-ff5bb260df2e"],
+                    capture_output=True, text=True, timeout=4, creationflags=cf)
+            results.append(True)
+        except Exception:
+            results.append(False)
+        self._gopt_status.configure(
+            text=f"↩ Vráceno. {sum(1 for r in results if r)}/{len(results)} kroků úspěšných.",
+            text_color=th["text"],
+        )
+        self._gopt_refresh_status()
+
+    # ─── ADVANCED PC TOOLS (N-08) — auth required ────────────────────────────
+
+    def _build_advanced(self, tab):
+        th = self.theme
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        _label(scroll, " " + t("advanced_pc_tools"), 16, bold=True, color=th["primary"],
+               image=icons.icon("lock", 18, th["primary"]), compound="left"
+               ).pack(padx=4, pady=(4, 8), anchor="w")
+
+        if not is_authenticated():
+            gate = _card(scroll, th)
+            gate.pack(fill="x", pady=16)
+            _label(gate, "🔒 " + t("advanced_pc_tools_locked"),
+                   14, bold=True, color=th["warning"]
+                   ).pack(padx=14, pady=(16, 6), anchor="w")
+            _label(gate,
+                   "Pokročilé nástroje mohou měnit systémové nastavení. "
+                   "Pro bezpečnost vyžadují přihlášení.\n"
+                   "Přihlaste se v dolní části sidebaru nebo v Nastavení → Účet.",
+                   11, color=th["text_dim"], wraplength=720, justify="left"
+                   ).pack(padx=14, pady=(0, 16), anchor="w")
+            return
+
+        # ── Tools are available ──
+        tools = [
+            ("advanced_registry",  "database",     self._adv_registry_cleanup),
+            ("advanced_startup",   "power-off",    self._adv_startup_manager),
+            ("advanced_services",  "server",       self._adv_services),
+            ("advanced_net_reset", "network-wired", self._adv_net_reset),
+            ("advanced_bsod",      "triangle-exclamation", self._adv_bsod_history),
+        ]
+        for key, icon_name, handler in tools:
+            card = _card(scroll, th)
+            card.pack(fill="x", pady=6)
+
+            row = ctk.CTkFrame(card, fg_color="transparent")
+            row.pack(fill="x", padx=14, pady=(12, 10))
+
+            _label(row, " " + t(key), 13, bold=True, color=th["primary"],
+                   image=icons.icon(icon_name, 15, th["primary"]), compound="left"
+                   ).pack(side="left")
+
+            ctk.CTkButton(row, text="Spustit",
+                          fg_color=th["secondary"], hover_color=th["primary"],
+                          font=ctk.CTkFont("Segoe UI", 11), height=30, width=110,
+                          command=handler,
+                          ).pack(side="right")
+
+        self._adv_output = ctk.CTkTextbox(
+            scroll, height=220,
+            fg_color=th["secondary"], text_color=th["text"],
+            font=ctk.CTkFont("Consolas", 10),
+        )
+        self._adv_output.pack(fill="x", pady=12)
+        self._adv_log("▸ Pokročilé nástroje připraveny. Výstup se zobrazuje zde.\n")
+
+    def _adv_log(self, line: str):
+        try:
+            self._adv_output.insert("end", line if line.endswith("\n") else line + "\n")
+            self._adv_output.see("end")
+        except Exception:
+            pass
+
+    def _adv_registry_cleanup(self):
+        """Backup key HKCU\\Software + preview of broken uninstall entries."""
+        import tempfile, datetime, subprocess as _sp
+        from tkinter import messagebox as _mb
+        if not _mb.askyesno("Registry cleanup",
+                             "Vytvořit zálohu HKCU\\Software před případným úklidem?"):
+            return
+        try:
+            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            out = Path(tempfile.gettempdir()) / f"zeddihub_reg_backup_{stamp}.reg"
+            cf = getattr(_sp, "CREATE_NO_WINDOW", 0)
+            _sp.run(["reg", "export", "HKCU\\Software", str(out), "/y"],
+                    capture_output=True, text=True, timeout=30, creationflags=cf)
+            self._adv_log(f"✅ Záloha registru: {out}")
+            self._adv_log("  (Automatický úklid není zapnut; jde pouze o zálohu.)")
+        except Exception as e:
+            self._adv_log(f"✗ Chyba zálohy: {e}")
+
+    def _adv_startup_manager(self):
+        """List HKCU + HKLM Run autostart entries."""
+        try:
+            import winreg
+            self._adv_log("\n▸ Startup entries:")
+            for hive_name, hive in [("HKCU", winreg.HKEY_CURRENT_USER),
+                                     ("HKLM", winreg.HKEY_LOCAL_MACHINE)]:
+                try:
+                    with winreg.OpenKey(hive, r"Software\Microsoft\Windows\CurrentVersion\Run") as k:
+                        for i in range(0, winreg.QueryInfoKey(k)[1]):
+                            name, val, _ = winreg.EnumValue(k, i)
+                            self._adv_log(f"  {hive_name}: {name} → {val}")
+                except FileNotFoundError:
+                    pass
+        except Exception as e:
+            self._adv_log(f"✗ {e}")
+
+    def _adv_services(self):
+        """List top-10 running non-Microsoft services via sc."""
+        import subprocess as _sp
+        try:
+            cf = getattr(_sp, "CREATE_NO_WINDOW", 0)
+            out = _sp.run(["sc", "query", "type=", "service", "state=", "running"],
+                          capture_output=True, text=True, timeout=10,
+                          creationflags=cf).stdout
+            lines = [l for l in out.splitlines() if "SERVICE_NAME" in l]
+            self._adv_log(f"\n▸ Running services: {len(lines)}")
+            for l in lines[:15]:
+                self._adv_log("  " + l.strip())
+            if len(lines) > 15:
+                self._adv_log(f"  …+{len(lines) - 15} dalších")
+        except Exception as e:
+            self._adv_log(f"✗ {e}")
+
+    def _adv_net_reset(self):
+        """Show the reset commands — do NOT run them without explicit admin confirmation."""
+        from tkinter import messagebox as _mb
+        cmds = [
+            "netsh winsock reset",
+            "netsh int ip reset",
+            "ipconfig /release && ipconfig /renew",
+            "ipconfig /flushdns",
+        ]
+        self._adv_log("\n▸ Reset sítě — příkazy (vyžadují admin CMD):")
+        for c in cmds:
+            self._adv_log(f"  {c}")
+        if _mb.askyesno("Reset sítě",
+                         "Otevřít admin CMD pro spuštění těchto příkazů?"):
+            try:
+                import subprocess as _sp
+                _sp.Popen(["powershell", "-Command",
+                           "Start-Process cmd -Verb RunAs"])
+            except Exception as e:
+                self._adv_log(f"✗ {e}")
+
+    def _adv_bsod_history(self):
+        """List recent minidump files."""
+        from glob import glob
+        self._adv_log("\n▸ BSOD minidumps:")
+        found = False
+        for pat in [r"C:\Windows\Minidump\*.dmp", r"C:\Windows\MEMORY.DMP"]:
+            for f in glob(pat):
+                try:
+                    mt = os.path.getmtime(f)
+                    import datetime as _dt
+                    self._adv_log(
+                        f"  {f}  ({_dt.datetime.fromtimestamp(mt):%Y-%m-%d %H:%M})")
+                    found = True
+                except Exception:
+                    pass
+        if not found:
+            self._adv_log("  (Žádné minidumpy — systém pravděpodobně nezažil BSOD.)")

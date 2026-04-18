@@ -1,72 +1,162 @@
 @echo off
 REM =======================================================================
 REM  ZEDDIHUB TOOLS DESKTOP - Release Manager v1.7.0
-REM  Centralni skript pro konfiguraci, build, test a release.
-REM  Spustit z korene projektu: zeddihub.bat
+REM  Windows 11 compatible, ASCII-safe, FAST (cached status).
 REM =======================================================================
-setlocal EnableDelayedExpansion
+setlocal EnableDelayedExpansion EnableExtensions
 cd /d "%~dp0"
+
+if /i "%~1"=="--debug" set "ZH_DEBUG=1"
+if /i "%~1"=="/?" goto show_help
+if /i "%~1"=="-h" goto show_help
+if /i "%~1"=="--help" goto show_help
+
+title ZeddiHub Tools Desktop - Release Manager
+
 chcp 65001 >nul 2>&1
 
 set "REPO_ROOT=%~dp0"
 set "ENV_FILE=%REPO_ROOT%.env"
-set "VERSION=1.7.0"
+set "VERSION=1.8.0"
 set "TAG=v%VERSION%"
 
-:menu
-cls
+REM --- Menu definice ---
+set "MI_COUNT=11"
+set "MI_1=Konfigurace .env"
+set "MI_2=Test GITHUB_TOKEN"
+set "MI_3=Dependencies (Python + PyInstaller)"
+set "MI_4=Build .exe lokalne"
+set "MI_5=Auto Release (commit+push+Actions)"
+set "MI_6=Manual Release (gh CLI upload)"
+set "MI_7=Git status"
+set "MI_8=Smazat tag %TAG%"
+set "MI_9=Otevrit GitHub v prohlizeci"
+set "MI_10=Obnovit status (rescan)"
+set "MI_11=Rychla push (quick commit)"
+
+set "MH_1=Vytvori/prepise .env (token, owner, repo, identita)."
+set "MH_2=Overi zda tvuj GITHUB_TOKEN ma spravne permissions."
+set "MH_3=Nainstaluje requirements.txt + pyinstaller pres 'python -m pip'."
+set "MH_4=Spusti 'python -m PyInstaller' na ZeddiHubTools.spec."
+set "MH_5=Stage + commit + push + tag %TAG%. GitHub Actions zbuilduje .exe."
+set "MH_6=Vytvori release s uz zbuildenym .exe pres gh CLI."
+set "MH_7=Zobrazi lokalni git status, vetve a tagy."
+set "MH_8=Smaze tag %TAG% lokalne i na GitHubu (pokud blokuje push)."
+set "MH_9=Otevre repo/releases/actions/issues v prohlizeci."
+set "MH_10=Znovu zjisti stav Pythonu, Gitu, tagu a .env (pomale - siti)."
+set "MH_11=Rychly commit + push beze zmeny verze (bez tagu)."
+
+set "MENU_POS=1"
+
+REM --- Prvotni detekce statusu (probehne POUZE jednou na startu) ---
 call :load_env
-call :detect_status
+call :detect_status_fast
+call :detect_status_slow
 
+if defined ZH_DEBUG (
+    echo [DEBUG] Initial scan done. Press any key...
+    pause >nul
+)
+
+:render
+REM --- Toto se vola POUZE na kazdy stisk klavesy - musi byt RYCHLE! ---
+cls
 echo.
 echo  +======================================================================+
-echo  ^|   ZEDDIHUB TOOLS DESKTOP - RELEASE MANAGER                           ^|
-echo  ^|   Verze: %VERSION%                                                        ^|
+echo  ^|  ZEDDIHUB TOOLS DESKTOP   Release Manager v%VERSION%                     ^|
+echo  +======================================================================+
+echo  ^|  Status systemu:
+echo  ^|    .env             !STATUS_ENV!
+echo  ^|    GITHUB_TOKEN     !STATUS_TOKEN!
+echo  ^|    Python           !STATUS_PYTHON!
+echo  ^|    PyInstaller      !STATUS_PYI!
+echo  ^|    Git branch       !STATUS_BRANCH!
+echo  ^|    Lokalni .exe     !STATUS_EXE!
+echo  ^|    Remote tag       !STATUS_TAG!
 echo  +======================================================================+
 echo.
-echo    STATUS:
-echo      .env:          !STATUS_ENV!
-echo      GITHUB_TOKEN:  !STATUS_TOKEN!
-echo      Python:        !STATUS_PYTHON!
-echo      PyInstaller:   !STATUS_PYI!
-echo      Git branch:    !STATUS_BRANCH!
-echo      Build .exe:    !STATUS_EXE!
-echo      Remote tag:    !STATUS_TAG!
+echo   Ovladani:  W/S nahoru/dolu   D/Enter potvrdit   1-9 primo   Q konec
 echo.
-echo  +--[ NASTAVENI ]-------------------------------------------------------+
-echo  ^|   [1] Konfigurace .env  (token, owner, repo, git identita)          ^|
-echo  ^|   [2] Test GITHUB_TOKEN (ma spravne permissions?)                   ^|
-echo  ^|   [3] Zkontrolovat/nainstalovat Python dependencies                 ^|
-echo  +--[ BUILD ^& RELEASE ]-------------------------------------------------+
-echo  ^|   [4] Build .exe lokalne  (pyinstaller)                             ^|
-echo  ^|   [5] Auto Release        (commit+push, GitHub Actions buildne)     ^|
-echo  ^|   [6] Manual Release      (vyzaduje [4], upload .exe pres gh CLI)   ^|
-echo  +--[ SPRAVA ]----------------------------------------------------------+
-echo  ^|   [7] Git status          (zobrazi lokalni zmeny)                   ^|
-echo  ^|   [8] Smazat tag %TAG%   (lokalne + na remote - pokud blokuje push)^|
-echo  ^|   [9] Otevrit GitHub      (repo / releases / actions v prohlizeci)  ^|
-echo  +----------------------------------------------------------------------+
-echo  ^|   [0] Konec                                                         ^|
-echo  +----------------------------------------------------------------------+
+for /l %%i in (1,1,%MI_COUNT%) do call :print_item %%i
 echo.
-set /p CHOICE=   Volba:
+echo   ----------------------------------------------------------------------
+echo   Napoveda:  !MH_%MENU_POS%!
+echo.
 
-if "%CHOICE%"=="1" goto configure_env
-if "%CHOICE%"=="2" goto test_token
-if "%CHOICE%"=="3" goto install_deps
-if "%CHOICE%"=="4" goto build_exe
-if "%CHOICE%"=="5" goto auto_release
-if "%CHOICE%"=="6" goto manual_release
-if "%CHOICE%"=="7" goto git_status
-if "%CHOICE%"=="8" goto delete_tag
-if "%CHOICE%"=="9" goto open_github
-if "%CHOICE%"=="0" goto end
-goto menu
+choice /c WSADQ123456789R /n >nul
+set "K=!errorlevel!"
+
+if "%K%"=="1" goto key_up
+if "%K%"=="2" goto key_down
+if "%K%"=="3" goto key_back
+if "%K%"=="4" goto key_select
+if "%K%"=="5" goto end
+if "%K%"=="15" goto key_refresh
+if %K% geq 6 if %K% leq 14 (
+    set /a "N=K-5"
+    if !N! leq %MI_COUNT% (
+        set "MENU_POS=!N!"
+        goto key_select
+    )
+)
+goto render
+
+:key_up
+set /a "MENU_POS-=1"
+if %MENU_POS% lss 1 set "MENU_POS=%MI_COUNT%"
+goto render
+
+:key_down
+set /a "MENU_POS+=1"
+if %MENU_POS% gtr %MI_COUNT% set "MENU_POS=1"
+goto render
+
+:key_back
+goto render
+
+:key_refresh
+call :refresh_banner "Obnovuji status..."
+call :load_env
+call :detect_status_fast
+call :detect_status_slow
+goto render
+
+:key_select
+if %MENU_POS%==1 goto configure_env
+if %MENU_POS%==2 goto test_token
+if %MENU_POS%==3 goto install_deps
+if %MENU_POS%==4 goto build_exe
+if %MENU_POS%==5 goto auto_release
+if %MENU_POS%==6 goto manual_release
+if %MENU_POS%==7 goto git_status
+if %MENU_POS%==8 goto delete_tag
+if %MENU_POS%==9 goto open_github
+if %MENU_POS%==10 goto key_refresh
+if %MENU_POS%==11 goto quick_push
+goto render
 
 REM =======================================================================
-REM  [HELPERS]
+REM  HELPERS - musi byt super rychle!
 REM =======================================================================
+:print_item
+set "IDX=%~1"
+call set "LABEL=%%MI_%IDX%%%"
+if "%IDX%"=="%MENU_POS%" (
+    echo    ^>^> [%IDX%] !LABEL!
+) else (
+    echo       [%IDX%] !LABEL!
+)
+exit /b 0
+
+:refresh_banner
+cls
+echo.
+echo   %~1
+echo.
+exit /b 0
+
 :load_env
+REM Parse .env - RYCHLE, bez site.
 set "GITHUB_TOKEN="
 set "GITHUB_OWNER=ZeddiS"
 set "GITHUB_REPO=zeddihub-tools-desktop"
@@ -74,26 +164,36 @@ set "GITHUB_DEFAULT_BRANCH=master"
 set "GIT_AUTHOR_NAME=ZeddiS"
 set "GIT_AUTHOR_EMAIL="
 if not exist "%ENV_FILE%" exit /b 0
-for /f "usebackq tokens=1,2 delims==" %%A in ("%ENV_FILE%") do (
-    set "LINE=%%A"
-    if not "!LINE:~0,1!"=="#" if not "!LINE!"=="" (
-        set "%%A=%%B"
+for /f "usebackq tokens=* delims=" %%L in ("%ENV_FILE%") do (
+    set "LINE=%%L"
+    if defined LINE (
+        set "CHR1=!LINE:~0,1!"
+        if not "!CHR1!"=="#" (
+            for /f "tokens=1,* delims==" %%A in ("!LINE!") do (
+                if not "%%A"=="" if not "%%B"=="" set "%%A=%%B"
+            )
+        )
     )
 )
 exit /b 0
 
-:detect_status
-if exist "%ENV_FILE%" (set "STATUS_ENV=[OK]") else (set "STATUS_ENV=[CHYBI]")
+:detect_status_fast
+REM Rychle kontroly (bez siti, bez importu Python knihoven).
+if exist "%ENV_FILE%" (
+    set "STATUS_ENV=[OK]"
+) else (
+    set "STATUS_ENV=[CHYBI]"
+)
 if defined GITHUB_TOKEN (
     set "T1=!GITHUB_TOKEN:~0,15!"
     set "STATUS_TOKEN=[OK] !T1!..."
 ) else (
     set "STATUS_TOKEN=[CHYBI]"
 )
-python --version >nul 2>&1 && (set "STATUS_PYTHON=[OK]") || (set "STATUS_PYTHON=[CHYBI]")
-python -m PyInstaller --version >nul 2>&1 && (set "STATUS_PYI=[OK]") || (set "STATUS_PYI=[CHYBI]")
-set "STATUS_BRANCH=(nezjisteno)"
-for /f "usebackq" %%B in (`git branch --show-current 2^>nul`) do set "STATUS_BRANCH=%%B"
+REM Python version: rychle (subprocess, bez importu)
+set "STATUS_PYTHON=[CHYBI]"
+for /f "tokens=2" %%V in ('python --version 2^>nul') do set "STATUS_PYTHON=[OK] %%V"
+REM .exe existence: disk check
 if exist "dist\ZeddiHubTools.exe" (
     set "STATUS_EXE=[OK] dist\ZeddiHubTools.exe"
 ) else if exist "dist\ZeddiHub.Tools.exe" (
@@ -101,411 +201,281 @@ if exist "dist\ZeddiHubTools.exe" (
 ) else (
     set "STATUS_EXE=[NENI]"
 )
-set "STATUS_TAG=(nezjisteno)"
-git ls-remote --tags https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git %TAG% >nul 2>&1 && (
-    for /f "usebackq tokens=1,2" %%T in (`git ls-remote --tags https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git %TAG% 2^>nul`) do (
-        if "%%U"=="" set "STATUS_TAG=[MISSING] %TAG% neni pushnut"
-    )
+REM Git branch: rychle
+set "STATUS_BRANCH=(neni git repo)"
+for /f "usebackq" %%B in (`git branch --show-current 2^>nul`) do set "STATUS_BRANCH=%%B"
+exit /b 0
+
+:detect_status_slow
+REM Pomale kontroly - pouze pri startu nebo rucne (menu polozka 10).
+REM PyInstaller: pomale - importuje knihovnu
+set "STATUS_PYI=[CHYBI]"
+for /f "tokens=2" %%V in ('python -m PyInstaller --version 2^>^&1') do (
+    echo %%V | findstr /R "^[0-9]" >nul 2>&1 && set "STATUS_PYI=[OK] %%V"
 )
-git ls-remote --tags https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git refs/tags/%TAG% 2>nul | findstr /C:"%TAG%" >nul && (
-    set "STATUS_TAG=[PUSHED] %TAG% je na GitHubu"
-) || (
-    set "STATUS_TAG=[NOT PUSHED] %TAG% jeste neni na GitHubu"
+REM Remote tag: pomale - SIT!
+set "STATUS_TAG=(neoveren)"
+git ls-remote --tags https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git refs/tags/%TAG% 2>nul | findstr /C:"%TAG%" >nul
+if not errorlevel 1 (
+    set "STATUS_TAG=[PUSHED] %TAG% na GitHubu"
+) else (
+    set "STATUS_TAG=[PENDING] %TAG% jeste nepushnut"
 )
+exit /b 0
+
+:header
+echo.
+echo  ======================================================================
+echo    %~1
+echo  ======================================================================
+echo.
 exit /b 0
 
 :pause_and_return
 echo.
+echo   Stiskni libovolnou klavesu pro navrat do menu...
+pause >nul
+REM Po akci znovu nacteme .env a rychle checks, pomale preskocime.
+call :load_env
+call :detect_status_fast
+goto render
+
+:pause_and_return_rescan
+REM Pouziva se po akcich, ktere zmenily stav (release, tag, build).
+echo.
+echo   Stiskni libovolnou klavesu pro navrat do menu...
+pause >nul
+call :load_env
+call :detect_status_fast
+call :detect_status_slow
+goto render
+
+:ok
+echo   [OK]  %~1
+exit /b 0
+
+:err
+echo   [CHYBA] %~1
+exit /b 0
+
+:info
+echo   [INFO] %~1
+exit /b 0
+
+:warn
+echo   [POZOR] %~1
+exit /b 0
+
+:show_help
+echo.
+echo  ZeddiHub Release Manager v%VERSION%
+echo.
+echo  Pouziti:
+echo    zeddihub.bat           - spusti interaktivni menu
+echo    zeddihub.bat --debug   - spusti s debug vystupem
+echo    zeddihub.bat /?        - zobrazi tuto napovedu
+echo.
 pause
-goto menu
+exit /b 0
 
 REM =======================================================================
 REM  [1] KONFIGURACE .env
 REM =======================================================================
 :configure_env
-cls
-echo.
-echo  ====================================================================
-echo   [1] KONFIGURACE .env
-echo  ====================================================================
-echo.
-echo  Tento formular vytvori/prepise soubor .env v korene projektu.
-echo  Soubor je chranen .gitignore a NIKDY se nepostne do repozitare.
-echo.
+call :header "[1] Konfigurace .env"
 if exist "%ENV_FILE%" (
-    echo  UPOZORNENI: .env jiz existuje. Pokracovani ho prepise.
-    echo.
-    choice /c AN /n /m "  Pokracovat? [A]no / [N]e: "
-    if errorlevel 2 goto menu
+    call :warn ".env jiz existuje. Bude prepsan."
     echo.
 )
-echo  --- GITHUB_TOKEN (Fine-grained PAT) ---
-echo  Vytvor na: https://github.com/settings/personal-access-tokens/new
-echo  Repository access: Only selected -^> %GITHUB_OWNER%/%GITHUB_REPO%
-echo  Permissions: Contents R/W, Issues R/W, Pull requests R/W, Metadata R-only
+echo   Zadej hodnoty (Enter = ponechat default):
 echo.
-set "NEW_TOKEN="
-set /p NEW_TOKEN=  Vloz GITHUB_TOKEN (github_pat_...):
-if "!NEW_TOKEN!"=="" (
-    echo  CHYBA: Token nemuze byt prazdny.
-    goto pause_and_return
-)
+set /p "IN_TOKEN=  GITHUB_TOKEN (github_pat_...): "
+set /p "IN_OWNER=  GITHUB_OWNER [ZeddiS]: "
+set /p "IN_REPO=  GITHUB_REPO [zeddihub-tools-desktop]: "
+set /p "IN_BRANCH=  GITHUB_DEFAULT_BRANCH [master]: "
+set /p "IN_NAME=  GIT_AUTHOR_NAME [ZeddiS]: "
+set /p "IN_EMAIL=  GIT_AUTHOR_EMAIL: "
 
-echo.
-echo  --- GITHUB_OWNER ---
-set "NEW_OWNER="
-set /p NEW_OWNER=  Owner [ZeddiS]:
-if "!NEW_OWNER!"=="" set "NEW_OWNER=ZeddiS"
+if "%IN_OWNER%"=="" set "IN_OWNER=ZeddiS"
+if "%IN_REPO%"=="" set "IN_REPO=zeddihub-tools-desktop"
+if "%IN_BRANCH%"=="" set "IN_BRANCH=master"
+if "%IN_NAME%"=="" set "IN_NAME=ZeddiS"
 
-echo.
-echo  --- GITHUB_REPO ---
-set "NEW_REPO="
-set /p NEW_REPO=  Repo [zeddihub-tools-desktop]:
-if "!NEW_REPO!"=="" set "NEW_REPO=zeddihub-tools-desktop"
-
-echo.
-echo  --- GITHUB_DEFAULT_BRANCH ---
-set "NEW_BRANCH="
-set /p NEW_BRANCH=  Branch [master]:
-if "!NEW_BRANCH!"=="" set "NEW_BRANCH=master"
-
-echo.
-echo  --- Git identita ---
-set "NEW_GNAME="
-set /p NEW_GNAME=  Git author name [ZeddiS]:
-if "!NEW_GNAME!"=="" set "NEW_GNAME=ZeddiS"
-
-set "NEW_GEMAIL="
-set /p NEW_GEMAIL=  Git author email:
-if "!NEW_GEMAIL!"=="" (
-    echo  CHYBA: Email nemuze byt prazdny.
-    goto pause_and_return
-)
-
-REM Zapsat .env
 (
     echo # ZeddiHub Tools Desktop - runtime secrets ^(NIKDY NECOMMITUJ^)
     echo # Tento soubor je v .gitignore.
     echo.
-    echo GITHUB_TOKEN=!NEW_TOKEN!
+    echo GITHUB_TOKEN=%IN_TOKEN%
     echo.
-    echo GITHUB_OWNER=!NEW_OWNER!
-    echo GITHUB_REPO=!NEW_REPO!
-    echo GITHUB_DEFAULT_BRANCH=!NEW_BRANCH!
+    echo GITHUB_OWNER=%IN_OWNER%
+    echo GITHUB_REPO=%IN_REPO%
+    echo GITHUB_DEFAULT_BRANCH=%IN_BRANCH%
     echo.
-    echo GIT_AUTHOR_NAME=!NEW_GNAME!
-    echo GIT_AUTHOR_EMAIL=!NEW_GEMAIL!
+    echo GIT_AUTHOR_NAME=%IN_NAME%
+    echo GIT_AUTHOR_EMAIL=%IN_EMAIL%
 ) > "%ENV_FILE%"
 
-echo.
-echo  [OK] .env byl ulozen do: %ENV_FILE%
-echo  Nastavuji git config...
-git config user.name "!NEW_GNAME!" >nul
-git config user.email "!NEW_GEMAIL!" >nul
-echo  [OK] git config user.name / user.email nastaveno.
-goto pause_and_return
+call :ok ".env zapsan do %ENV_FILE%"
+goto pause_and_return_rescan
 
 REM =======================================================================
-REM  [2] TEST TOKENU
+REM  [2] TEST GITHUB_TOKEN
 REM =======================================================================
 :test_token
-cls
-echo.
-echo  ====================================================================
-echo   [2] TEST GITHUB_TOKEN
-echo  ====================================================================
-echo.
+call :header "[2] Test GITHUB_TOKEN"
 if not defined GITHUB_TOKEN (
-    echo  CHYBA: GITHUB_TOKEN neni v .env. Spustte volbu [1].
+    call :err "GITHUB_TOKEN neni nastaven. Spust [1] Konfigurace .env."
     goto pause_and_return
 )
-echo  Testuji token (prvnich 15 znaku: !GITHUB_TOKEN:~0,15!...^)
+echo   Testuji token proti GitHub API...
 echo.
-echo  --- Test 1: GET /user (authentication) ---
-curl -sS -H "Accept: application/vnd.github+json" -H "Authorization: Bearer %GITHUB_TOKEN%" https://api.github.com/user | findstr /C:"\"login\":"
+echo   /user endpoint:
+curl --ssl-no-revoke -s -o nul -w "     HTTP %%{http_code}\n" -H "Authorization: Bearer %GITHUB_TOKEN%" -H "Accept: application/vnd.github+json" "https://api.github.com/user"
 echo.
-echo  --- Test 2: GET /repos/%GITHUB_OWNER%/%GITHUB_REPO% (repo access) ---
-curl -sS -o nul -w "  HTTP: %%{http_code}\n" -H "Accept: application/vnd.github+json" -H "Authorization: Bearer %GITHUB_TOKEN%" https://api.github.com/repos/%GITHUB_OWNER%/%GITHUB_REPO%
+echo   /repos/%GITHUB_OWNER%/%GITHUB_REPO% endpoint:
+curl --ssl-no-revoke -s -o nul -w "     HTTP %%{http_code}\n" -H "Authorization: Bearer %GITHUB_TOKEN%" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/%GITHUB_OWNER%/%GITHUB_REPO%"
 echo.
-echo  --- Test 3: GET /repos/.../releases (contents permission) ---
-curl -sS -o nul -w "  HTTP: %%{http_code}\n" -H "Accept: application/vnd.github+json" -H "Authorization: Bearer %GITHUB_TOKEN%" https://api.github.com/repos/%GITHUB_OWNER%/%GITHUB_REPO%/releases
+echo   Rate limit:
+curl --ssl-no-revoke -s -H "Authorization: Bearer %GITHUB_TOKEN%" "https://api.github.com/rate_limit" | findstr /R "limit remaining reset" | findstr /V "core search graphql"
 echo.
-echo  Vsechny testy mely vratit "login": "%GITHUB_OWNER%" nebo HTTP 200.
-echo  401/403/404 = token nema spravne permissions nebo je expired.
+call :info "HTTP 200 = OK, 401 = spatny token, 404 = chybi permissions"
 goto pause_and_return
 
 REM =======================================================================
-REM  [3] PYTHON DEPENDENCIES
+REM  [3] DEPENDENCIES
 REM =======================================================================
 :install_deps
-cls
-echo.
-echo  ====================================================================
-echo   [3] PYTHON DEPENDENCIES
-echo  ====================================================================
-echo.
-python --version 2>nul || (
-    echo  CHYBA: Python neni nainstalovan nebo neni v PATH.
-    echo  Stahnete: https://www.python.org/downloads/
+call :header "[3] Dependencies (Python + PyInstaller)"
+where python >nul 2>&1
+if errorlevel 1 (
+    call :err "Python neni v PATH. Nainstaluj z https://www.python.org/"
     goto pause_and_return
 )
-echo.
-echo  Instaluji requirements.txt...
+echo   Instaluji requirements.txt...
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt || (
-    echo  CHYBA pri instalaci requirements.txt
-    goto pause_and_return
-)
+python -m pip install -r requirements.txt
+python -m pip install pyinstaller
 echo.
-echo  Instaluji PyInstaller...
-python -m pip install --upgrade pyinstaller || (
-    echo  CHYBA pri instalaci pyinstaller
-    goto pause_and_return
-)
-echo.
-echo  --- Kontrola ---
-python -m PyInstaller --version
-python -c "import customtkinter, PIL, cryptography, pystray, psutil, pynput, pyautogui; print('Vsechny moduly nacteny OK.')"
-goto pause_and_return
+call :ok "Hotovo."
+goto pause_and_return_rescan
 
 REM =======================================================================
-REM  [4] BUILD .EXE
+REM  [4] BUILD .exe
 REM =======================================================================
 :build_exe
-cls
-echo.
-echo  ====================================================================
-echo   [4] BUILD Windows .exe
-echo  ====================================================================
-echo.
+call :header "[4] Build .exe lokalne"
 if not exist "ZeddiHubTools.spec" (
-    echo  CHYBA: ZeddiHubTools.spec nenalezen.
+    call :err "ZeddiHubTools.spec nenalezen."
     goto pause_and_return
 )
-python -m PyInstaller --version >nul 2>&1 || (
-    echo  UPOZORNENI: PyInstaller neni nainstalovan. Spoustim [3] nejdriv...
-    call :install_deps_inline
-)
-echo.
-echo  Spoustim pyinstaller...
-python -m PyInstaller --noconfirm ZeddiHubTools.spec || (
-    echo  CHYBA: Build selhal.
-    goto pause_and_return
-)
+echo   Spoustim PyInstaller (muze trvat minutu)...
+python -m PyInstaller ZeddiHubTools.spec --clean --noconfirm
 echo.
 if exist "dist\ZeddiHubTools.exe" (
-    echo  [OK] Build hotov: dist\ZeddiHubTools.exe
-    for %%I in (dist\ZeddiHubTools.exe) do echo  Velikost: %%~zI bajtu
+    call :ok "Build uspesny: dist\ZeddiHubTools.exe"
+    for %%A in ("dist\ZeddiHubTools.exe") do echo   Velikost: %%~zA B
 ) else (
-    echo  CHYBA: dist\ZeddiHubTools.exe nevytvoren.
+    call :err "Build selhal - .exe nenalezen v dist\"
 )
-goto pause_and_return
-
-:install_deps_inline
-python -m pip install --upgrade pip >nul 2>&1
-python -m pip install -r requirements.txt
-python -m pip install --upgrade pyinstaller
-exit /b 0
+goto pause_and_return_rescan
 
 REM =======================================================================
-REM  [5] AUTO RELEASE (push -> GitHub Actions buildne)
+REM  [5] AUTO RELEASE
 REM =======================================================================
 :auto_release
-cls
-echo.
-echo  ====================================================================
-echo   [5] AUTO RELEASE - commit + push + Actions
-echo  ====================================================================
-echo.
+call :header "[5] Auto Release (commit+push+Actions)"
 if not defined GITHUB_TOKEN (
-    echo  CHYBA: GITHUB_TOKEN neni v .env. Spustte [1].
+    call :err "GITHUB_TOKEN neni nastaven."
     goto pause_and_return
 )
-
-REM Odstranit stale lock
+echo   Probehne:
+echo     1. git config user.name/email (pokud nastaveno v .env)
+echo     2. git add -A
+echo     3. git commit -m "Release %TAG%"
+echo     4. git push origin %GITHUB_DEFAULT_BRANCH%
+echo     5. git tag %TAG%
+echo     6. git push origin %TAG%  ^<- spusti GitHub Actions
+echo.
+choice /c AN /n /m "  [A]no pokracovat / [N]e zrusit: "
+if errorlevel 2 goto render
+echo.
+git config user.name "%GIT_AUTHOR_NAME%" 2>nul
+if defined GIT_AUTHOR_EMAIL git config user.email "%GIT_AUTHOR_EMAIL%" 2>nul
 if exist ".git\index.lock" del /f /q ".git\index.lock" 2>nul
-
-REM Git identita
-git config user.name "%GIT_AUTHOR_NAME%" >nul 2>&1
-git config user.email "%GIT_AUTHOR_EMAIL%" >nul 2>&1
-
-REM Obnovit omylem smazane tracked soubory
-if not exist "assets\icon.ico"      git restore assets/icon.ico       >nul 2>&1
-if not exist "assets\logo_icon.png" git restore assets/logo_icon.png  >nul 2>&1
-
-REM Stage vsech zmen KROME webhosting/data/auth.json (plaintext hesla!)
-echo  [1/5] Staging...
 git add -A
-git reset HEAD -- webhosting/data/auth.json >nul 2>&1
-
-echo.
-echo  [2/5] Vytvareni commitu...
-git diff --cached --quiet
-if errorlevel 1 (
-    git commit -m "release: %TAG% - N-01/05/12-15 + F-07/F-08 + fixes" || goto auto_err
-) else (
-    echo   (zadne nove staged zmeny - pokracuji)
-)
-
-echo.
-echo  [3/5] Vytvareni tagu %TAG%...
-git tag -a %TAG% -m "Release %TAG%" 2>nul && (
-    echo   (tag %TAG% vytvoren)
-) || (
-    echo   (tag %TAG% uz existuje lokalne)
-)
-
-echo.
-echo  [4/5] Push pres HTTPS s tokenem...
-set "REMOTE_URL=https://%GITHUB_TOKEN%@github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git"
-git push "%REMOTE_URL%" %GITHUB_DEFAULT_BRANCH% || goto auto_err
-git push "%REMOTE_URL%" %TAG% || goto auto_err
-
-echo.
-echo  [5/5] +========================================+
-echo        ^|  PUSH USPESNY - GITHUB ACTIONS BEZI!  ^|
-echo        +========================================+
-echo.
-echo  Sledujte build:  https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions
-echo  Release bude za ~3-5 minut na:
-echo    https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases/tag/%TAG%
-goto pause_and_return
+REM BEZPECNOST: odstage webhosting\data\auth.json, aby se produkcni hesla nedostala do public repa
+git reset HEAD -- webhosting/data/auth.json 2>nul
+git commit -m "Release %TAG%" || call :info "(nic k commitnuti)"
+git push origin %GITHUB_DEFAULT_BRANCH% || goto auto_err
+git tag %TAG% 2>nul || call :info "(tag uz existuje lokalne)"
+git push origin %TAG% || goto auto_err
+call :ok "Release pushnut. Sleduj build na:"
+echo      https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions
+goto pause_and_return_rescan
 
 :auto_err
-echo.
-echo  CHYBA: Push selhal. Mozne priciny:
-echo   - Push Protection detekoval tajemstvi v commitu (token v .gitignore?)
-echo   - Token nema permission 'Contents: Read and write'
-echo   - Tag %TAG% jiz existuje na remote - pouzijte [8] pro smazani
-echo   - Konflikt s remote - spustte 'git pull' rucne
+call :err "Git push selhal. Zkontroluj pristup a stav."
 goto pause_and_return
 
 REM =======================================================================
-REM  [6] MANUAL RELEASE (gh CLI upload lokalni .exe)
+REM  [6] MANUAL RELEASE
 REM =======================================================================
 :manual_release
-cls
-echo.
-echo  ====================================================================
-echo   [6] MANUAL RELEASE - upload .exe pres gh CLI
-echo  ====================================================================
-echo.
+call :header "[6] Manual Release (gh CLI)"
+where gh >nul 2>&1
+if errorlevel 1 (
+    call :err "gh CLI neni v PATH. Nainstaluj z https://cli.github.com/"
+    goto pause_and_return
+)
 if not exist "dist\ZeddiHubTools.exe" (
-    echo  CHYBA: dist\ZeddiHubTools.exe neni. Spustte nejdriv [4].
+    call :err "dist\ZeddiHubTools.exe neexistuje. Spust [4] Build."
     goto pause_and_return
 )
-where gh >nul 2>&1 || (
-    echo  CHYBA: GitHub CLI 'gh' neni nainstalovan.
-    echo  Stahnete: https://cli.github.com/
-    echo.
-    echo  NEBO: pouzijte [5] Auto Release - ten nepotrebuje gh.
-    goto pause_and_return
-)
-echo  Overeni gh autentizace...
-gh auth status >nul 2>&1 || (
-    echo  CHYBA: gh neni prihlaseny. Spustte 'gh auth login' rucne.
-    goto pause_and_return
-)
-echo.
-echo  Vytvarim release %TAG% s .exe...
-gh release create %TAG% "dist\ZeddiHubTools.exe" ^
-    --repo %GITHUB_OWNER%/%GITHUB_REPO% ^
-    --title "ZeddiHub Tools Desktop %TAG%" ^
-    --notes-file "RELEASE_NOTES_%TAG%.md" ^
-    --latest || (
-    echo  CHYBA pri vytvareni release (mozna uz existuje).
-    goto pause_and_return
-)
-echo.
-echo  [OK] Release vytvoren:
-echo    https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases/tag/%TAG%
-goto pause_and_return
+echo   Vytvarim release %TAG% s .exe...
+gh release create %TAG% "dist\ZeddiHubTools.exe" --title "%TAG%" --generate-notes
+goto pause_and_return_rescan
 
 REM =======================================================================
 REM  [7] GIT STATUS
 REM =======================================================================
 :git_status
-cls
+call :header "[7] Git status"
+echo   -- git status --
+git status
 echo.
-echo  ====================================================================
-echo   [7] GIT STATUS
-echo  ====================================================================
+echo   -- git branch -vv --
+git branch -vv
 echo.
-echo  --- Branch ---
-git branch --show-current
+echo   -- posledni commity --
+git log --oneline -10 2>nul
 echo.
-echo  --- Last commit ---
-git log -1 --oneline
-echo.
-echo  --- Changes ---
-git status --short
-echo.
-echo  --- Local tags ---
-git tag -l
-echo.
-echo  --- Remote tags ---
-git ls-remote --tags origin 2>nul | findstr /V "{}" | findstr /C:"refs/tags"
+echo   -- tagy (poslednich 10) --
+git for-each-ref --count=10 --sort=-creatordate --format="%%(refname:short)  %%(creatordate:short)" refs/tags 2>nul
 goto pause_and_return
 
 REM =======================================================================
 REM  [8] SMAZAT TAG
 REM =======================================================================
 :delete_tag
-cls
+call :header "[8] Smazat tag %TAG%"
+call :warn "Pouzivat POUZE pokud push selhal a potrebujete zacit znovu."
 echo.
-echo  ====================================================================
-echo   [8] SMAZAT TAG %TAG%
-echo  ====================================================================
+choice /c AN /n /m "  [A]no pokracovat / [N]e zrusit: "
+if errorlevel 2 goto render
 echo.
-echo  Tento krok smaze tag %TAG% LOKALNE i na GitHubu.
-echo  Pouzivat POUZE pokud push selhal a potrebujete zacit znovu.
-echo.
-choice /c AN /n /m "  Pokracovat? [A]no / [N]e: "
-if errorlevel 2 goto menu
-echo.
-git tag -d %TAG% 2>nul && echo   (lokalni tag %TAG% smazan) || echo   (lokalni tag neexistoval)
+git tag -d %TAG% 2>nul && call :ok "Lokalni tag %TAG% smazan." || call :info "(lokalni tag neexistoval)"
 if defined GITHUB_TOKEN (
-    echo.
-    echo  Mazu remote tag...
     set "REMOTE_URL=https://%GITHUB_TOKEN%@github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git"
     git push "!REMOTE_URL!" --delete %TAG% 2>nul && (
-        echo   [OK] remote tag smazan
+        call :ok "Remote tag smazan."
     ) || (
-        echo   (remote tag neexistoval, nebo chybi permissions)
+        call :info "(remote tag neexistoval nebo chyba permissions)"
     )
 ) else (
-    echo  .env nema token - remote tag smazte rucne na GitHubu.
+    call :warn ".env nema token - remote tag smazte rucne na GitHubu."
 )
-goto pause_and_return
+goto pause_and_return_rescan
 
 REM =======================================================================
 REM  [9] OTEVRIT GITHUB
-REM =======================================================================
-:open_github
-cls
-echo.
-echo  ====================================================================
-echo   [9] OTEVRIT GITHUB
-echo  ====================================================================
-echo.
-echo    [a] Repo home      https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%
-echo    [b] Releases       https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases
-echo    [c] Actions        https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions
-echo    [d] Issues         https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/issues
-echo    [e] Settings PAT   https://github.com/settings/personal-access-tokens
-echo    [0] zpet
-echo.
-set /p GHCHOICE=  Volba:
-if /i "%GHCHOICE%"=="a" start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%"
-if /i "%GHCHOICE%"=="b" start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases"
-if /i "%GHCHOICE%"=="c" start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions"
-if /i "%GHCHOICE%"=="d" start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/issues"
-if /i "%GHCHOICE%"=="e" start "" "https://github.com/settings/personal-access-tokens"
-goto menu
-
-REM =======================================================================
-:end
-echo.
-echo  Nashledanou!
-endlocal
-exit /b 0
+RE

@@ -6,7 +6,8 @@
 
 define('GITHUB_REPO',    'ZeddiS/zeddihub-tools-desktop');
 define('GITHUB_RELEASE', 'https://github.com/' . GITHUB_REPO . '/releases/latest');
-define('GITHUB_DL',      'https://github.com/' . GITHUB_REPO . '/releases/latest/download/ZeddiHub.Tools.exe');
+define('DL_FILENAME',    'ZeddiHubTools.exe');
+define('GITHUB_DL',      'https://github.com/' . GITHUB_REPO . '/releases/latest/download/' . DL_FILENAME);
 
 function get_latest_version(): string {
     $cache = sys_get_temp_dir() . '/zeddihub_version_cache.txt';
@@ -34,7 +35,53 @@ function get_latest_version(): string {
     return '—';
 }
 
+function get_recent_releases(int $limit = 5): array {
+    $cache = sys_get_temp_dir() . '/zeddihub_releases_cache.json';
+    if (file_exists($cache) && (time() - filemtime($cache)) < 1800) {
+        $data = json_decode(@file_get_contents($cache), true);
+        if (is_array($data)) return array_slice($data, 0, $limit);
+    }
+    $api_url = 'https://api.github.com/repos/' . GITHUB_REPO . '/releases?per_page=' . $limit;
+    $json = null;
+    if (function_exists('curl_init')) {
+        $ch = curl_init($api_url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_USERAGENT      => 'ZeddiHubTools-landing',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER     => ['Accept: application/vnd.github.v3+json'],
+        ]);
+        $json = curl_exec($ch);
+        curl_close($ch);
+    }
+    if (!$json && ini_get('allow_url_fopen')) {
+        $ctx = stream_context_create(['http' => [
+            'timeout' => 5, 'ignore_errors' => true,
+            'header'  => "User-Agent: ZeddiHubTools-landing\r\nAccept: application/vnd.github.v3+json\r\n",
+        ]]);
+        $json = @file_get_contents($api_url, false, $ctx);
+    }
+    if (!$json) return [];
+    $rels = json_decode($json, true);
+    if (!is_array($rels)) return [];
+    $trim = [];
+    foreach (array_slice($rels, 0, $limit) as $r) {
+        $trim[] = [
+            'tag'       => $r['tag_name'] ?? '?',
+            'name'      => $r['name'] ?: ($r['tag_name'] ?? '?'),
+            'body'      => $r['body'] ?? '',
+            'published' => substr($r['published_at'] ?? '', 0, 10),
+            'url'       => $r['html_url'] ?? '',
+            'prerelease'=> !empty($r['prerelease']),
+        ];
+    }
+    @file_put_contents($cache, json_encode($trim));
+    return $trim;
+}
+
 $version = get_latest_version();
+$releases = get_recent_releases(5);
 ?>
 <!DOCTYPE html>
 <html lang="cs" data-lang="cs">
@@ -84,16 +131,18 @@ code{background:var(--card2);padding:2px 7px;border-radius:4px;font-size:.85em;c
 .navbar-brand:hover{text-decoration:none}
 .brand-dot{width:9px;height:9px;background:var(--primary);border-radius:50%;box-shadow:0 0 8px var(--primary)}
 .navbar-logo{height:34px;width:auto;display:block;image-rendering:auto;image-rendering:-webkit-optimize-contrast;filter:none;object-fit:contain}
-.hero-banner{display:block;max-width:340px;width:100%;height:auto;margin:0 auto 32px;image-rendering:auto;image-rendering:-webkit-optimize-contrast;filter:none;object-fit:contain}
+.hero-banner{display:block;max-width:320px;width:100%;height:auto;margin:0 auto 24px;image-rendering:auto;image-rendering:-webkit-optimize-contrast;filter:none;object-fit:contain;filter:drop-shadow(0 8px 32px rgba(240,165,0,.25))}
 .navbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .nav-link{font-size:13px;color:var(--text-dim);padding:6px 10px;border-radius:6px;transition:color .15s,background .15s}
 .nav-link:hover{color:var(--text);background:var(--card);text-decoration:none}
 .btn-lang{
-  font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;
+  font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;
   background:var(--card2);border:1px solid var(--border);color:var(--text-dim);
   cursor:pointer;transition:all .15s;
+  display:inline-flex;align-items:center;gap:6px;line-height:1;
 }
 .btn-lang:hover{color:var(--text);border-color:var(--primary)}
+.btn-lang svg.flag{width:18px;height:13px;display:block;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.08)}
 .btn-admin{
   display:inline-flex;align-items:center;gap:6px;
   background:var(--card);border:1px solid var(--border);color:var(--text);
@@ -118,13 +167,13 @@ code{background:var(--card2);padding:2px 7px;border-radius:4px;font-size:.85em;c
 
 /* ── Hero ─── */
 .hero{
-  text-align:center;padding:100px 24px 88px;
+  text-align:center;padding:48px 24px 80px;
   max-width:760px;margin:0 auto;
   position:relative;
 }
 .hero-glow{
-  position:absolute;top:0;left:50%;transform:translateX(-50%);
-  width:600px;height:300px;
+  position:absolute;top:20px;left:50%;transform:translateX(-50%);
+  width:620px;height:280px;
   background:radial-gradient(ellipse at center, var(--primary-glow) 0%, transparent 70%);
   pointer-events:none;z-index:0;
 }
@@ -250,11 +299,28 @@ footer a:hover{color:var(--primary);text-decoration:none}
 .footer-links{display:flex;gap:24px;justify-content:center;margin-bottom:12px;flex-wrap:wrap}
 
 @media(max-width:640px){
-  .hero{padding:72px 16px 60px}
-  section{padding:52px 16px}
+  .hero{padding:32px 16px 56px}
+  .hero-banner{max-width:260px;margin-bottom:20px}
+  .hero-title{font-size:32px}
+  .hero-sub{font-size:15px;margin-bottom:28px}
+  section{padding:44px 16px}
   .navbar{padding:0 16px}
   .btn-download,.btn-outline{font-size:14px;padding:12px 22px}
 }
+
+/* ── News section (N-04) ── */
+.news-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:12px}
+.news-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:22px;transition:transform .18s,border-color .18s;position:relative;overflow:hidden}
+.news-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--primary)}
+.news-card:hover{transform:translateY(-3px);border-color:var(--primary)}
+.news-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.news-tag{color:var(--primary);font-weight:800;font-size:17px}
+.news-date{color:var(--text-dark);font-size:12px;font-family:'Consolas',monospace}
+.news-name{color:var(--text);font-size:14px;font-weight:600;margin-bottom:10px}
+.news-body{color:var(--text-dim);font-size:13px;line-height:1.6;max-height:84px;overflow:hidden;margin-bottom:10px;white-space:pre-line}
+.news-link{font-size:13px;color:var(--primary);font-weight:600}
+.news-badge-pre{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--card2);color:var(--text-dim);font-weight:700}
+.news-empty{color:var(--text-dim);font-style:italic;padding:24px;text-align:center}
 </style>
 </head>
 <body>
@@ -266,9 +332,24 @@ footer a:hover{color:var(--primary);text-decoration:none}
   </a>
   <div class="navbar-right">
     <a href="#features" class="nav-link" data-cs="Funkce" data-en="Features">Funkce</a>
+    <a href="#news" class="nav-link" data-cs="Novinky" data-en="News">Novinky</a>
+    <a href="guides.php" class="nav-link" data-cs="Návody" data-en="Guides">Návody</a>
     <a href="#start" class="nav-link" data-cs="Ke stažení" data-en="Download">Ke stažení</a>
     <a href="https://dsc.gg/zeddihub" target="_blank" rel="noopener" class="nav-link">Discord</a>
-    <button class="btn-lang" onclick="toggleLang()" id="langBtn">🇬🇧 EN</button>
+    <button class="btn-lang" onclick="toggleLang()" id="langBtn" aria-label="Switch language">
+      <svg class="flag" viewBox="0 0 60 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <clipPath id="gb-s"><path d="M0,0 v30 h60 v-30 z"/></clipPath>
+        <clipPath id="gb-t"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath>
+        <g clip-path="url(#gb-s)">
+          <path d="M0,0 v30 h60 v-30 z" fill="#012169"/>
+          <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>
+          <path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#gb-t)" stroke="#C8102E" stroke-width="4"/>
+          <path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/>
+          <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>
+        </g>
+      </svg>
+      <span id="langBtnText">EN</span>
+    </button>
     <a href="admin/" class="btn-admin">🔐 Admin</a>
   </div>
 </nav>
@@ -291,8 +372,8 @@ footer a:hover{color:var(--primary);text-decoration:none}
     Vše, co potřebuješ jako hráč nebo správce CS2, CS:GO či Rust serveru, na jednom místě. Bez instalace, bez Pythonu.
   </p>
   <div class="hero-actions anim">
-    <a href="<?= GITHUB_DL ?>" class="btn-download">
-      ⬇ <span data-cs="Stáhnout ZeddiHub.Tools.exe" data-en="Download ZeddiHub.Tools.exe">Stáhnout ZeddiHub.Tools.exe</span>
+    <a href="<?= GITHUB_DL ?>" class="btn-download" download="<?= DL_FILENAME ?>">
+      ⬇ <span data-cs="Stáhnout <?= DL_FILENAME ?>" data-en="Download <?= DL_FILENAME ?>">Stáhnout <?= DL_FILENAME ?></span>
     </a>
     <a href="<?= GITHUB_RELEASE ?>" target="_blank" rel="noopener" class="btn-outline">
       📋 <span data-cs="Všechny verze" data-en="All releases">Všechny verze</span>
@@ -387,6 +468,48 @@ footer a:hover{color:var(--primary);text-decoration:none}
       <div class="feature-name" data-cs="Dark / Light mode" data-en="Dark / Light mode">Dark / Light mode</div>
       <div class="feature-desc" data-cs="Plný dark a light mode s barevnými tématy pro každou hru." data-en="Full dark and light mode with per-game color themes.">Plný dark a light mode s barevnými tématy pro každou hru.</div>
     </div>
+    <div class="feature-card reveal" style="--fc:#ef4444">
+      <span class="feature-icon">🖱️</span>
+      <div class="feature-name" data-cs="Autoclicker" data-en="Autoclicker">Autoclicker</div>
+      <div class="feature-desc" data-cs="Globální autoclicker s nastavitelným CPS, hotkey start/stop a volbou tlačítka myši." data-en="Global autoclicker with adjustable CPS, hotkey start/stop, and mouse button selection.">Globální autoclicker s nastavitelným CPS, hotkey start/stop a volbou tlačítka myši.</div>
+      <span class="tag-game" style="background:#2a0a0a;border-color:#6a1a1a;color:#ef4444">NEW v1.7</span>
+    </div>
+    <div class="feature-card reveal" style="--fc:#fbbf24">
+      <span class="feature-icon">📝</span>
+      <div class="feature-name" data-cs="Sticky Notes" data-en="Sticky Notes">Sticky Notes</div>
+      <div class="feature-desc" data-cs="Perzistentní poznámky na ploše. Podpora self-destruct timerů pro citlivé údaje." data-en="Persistent desktop notes. Supports self-destruct timers for sensitive data.">Perzistentní poznámky na ploše. Podpora self-destruct timerů pro citlivé údaje.</div>
+      <span class="tag-game" style="background:#2a1a00;border-color:#6a4400;color:#fbbf24">NEW v1.7</span>
+    </div>
+    <div class="feature-card reveal" style="--fc:#ff0000">
+      <span class="feature-icon">📺</span>
+      <div class="feature-name" data-cs="YouTube Downloader" data-en="YouTube Downloader">YouTube Downloader</div>
+      <div class="feature-desc" data-cs="Stahování YouTube videí i zvuku (MP3). Výběr kvality od 360p po 4K, lazy yt-dlp." data-en="Download YouTube videos and audio (MP3). Quality from 360p to 4K, lazy yt-dlp.">Stahování YouTube videí i zvuku (MP3). Výběr kvality od 360p po 4K.</div>
+      <span class="tag-game" style="background:#2a0000;border-color:#6a0000;color:#ff6666">NEW v1.7</span>
+    </div>
+    <div class="feature-card reveal" style="--fc:#10b981">
+      <span class="feature-icon">🚀</span>
+      <div class="feature-name" data-cs="Spouštět při startu" data-en="Launch at startup">Spouštět při startu</div>
+      <div class="feature-desc" data-cs="Jedním klikem zapne autostart aplikace při přihlášení do Windows (zápis do registru)." data-en="Toggle Windows startup launch with one click (registry-based).">Jedním klikem zapne autostart aplikace při přihlášení do Windows.</div>
+      <span class="tag-game" style="background:#00220a;border-color:#00551a;color:#10b981">NEW v1.7</span>
+    </div>
+    <div class="feature-card reveal" style="--fc:#60a5fa">
+      <span class="feature-icon">🔔</span>
+      <div class="feature-name" data-cs="GitHub Checker" data-en="GitHub Checker">GitHub Checker</div>
+      <div class="feature-desc" data-cs="Monitoring GitHub repozitářů — nové releases, issues, PR. Přímé notifikace v trayi." data-en="Monitor GitHub repos — new releases, issues, PRs. Direct tray notifications.">Monitoring GitHub repozitářů — nové releases, issues, PR. Notifikace v trayi.</div>
+      <span class="tag-game" style="background:#0a1a2a;border-color:#1a3355;color:#60a5fa">NEW v1.7</span>
+    </div>
+    <div class="feature-card reveal" style="--fc:#a78bfa">
+      <span class="feature-icon">🎮</span>
+      <div class="feature-name" data-cs="Sensitivity detekce" data-en="Sensitivity detection">Sensitivity detekce</div>
+      <div class="feature-desc" data-cs="Automatická detekce Windows sensitivity z registru pro přesný přepočet eDPI mezi hrami." data-en="Auto-detect Windows mouse sensitivity from registry for precise eDPI conversion between games.">Auto-detekce Windows sensitivity pro přesný přepočet eDPI mezi hrami.</div>
+      <span class="tag-game" style="background:#1a0a2a;border-color:#3a1a5a;color:#a78bfa">NEW v1.7</span>
+    </div>
+    <div class="feature-card reveal" style="--fc:#06b6d4">
+      <span class="feature-icon">📰</span>
+      <div class="feature-name" data-cs="Changelog v aplikaci" data-en="In-app changelog">Changelog v aplikaci</div>
+      <div class="feature-desc" data-cs="Novinky z posledních GitHub releases přímo v aplikaci — víš co je nového bez opuštění nástroje." data-en="Latest GitHub release notes directly in the app — stay updated without leaving the tool.">Novinky z posledních GitHub releases přímo v aplikaci.</div>
+      <span class="tag-game" style="background:#002a30;border-color:#005a6a;color:#06b6d4">NEW v1.7</span>
+    </div>
   </div>
 </section>
 
@@ -400,21 +523,49 @@ footer a:hover{color:var(--primary);text-decoration:none}
 
   <div class="steps">
     <div class="step reveal">
-      <div class="step-title" data-cs="Stáhnout .exe" data-en="Download .exe">Stáhnout .exe</div>
+      <div class="step-title" data-cs="1. Stáhnout .exe" data-en="1. Download .exe">1. Stáhnout .exe</div>
       <div class="step-desc" data-cs="Stáhněte ZeddiHub.Tools.exe z nejnovější verze na GitHubu." data-en="Download ZeddiHub.Tools.exe from the latest GitHub release.">Stáhněte <code>ZeddiHub.Tools.exe</code> z nejnovější verze na GitHubu.</div>
     </div>
     <div class="step reveal">
-      <div class="step-title" data-cs="Spustit" data-en="Launch">Spustit</div>
-      <div class="step-desc" data-cs="Žádná instalace. Dvojklik a aplikace se spustí." data-en="No installation. Double-click to launch.">Žádná instalace. Dvojklik a aplikace se spustí.</div>
+      <div class="step-title" data-cs="2. Spustit" data-en="2. Launch">2. Spustit</div>
+      <div class="step-desc" data-cs="Žádná instalace, žádný Python. Dvojklik a aplikace se spustí." data-en="No installation, no Python. Double-click to launch.">Žádná instalace, žádný Python. Dvojklik a aplikace se spustí.</div>
     </div>
     <div class="step reveal">
-      <div class="step-title" data-cs="Přihlásit se" data-en="Log in">Přihlásit se</div>
-      <div class="step-desc" data-cs="Zadejte přihlašovací údaje nebo přístupový kód pro odemčení server tools." data-en="Enter credentials or an access code to unlock server tools.">Zadejte přihlašovací údaje nebo přístupový kód pro odemčení server tools.</div>
+      <div class="step-title" data-cs="3. Přihlásit se" data-en="3. Log in">3. Přihlásit se</div>
+      <div class="step-desc" data-cs="Zadejte přihlašovací údaje nebo přístupový kód. Hotovo – aplikace běží v trayi." data-en="Enter credentials or an access code. Done – app runs in the system tray.">Zadejte přihlašovací údaje nebo přístupový kód. Hotovo – aplikace běží v trayi.</div>
     </div>
-    <div class="step reveal">
-      <div class="step-title" data-cs="Hotovo" data-en="Done">Hotovo</div>
-      <div class="step-desc" data-cs="Aplikace běží v trayi. Přistupte pravým klikem na ikonu v liště." data-en="App runs in the system tray. Right-click the tray icon to access it.">Aplikace běží v trayi. Přistupte pravým klikem na ikonu v liště.</div>
-    </div>
+  </div>
+</section>
+
+<hr class="divider-line">
+
+<!-- ── News / Releases (N-04) ── -->
+<section id="news">
+  <div class="section-label reveal" data-cs="Novinky" data-en="What's new">Novinky</div>
+  <h2 class="section-title reveal" data-cs="Aktualizace a changelog" data-en="Updates & changelog">Aktualizace a changelog</h2>
+  <p class="section-sub reveal" data-cs="Posledních 5 verzí přímo z GitHub Releases — každá verze přináší nové funkce a opravy." data-en="Last 5 versions straight from GitHub Releases — each release brings new features and fixes.">Posledních 5 verzí přímo z GitHub Releases — každá verze přináší nové funkce a opravy.</p>
+
+  <div class="news-grid">
+    <?php if (empty($releases)): ?>
+      <div class="news-empty" data-cs="Momentálně se nepodařilo načíst seznam verzí. Zkuste to prosím později nebo navštivte GitHub přímo." data-en="Unable to load releases right now. Please try again later or visit GitHub directly.">Momentálně se nepodařilo načíst seznam verzí. Zkuste to prosím později nebo navštivte GitHub přímo.</div>
+    <?php else: foreach ($releases as $r): ?>
+      <article class="news-card reveal">
+        <div class="news-head">
+          <div class="news-tag">
+            <?= htmlspecialchars($r['tag']) ?>
+            <?php if ($r['prerelease']): ?><span class="news-badge-pre">pre</span><?php endif; ?>
+          </div>
+          <div class="news-date"><?= htmlspecialchars($r['published']) ?></div>
+        </div>
+        <div class="news-name"><?= htmlspecialchars($r['name']) ?></div>
+        <div class="news-body"><?= htmlspecialchars(
+            mb_substr(preg_replace('/\r\n|\r/', "\n", $r['body'] ?? ''), 0, 280)
+        ) ?><?= mb_strlen($r['body'] ?? '') > 280 ? '…' : '' ?></div>
+        <?php if (!empty($r['url'])): ?>
+          <a class="news-link" href="<?= htmlspecialchars($r['url']) ?>" target="_blank" rel="noopener" data-cs="Číst na GitHubu →" data-en="Read on GitHub →">Číst na GitHubu →</a>
+        <?php endif; ?>
+      </article>
+    <?php endforeach; endif; ?>
   </div>
 </section>
 
@@ -429,8 +580,8 @@ footer a:hover{color:var(--primary);text-decoration:none}
     <span data-cs="Zdarma" data-en="Free">Zdarma</span>
   </p>
   <div class="hero-actions reveal">
-    <a href="<?= GITHUB_DL ?>" class="btn-download">
-      ⬇ <span data-cs="Stáhnout .exe" data-en="Download .exe">Stáhnout .exe</span>
+    <a href="<?= GITHUB_DL ?>" class="btn-download" download="<?= DL_FILENAME ?>">
+      ⬇ <span data-cs="Stáhnout <?= DL_FILENAME ?>" data-en="Download <?= DL_FILENAME ?>">Stáhnout <?= DL_FILENAME ?></span>
     </a>
     <a href="<?= GITHUB_RELEASE ?>" target="_blank" rel="noopener" class="btn-outline">
       📋 <span data-cs="Releases na GitHubu" data-en="GitHub Releases">Releases na GitHubu</span>
@@ -457,7 +608,29 @@ function applyLang(lang) {
   currentLang = lang;
   localStorage.setItem('zh_lang', lang);
   document.documentElement.setAttribute('data-lang', lang);
-  document.getElementById('langBtn').textContent = lang === 'cs' ? '🇬🇧 EN' : '🇨🇿 CS';
+  // Update language button: show the OTHER language flag + label
+  const btn = document.getElementById('langBtn');
+  const txt = document.getElementById('langBtnText');
+  const svg = btn.querySelector('svg.flag');
+  if (lang === 'cs') {
+    // Currently CS -> button offers switch to EN (show UK flag)
+    txt.textContent = 'EN';
+    svg.innerHTML = '<clipPath id="gb-s"><path d="M0,0 v30 h60 v-30 z"/></clipPath>'
+      + '<clipPath id="gb-t"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath>'
+      + '<g clip-path="url(#gb-s)">'
+      + '<path d="M0,0 v30 h60 v-30 z" fill="#012169"/>'
+      + '<path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>'
+      + '<path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#gb-t)" stroke="#C8102E" stroke-width="4"/>'
+      + '<path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/>'
+      + '<path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>'
+      + '</g>';
+  } else {
+    // Currently EN -> button offers switch to CS (show CZ flag)
+    txt.textContent = 'CS';
+    svg.innerHTML = '<rect width="60" height="15" y="0" fill="#fff"/>'
+      + '<rect width="60" height="15" y="15" fill="#D7141A"/>'
+      + '<path d="M0,0 L30,15 L0,30 Z" fill="#11457E"/>';
+  }
 
   // Replace text content from data-cs / data-en attributes
   document.querySelectorAll('[data-' + lang + ']').forEach(el => {

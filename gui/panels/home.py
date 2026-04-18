@@ -26,6 +26,12 @@ try:
 except ImportError:
     def t(key, **kw): return key
 
+try:
+    from ..auth import is_authenticated, get_current_user
+except ImportError:
+    def is_authenticated(): return False
+    def get_current_user(): return None
+
 from .. import icons
 
 BANNER_PATH = Path(__file__).parent.parent.parent / "assets" / "banner.png"
@@ -153,6 +159,20 @@ class HomePanel(ctk.CTkFrame):
                           **btn_kw
                           ).pack(side="left", padx=4)
 
+        # ── Login card (N-11) + PC Tools quick grid (E-01) side by side ──
+        two_col = ctk.CTkFrame(scroll, fg_color="transparent")
+        two_col.pack(fill="x", padx=20, pady=(4, 8))
+        two_col.grid_columnconfigure(0, weight=1)
+        two_col.grid_columnconfigure(1, weight=2)
+
+        self._login_card = ctk.CTkFrame(two_col, fg_color=th["card_bg"], corner_radius=10)
+        self._login_card.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        self._build_login_card(self._login_card)
+
+        self._pc_home_card = ctk.CTkFrame(two_col, fg_color=th["card_bg"], corner_radius=10)
+        self._pc_home_card.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        self._build_pc_tools_home(self._pc_home_card)
+
         # Server status section
         srv_header = ctk.CTkFrame(scroll, fg_color="transparent")
         srv_header.pack(fill="x", padx=20, pady=(12, 4))
@@ -193,6 +213,154 @@ class HomePanel(ctk.CTkFrame):
         # ── GitHub Checker (N-05) + Novinky z Releases (N-13) ────────────
         self._build_github_section(scroll)
 
+
+    # ─── Login Card (N-11) ───────────────────────────────────────────────────
+
+    def _build_login_card(self, parent):
+        th = self.theme
+        _label(parent, " " + t("login_card_title"), 13, bold=True,
+               color=th["primary"],
+               image=icons.icon("user-shield", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+
+        self._login_status = _label(parent, "", 11, color=th["text_dim"])
+        self._login_status.pack(padx=14, pady=(0, 8), anchor="w")
+
+        self._login_btn_row = ctk.CTkFrame(parent, fg_color="transparent")
+        self._login_btn_row.pack(fill="x", padx=14, pady=(0, 12))
+
+        self._refresh_login_card()
+
+    def _refresh_login_card(self):
+        """Re-render login card (called on auth state changes / periodic)."""
+        th = self.theme
+        for w in self._login_btn_row.winfo_children():
+            try:
+                w.destroy()
+            except Exception:
+                pass
+
+        if is_authenticated():
+            user = get_current_user() or "?"
+            self._login_status.configure(
+                text=f"✅ {t('login_card_signed_in')}: {user}",
+                text_color=th["success"],
+            )
+            ctk.CTkButton(
+                self._login_btn_row, text=" " + t("login_card_profile_btn"),
+                image=icons.icon("id-card", 13, th["text"]), compound="left",
+                fg_color=th["secondary"], hover_color=th["primary"],
+                font=ctk.CTkFont("Segoe UI", 11), height=32,
+                command=lambda: self._nav_callback("settings") if self._nav_callback else None,
+            ).pack(side="left", padx=(0, 6))
+            ctk.CTkButton(
+                self._login_btn_row, text=" " + t("login_card_logout_btn"),
+                image=icons.icon("sign-out-alt", 13, "#ffffff"), compound="left",
+                fg_color="#8b2020", hover_color="#6b1818",
+                text_color="#ffffff",
+                font=ctk.CTkFont("Segoe UI", 11), height=32,
+                command=self._handle_logout,
+            ).pack(side="left")
+        else:
+            self._login_status.configure(
+                text="🔒 " + t("login_card_anon"),
+                text_color=th["text_dim"],
+            )
+            ctk.CTkButton(
+                self._login_btn_row, text=" " + t("login_card_login_btn"),
+                image=icons.icon("sign-in-alt", 13, "#ffffff"), compound="left",
+                fg_color=th["primary"], hover_color=th["primary_hover"],
+                font=ctk.CTkFont("Segoe UI", 11, "bold"), height=32,
+                command=self._handle_login,
+            ).pack(side="left")
+
+    def _handle_login(self):
+        parent = self.winfo_toplevel()
+        if hasattr(parent, "_open_auth_dialog"):
+            parent._open_auth_dialog(on_success=self._refresh_login_card)
+        elif hasattr(parent, "_show_auth_dialog"):
+            parent._show_auth_dialog()
+            self.after(500, self._refresh_login_card)
+
+    def _handle_logout(self):
+        try:
+            from ..auth import logout as _logout
+            _logout()
+        except Exception:
+            pass
+        self._refresh_login_card()
+        parent = self.winfo_toplevel()
+        if hasattr(parent, "_update_auth_ui"):
+            try:
+                parent._update_auth_ui()
+            except Exception:
+                pass
+
+    # ─── PC Tools Home Quick Grid (E-01) ─────────────────────────────────────
+
+    def _build_pc_tools_home(self, parent):
+        th = self.theme
+
+        header_row = ctk.CTkFrame(parent, fg_color="transparent")
+        header_row.pack(fill="x", padx=14, pady=(12, 4))
+        _label(header_row, " " + t("pc_tools_home"), 13, bold=True,
+               color=th["primary"],
+               image=icons.icon("laptop", 15, th["primary"]), compound="left"
+               ).pack(side="left")
+        ctk.CTkButton(
+            header_row, text=t("pc_tools_open_full"),
+            fg_color="transparent", hover_color=th["secondary"],
+            text_color=th["primary"],
+            font=ctk.CTkFont("Segoe UI", 10), height=24,
+            command=lambda: self._nav_callback("pc_tools") if self._nav_callback else None,
+        ).pack(side="right")
+
+        _label(parent, t("pc_tools_home_hint"),
+               10, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
+
+        grid = ctk.CTkFrame(parent, fg_color="transparent")
+        grid.pack(fill="x", padx=14, pady=(0, 14))
+        for c in range(3):
+            grid.grid_columnconfigure(c, weight=1)
+
+        actions = [
+            (t("dns_flush_btn"),  "eraser",       self._pc_dns_flush),
+            (t("temp_clean"),     "trash",        lambda: self._jump_pc_tab("dns_temp")),
+            (t("ping_tool"),      "wifi",         lambda: self._jump_pc_tab("net_tools")),
+            (t("ip_info"),        "globe",        lambda: self._jump_pc_tab("net_tools")),
+            (t("sys_info"),       "microchip",    lambda: self._jump_pc_tab("sys_info")),
+            (t("process_list"),   "list-check",   lambda: self._jump_pc_tab("utility")),
+        ]
+
+        for i, (label, icon_name, cmd) in enumerate(actions):
+            b = ctk.CTkButton(
+                grid, text=" " + label,
+                image=icons.icon(icon_name, 14, th["primary"]),
+                compound="left", anchor="w",
+                fg_color=th["secondary"], hover_color=th["primary"],
+                font=ctk.CTkFont("Segoe UI", 11),
+                height=34,
+                command=cmd,
+            )
+            b.grid(row=i // 3, column=i % 3, padx=4, pady=4, sticky="ew")
+
+    def _pc_dns_flush(self):
+        """Inline DNS flush from the home panel."""
+        import subprocess, tkinter.messagebox as _mb
+        try:
+            subprocess.run(
+                ["ipconfig", "/flushdns"],
+                capture_output=True, text=True, timeout=8,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            _mb.showinfo("DNS", "✅ DNS cache flushed.")
+        except Exception as e:
+            _mb.showerror("DNS", f"✗ {e}")
+
+    def _jump_pc_tab(self, tab_name: str):
+        """Navigate to pc_tools and hint which tab to open (best-effort)."""
+        if self._nav_callback:
+            self._nav_callback("pc_tools")
 
     def _build_banner(self, parent):
         th = self.theme

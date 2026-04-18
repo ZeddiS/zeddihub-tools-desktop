@@ -266,6 +266,100 @@ class MainWindow(ctk.CTk):
         self.after(500, self._start_tray)
         self.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
 
+        # N-03: global keyboard shortcuts
+        self._fullscreen = False
+        self._bound_shortcuts: list = []
+        self._apply_shortcut_bindings()
+
+    def _apply_shortcut_bindings(self):
+        """N-03: wire or re-wire global shortcuts based on user preference."""
+        # Unbind previous
+        for seq in list(getattr(self, "_bound_shortcuts", [])):
+            try:
+                self.unbind_all(seq)
+            except Exception:
+                pass
+        self._bound_shortcuts = []
+
+        if not load_settings().get("shortcuts_enabled", True):
+            return
+
+        bindings = [
+            ("<Control-Key-1>", lambda e: self._navigate("home")),
+            ("<Control-Key-2>", lambda e: self._navigate("pc_tools")),
+            ("<Control-Key-3>", lambda e: self._navigate("settings")),
+            ("<Control-Key-4>", lambda e: self._navigate("links")),
+            ("<F5>",            lambda e: self._show_panel(self._current_nav_id)),
+            ("<Control-q>",     lambda e: self._quit_app()),
+            ("<Control-Q>",     lambda e: self._quit_app()),
+            ("<Control-m>",     lambda e: self._minimize_to_tray()),
+            ("<Control-M>",     lambda e: self._minimize_to_tray()),
+            ("<F11>",           lambda e: self._toggle_fullscreen()),
+            ("<F1>",            lambda e: self._show_shortcuts_help()),
+        ]
+        for seq, fn in bindings:
+            try:
+                self.bind_all(seq, fn)
+                self._bound_shortcuts.append(seq)
+            except Exception:
+                pass
+
+    def _toggle_fullscreen(self):
+        try:
+            self._fullscreen = not self._fullscreen
+            self.attributes("-fullscreen", self._fullscreen)
+        except Exception:
+            pass
+
+    def _show_shortcuts_help(self):
+        """F1: show a small keybindings help popup."""
+        th = self._get_current_theme()
+        d = ctk.CTkToplevel(self)
+        d.title(t("shortcuts_section"))
+        d.geometry("420x360")
+        d.configure(fg_color=th["content_bg"])
+        d.resizable(False, False)
+        try:
+            d.grab_set()
+        except Exception:
+            pass
+
+        ctk.CTkLabel(d, text=t("shortcuts_section"),
+                     font=ctk.CTkFont("Segoe UI", 16, "bold"),
+                     text_color=th["primary"]).pack(pady=(16, 4))
+        ctk.CTkLabel(d, text=t("shortcuts_hint"),
+                     font=ctk.CTkFont("Segoe UI", 10),
+                     text_color=th["text_dim"]).pack(pady=(0, 10))
+
+        rows = [
+            ("Ctrl+1", t("shortcuts_home")),
+            ("Ctrl+2", t("shortcuts_pc_tools")),
+            ("Ctrl+3", t("shortcuts_settings")),
+            ("Ctrl+4", t("shortcuts_links")),
+            ("F5",     t("shortcuts_refresh")),
+            ("Ctrl+Q", t("shortcuts_quit")),
+            ("Ctrl+M", t("shortcuts_tray")),
+            ("F11",    t("shortcuts_fullscreen")),
+            ("F1",     t("shortcuts_help")),
+        ]
+        body = ctk.CTkFrame(d, fg_color=th["card_bg"], corner_radius=6)
+        body.pack(fill="x", padx=20, pady=4)
+        for key, desc in rows:
+            r = ctk.CTkFrame(body, fg_color="transparent")
+            r.pack(fill="x", padx=10, pady=2)
+            ctk.CTkLabel(r, text=key, width=80,
+                         font=ctk.CTkFont("Consolas", 11, "bold"),
+                         text_color=th["primary"], anchor="w"
+                         ).pack(side="left")
+            ctk.CTkLabel(r, text=desc,
+                         font=ctk.CTkFont("Segoe UI", 11),
+                         text_color=th["text"]).pack(side="left", padx=(10, 0))
+
+        ctk.CTkButton(d, text=t("close"),
+                      fg_color=th["primary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=34,
+                      command=d.destroy).pack(pady=(14, 16))
+
     def _setup_window(self):
         self.title("ZeddiHub Tools")
         w, h = 1280, 820
@@ -334,64 +428,73 @@ class MainWindow(ctk.CTk):
         self._content_container.pack(fill="both", expand=True, side="left")
 
     def _build_header(self):
+        th = self._get_current_theme()
         # Left: logo + title
         left = ctk.CTkFrame(self._header, fg_color="transparent")
-        left.pack(side="left", padx=16, fill="y")
+        left.pack(side="left", padx=18, fill="y")
 
         if PIL_OK and LOGO_PATH.exists():
             try:
                 img = Image.open(LOGO_PATH).resize((32, 32), Image.LANCZOS)
                 self._header_logo = ctk.CTkImage(img, size=(32, 32))
-                ctk.CTkLabel(left, image=self._header_logo, text="").pack(side="left", padx=(0, 8))
+                ctk.CTkLabel(left, image=self._header_logo, text="").pack(side="left", padx=(0, 10))
             except Exception:
                 pass
 
         ctk.CTkLabel(left, text="ZeddiHub Tools",
                      font=ctk.CTkFont("Segoe UI", 16, "bold"),
-                     text_color="#f0a500").pack(side="left")
+                     text_color=th["primary"]).pack(side="left")
 
-        self._game_badge = ctk.CTkLabel(left, text="",
-                                         font=ctk.CTkFont("Segoe UI", 11),
-                                         text_color="#666666")
-        self._game_badge.pack(side="left", padx=(10, 0))
+        # Game badge gets a pill background for the new "Blur" look
+        self._game_badge = ctk.CTkLabel(
+            left, text="",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            text_color=th["text_dim"],
+            fg_color=th["glass"],
+            corner_radius=10,
+            padx=10 if False else 0,  # CTkLabel ignores padx — use text padding instead
+        )
+        self._game_badge.pack(side="left", padx=(12, 0), pady=14)
 
         # Right: auth status + version
         right = ctk.CTkFrame(self._header, fg_color="transparent")
-        right.pack(side="right", padx=16, fill="y")
+        right.pack(side="right", padx=18, fill="y")
 
         self._version_label = ctk.CTkLabel(right, text=f"v{CURRENT_VERSION}",
                                             font=ctk.CTkFont("Segoe UI", 9),
-                                            text_color="#444444")
+                                            text_color=th["text_muted"])
         self._version_label.pack(side="right", padx=(4, 0))
 
         self._auth_label = ctk.CTkLabel(right,
-                                         image=icons.icon("lock-open", 13, "#666666"),
+                                         image=icons.icon("lock-open", 13, th["text_dim"]),
                                          text=" " + t("not_logged_in"),
                                          compound="left",
                                          font=ctk.CTkFont("Segoe UI", 10),
-                                         text_color="#666666")
-        self._auth_label.pack(side="right", padx=8)
+                                         text_color=th["text_dim"])
+        self._auth_label.pack(side="right", padx=10)
 
         self._update_label = ctk.CTkLabel(right, text="",
-                                           font=ctk.CTkFont("Segoe UI", 10),
-                                           text_color="#f0a500")
+                                           font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                                           text_color=th["primary"])
         self._update_label.pack(side="right", padx=8)
 
-        # Dark/light mode toggle
+        # Dark/light mode toggle — softer, more rounded
         self._mode_btn = ctk.CTkButton(
-            right, image=icons.icon("sun", 15, "#666666"), text="",
-            width=34, height=28,
-            fg_color="transparent", hover_color="#2a2a2a",
+            right, image=icons.icon("sun", 15, th["text_dim"]), text="",
+            width=34, height=30,
+            corner_radius=10,
+            fg_color="transparent", hover_color=th["card_hover"],
             command=self._toggle_appearance_mode
         )
         self._mode_btn.pack(side="right", padx=4)
         self._update_mode_btn()
 
-        # N-12: "About" / "Info" tlačítko (ⓘ) vedle mode toggle
+        # N-12: "About" / "Info" tlačítko (ⓘ)
         self._about_btn = ctk.CTkButton(
-            right, image=icons.icon("circle-info", 15, "#666666"), text="",
-            width=34, height=28,
-            fg_color="transparent", hover_color="#2a2a2a",
+            right, image=icons.icon("circle-info", 15, th["text_dim"]), text="",
+            width=34, height=30,
+            corner_radius=10,
+            fg_color="transparent", hover_color=th["card_hover"],
             command=lambda: self._navigate("about"),
         )
         self._about_btn.pack(side="right", padx=4)
@@ -446,9 +549,10 @@ class MainWindow(ctk.CTk):
             text_color=nav_dim, anchor="w",
             font=ctk.CTkFont("Segoe UI", 10),
             height=30,
+            corner_radius=10,
             command=self._toggle_language
         )
-        self._lang_btn.pack(fill="x", padx=4, pady=(2, 2), side="bottom")
+        self._lang_btn.pack(fill="x", padx=8, pady=(2, 4), side="bottom")
 
         self._auth_btn = ctk.CTkButton(
             self._sidebar,
@@ -458,9 +562,11 @@ class MainWindow(ctk.CTk):
             fg_color="transparent", hover_color=nav_hover,
             text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
-            height=36, command=self._show_auth_dialog
+            height=36,
+            corner_radius=10,
+            command=self._show_auth_dialog
         )
-        self._auth_btn.pack(fill="x", padx=4, pady=2, side="bottom")
+        self._auth_btn.pack(fill="x", padx=8, pady=2, side="bottom")
 
         self._settings_btn = ctk.CTkButton(
             self._sidebar,
@@ -470,9 +576,11 @@ class MainWindow(ctk.CTk):
             fg_color="transparent", hover_color=nav_hover,
             text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
-            height=36, command=lambda: self._navigate("settings")
+            height=36,
+            corner_radius=10,
+            command=lambda: self._navigate("settings")
         )
-        self._settings_btn.pack(fill="x", padx=4, pady=2, side="bottom")
+        self._settings_btn.pack(fill="x", padx=8, pady=2, side="bottom")
 
         self._links_btn = ctk.CTkButton(
             self._sidebar,
@@ -482,9 +590,11 @@ class MainWindow(ctk.CTk):
             fg_color="transparent", hover_color=nav_hover,
             text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
-            height=36, command=lambda: self._navigate("links")
+            height=36,
+            corner_radius=10,
+            command=lambda: self._navigate("links")
         )
-        self._links_btn.pack(fill="x", padx=4, pady=2, side="bottom")
+        self._links_btn.pack(fill="x", padx=8, pady=2, side="bottom")
 
     def _build_nav_items(self):
         th = self._get_current_theme()
@@ -523,10 +633,10 @@ class MainWindow(ctk.CTk):
                     anchor="w",
                     font=ctk.CTkFont("Segoe UI", 12),
                     height=38,
-                    corner_radius=6,
+                    corner_radius=10,
                     command=lambda nid=nav_id: self._navigate(nid)
                 )
-                btn.pack(fill="x", padx=6, pady=1)
+                btn.pack(fill="x", padx=8, pady=2)
                 self._nav_buttons[nav_id] = btn
             else:
                 # Wrapper keeps section header + children together so
@@ -552,10 +662,10 @@ class MainWindow(ctk.CTk):
                     anchor="w",
                     font=ctk.CTkFont("Segoe UI", 11, "bold"),
                     height=34,
-                    corner_radius=4,
+                    corner_radius=8,
                     command=lambda sid=sec_id: self._toggle_section(sid)
                 )
-                section_btn.pack(fill="x", padx=4, pady=(6, 1))
+                section_btn.pack(fill="x", padx=8, pady=(8, 2))
                 self._section_btns[sec_id] = section_btn
 
                 # Children frame lives inside outer — toggling it never reorders siblings
@@ -586,10 +696,10 @@ class MainWindow(ctk.CTk):
                         anchor="w",
                         font=ctk.CTkFont("Segoe UI", 11),
                         height=36,
-                        corner_radius=6,
+                        corner_radius=10,
                         command=lambda nid=nav_id, auth=requires_auth: self._on_nav_click(nid, auth)
                     )
-                    btn.pack(fill="x", padx=6, pady=1)
+                    btn.pack(fill="x", padx=14, pady=1)
                     self._nav_buttons[nav_id] = btn
 
     def _toggle_section(self, sec_id: str):
@@ -731,6 +841,26 @@ class MainWindow(ctk.CTk):
             w = getattr(self, attr, None)
             if w:
                 w.configure(hover_color=nav_hover)
+
+        # v1.8.0 "Blur" redesign — keep header widgets in sync with active theme
+        try:
+            if hasattr(self, "_version_label"):
+                self._version_label.configure(text_color=th.get("text_muted", th["text_dim"]))
+            if hasattr(self, "_auth_label"):
+                self._auth_label.configure(text_color=th["text_dim"])
+            if hasattr(self, "_update_label"):
+                self._update_label.configure(text_color=th["primary"])
+            if hasattr(self, "_game_badge"):
+                self._game_badge.configure(
+                    text_color=th["text_dim"],
+                    fg_color=th.get("glass", th["card_bg"]),
+                )
+            for btn_attr in ("_mode_btn", "_about_btn"):
+                b = getattr(self, btn_attr, None)
+                if b:
+                    b.configure(hover_color=th.get("card_hover", th["card_bg"]))
+        except Exception:
+            pass
 
     def _show_panel(self, nav_id: str):
         if self._current_panel:

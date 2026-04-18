@@ -1,7 +1,7 @@
 {
-  "version": "1.6.0",
-  "release_date": "2026-04-11",
-  "changelog": "Opravy panelů, light mode, telemetrie, admin dashboard s GitHub stats, tray warning dialog, psutil auto-install.",
+  "version": "1.8.0",
+  "release_date": "2026-04-18",
+  "changelog": "Blur redesign + Game Optimization + Advanced PC Tools (auth) + File Share + global shortcuts + profile editor + home login card + web guides page + GitHub news carousel.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest/download/ZeddiHub.Tools.exe"
 }

@@ -280,6 +280,114 @@ class SettingsPanel(ctk.CTkFrame):
                       command=self._factory_reset
                       ).pack(padx=14, pady=(6, 14), anchor="w")
 
+        # ─── Shortcuts section (N-03) ─────────────────────────────────────────
+        sc_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        sc_card.pack(fill="x", pady=6)
+
+        _label(sc_card, " " + t("shortcuts_section"), 13, bold=True, color=th["primary"],
+               image=icons.icon("keyboard", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(sc_card, t("shortcuts_hint"),
+               10, color=th["text_dim"], wraplength=700, justify="left"
+               ).pack(padx=14, pady=(0, 8), anchor="w")
+
+        sc_enabled = load_settings().get("shortcuts_enabled", True)
+        self._sc_var = ctk.BooleanVar(value=sc_enabled)
+        ctk.CTkSwitch(
+            sc_card, text=t("shortcuts_enable"),
+            variable=self._sc_var,
+            command=self._toggle_shortcuts,
+            fg_color=th["secondary"], progress_color=th["primary"],
+            font=ctk.CTkFont("Segoe UI", 11),
+        ).pack(padx=14, pady=(0, 8), anchor="w")
+
+        # Shortcut reference table
+        sc_table = ctk.CTkFrame(sc_card, fg_color=th["secondary"], corner_radius=6)
+        sc_table.pack(fill="x", padx=14, pady=(0, 14))
+
+        shortcuts_ref = [
+            ("Ctrl+1", t("shortcuts_home")),
+            ("Ctrl+2", t("shortcuts_pc_tools")),
+            ("Ctrl+3", t("shortcuts_settings")),
+            ("Ctrl+4", t("shortcuts_links")),
+            ("F5",     t("shortcuts_refresh")),
+            ("Ctrl+Q", t("shortcuts_quit")),
+            ("Ctrl+M", t("shortcuts_tray")),
+            ("F11",    t("shortcuts_fullscreen")),
+            ("F1",     t("shortcuts_help")),
+        ]
+        for key, desc in shortcuts_ref:
+            row = ctk.CTkFrame(sc_table, fg_color="transparent")
+            row.pack(fill="x", padx=10, pady=3)
+            key_lbl = ctk.CTkLabel(
+                row, text=key, width=80,
+                font=ctk.CTkFont("Consolas", 11, "bold"),
+                text_color=th["primary"], anchor="w",
+            )
+            key_lbl.pack(side="left")
+            _label(row, desc, 11, color=th["text"]).pack(side="left", padx=(10, 0))
+
+        # ─── Report a bug section (N-09) ──────────────────────────────────────
+        bug_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        bug_card.pack(fill="x", pady=6)
+
+        _label(bug_card, " " + t("report_bug_section"), 13, bold=True, color=th["primary"],
+               image=icons.icon("bug", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(bug_card, t("report_bug_hint"),
+               10, color=th["text_dim"], wraplength=700, justify="left"
+               ).pack(padx=14, pady=(0, 8), anchor="w")
+
+        ctk.CTkButton(bug_card, text=" " + t("report_bug_btn"),
+                      image=icons.icon("github", 13, th["text"]), compound="left",
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=34,
+                      command=self._open_bug_report,
+                      ).pack(padx=14, pady=(0, 14), anchor="w")
+
+    def _toggle_shortcuts(self):
+        """N-03: Enable/disable global shortcut bindings."""
+        try:
+            settings = load_settings()
+            settings["shortcuts_enabled"] = bool(self._sc_var.get())
+            save_settings(settings)
+            # Notify main window to rebind
+            parent = self.winfo_toplevel()
+            if hasattr(parent, "_apply_shortcut_bindings"):
+                parent._apply_shortcut_bindings()
+        except Exception:
+            pass
+
+    def _open_bug_report(self):
+        """N-09: open pre-filled GitHub Issues template."""
+        import platform as _pf
+        import urllib.parse as _up
+        try:
+            parent = self.winfo_toplevel()
+            active_panel = getattr(parent, "_current_nav_id", "unknown")
+        except Exception:
+            active_panel = "unknown"
+
+        title = f"[Bug] v{CURRENT_VERSION} — "
+        body = (
+            "**Popis problému / Describe the bug**\n"
+            "<!-- Stručný popis co se stalo -->\n\n"
+            "**Kroky k reprodukci / Steps to reproduce**\n"
+            "1. …\n2. …\n3. …\n\n"
+            "**Očekávané chování / Expected behavior**\n\n\n"
+            "**Systémové info / System info**\n"
+            f"- App: ZeddiHub Tools v{CURRENT_VERSION}\n"
+            f"- OS: {_pf.system()} {_pf.release()} ({_pf.machine()})\n"
+            f"- Python: {_pf.python_version()}\n"
+            f"- Aktivní panel / Active panel: `{active_panel}`\n\n"
+            "**Screenshoty / logs (volitelné)**\n"
+        )
+        url = (
+            "https://github.com/ZeddiS/zeddihub-tools-desktop/issues/new"
+            f"?title={_up.quote(title)}&body={_up.quote(body)}&labels=bug"
+        )
+        webbrowser.open(url)
+
     def _backup_settings(self):
         import datetime, json as _json
         from tkinter import messagebox as _mb
@@ -487,6 +595,70 @@ class SettingsPanel(ctk.CTkFrame):
                image=icons.icon("user", 18, th["primary"]), compound="left"
                ).pack(padx=4, pady=(4, 12), anchor="w")
 
+        # ─── Profile section (N-10) ───────────────────────────────────────────
+        prof_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        prof_card.pack(fill="x", pady=6)
+
+        _label(prof_card, " " + t("profile_section"), 13, bold=True, color=th["primary"],
+               image=icons.icon("id-card", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(prof_card, t("profile_hint"),
+               10, color=th["text_dim"], wraplength=700, justify="left"
+               ).pack(padx=14, pady=(0, 10), anchor="w")
+
+        saved = load_settings()
+        prof = saved.get("profile", {}) if isinstance(saved.get("profile", {}), dict) else {}
+
+        prof_form = ctk.CTkFrame(prof_card, fg_color="transparent")
+        prof_form.pack(fill="x", padx=14, pady=(0, 6))
+        prof_form.grid_columnconfigure(1, weight=1)
+
+        _label(prof_form, t("profile_display_name") + ":", 11, color=th["text_dim"]
+               ).grid(row=0, column=0, sticky="w", padx=(0, 10), pady=4)
+        self._prof_name_var = ctk.StringVar(value=prof.get("display_name", get_current_user() or ""))
+        ctk.CTkEntry(prof_form, textvariable=self._prof_name_var, height=32,
+                     fg_color=th["secondary"], border_color=th["border"],
+                     font=ctk.CTkFont("Segoe UI", 11),
+                     ).grid(row=0, column=1, sticky="ew", pady=4)
+
+        _label(prof_form, t("profile_email") + ":", 11, color=th["text_dim"]
+               ).grid(row=1, column=0, sticky="w", padx=(0, 10), pady=4)
+        self._prof_email_var = ctk.StringVar(value=prof.get("email", ""))
+        ctk.CTkEntry(prof_form, textvariable=self._prof_email_var, height=32,
+                     fg_color=th["secondary"], border_color=th["border"],
+                     font=ctk.CTkFont("Segoe UI", 11),
+                     ).grid(row=1, column=1, sticky="ew", pady=4)
+
+        _label(prof_form, t("profile_about") + ":", 11, color=th["text_dim"]
+               ).grid(row=2, column=0, sticky="nw", padx=(0, 10), pady=4)
+        self._prof_about_txt = ctk.CTkTextbox(
+            prof_form, height=72,
+            fg_color=th["secondary"], border_color=th["border"],
+            font=ctk.CTkFont("Segoe UI", 11),
+        )
+        self._prof_about_txt.grid(row=2, column=1, sticky="ew", pady=4)
+        self._prof_about_txt.insert("1.0", prof.get("about", ""))
+
+        self._prof_status = _label(prof_card, "", 10, color=th["text_dim"])
+        self._prof_status.pack(padx=14, pady=(2, 4), anchor="w")
+
+        prof_btn_row = ctk.CTkFrame(prof_card, fg_color="transparent")
+        prof_btn_row.pack(padx=14, pady=(0, 14), anchor="w")
+
+        ctk.CTkButton(prof_btn_row, text=" " + t("profile_save"),
+                      image=icons.icon("save", 13, th["text"]), compound="left",
+                      fg_color=th["primary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 11, "bold"), height=34,
+                      command=self._save_profile,
+                      ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(prof_btn_row, text=" " + t("profile_change_password"),
+                      image=icons.icon("key", 13, th["text"]), compound="left",
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=34,
+                      command=lambda: webbrowser.open("https://zeddihub.eu/tools/account"),
+                      ).pack(side="left")
+
         auth_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         auth_card.pack(fill="x", pady=6)
 
@@ -548,6 +720,26 @@ class SettingsPanel(ctk.CTkFrame):
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=lambda: webbrowser.open("https://dsc.gg/zeddihub")
                       ).pack(padx=14, pady=(0, 14), anchor="w")
+
+    def _save_profile(self):
+        """N-10: save profile info locally to settings.json."""
+        try:
+            settings = load_settings()
+            settings["profile"] = {
+                "display_name": self._prof_name_var.get().strip(),
+                "email":        self._prof_email_var.get().strip(),
+                "about":        self._prof_about_txt.get("1.0", "end").strip(),
+            }
+            save_settings(settings)
+            self._prof_status.configure(
+                text="✅ " + t("profile_saved"),
+                text_color=self.theme["success"],
+            )
+        except Exception as e:
+            self._prof_status.configure(
+                text=f"✗ {e}",
+                text_color=self.theme["error"],
+            )
 
     def _do_logout(self):
         logout()
