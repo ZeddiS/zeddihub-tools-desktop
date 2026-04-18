@@ -43,6 +43,9 @@ $version = get_latest_version();
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ZeddiHub Tools — Desktop nástroje pro hráče</title>
 <meta name="description" content="Zdarma ke stažení — desktop aplikace pro hráče a správce CS2, CS:GO a Rust serverů.">
+<link rel="icon" type="image/x-icon" href="assets/web_favicon.ico">
+<link rel="shortcut icon" type="image/x-icon" href="assets/web_favicon.ico">
+<link rel="apple-touch-icon" href="assets/logo.png">
 <style>
 :root {
   --bg:       #080810;
@@ -80,6 +83,8 @@ code{background:var(--card2);padding:2px 7px;border-radius:4px;font-size:.85em;c
 .navbar-brand{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:700;color:var(--primary)}
 .navbar-brand:hover{text-decoration:none}
 .brand-dot{width:9px;height:9px;background:var(--primary);border-radius:50%;box-shadow:0 0 8px var(--primary)}
+.navbar-logo{height:34px;width:auto;display:block;image-rendering:auto;image-rendering:-webkit-optimize-contrast;filter:none;object-fit:contain}
+.hero-banner{display:block;max-width:340px;width:100%;height:auto;margin:0 auto 32px;image-rendering:auto;image-rendering:-webkit-optimize-contrast;filter:none;object-fit:contain}
 .navbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .nav-link{font-size:13px;color:var(--text-dim);padding:6px 10px;border-radius:6px;transition:color .15s,background .15s}
 .nav-link:hover{color:var(--text);background:var(--card);text-decoration:none}
@@ -257,8 +262,7 @@ footer a:hover{color:var(--primary);text-decoration:none}
 <!-- ── Navbar ── -->
 <nav class="navbar">
   <a href="#" class="navbar-brand">
-    <div class="brand-dot"></div>
-    ZeddiHub Tools
+    <img src="assets/logo2.png" alt="ZeddiHub Tools" class="navbar-logo">
   </a>
   <div class="navbar-right">
     <a href="#features" class="nav-link" data-cs="Funkce" data-en="Features">Funkce</a>
@@ -272,6 +276,7 @@ footer a:hover{color:var(--primary);text-decoration:none}
 <!-- ── Hero ── -->
 <div class="hero">
   <div class="hero-glow"></div>
+  <img src="assets/banner.png" alt="ZeddiHub Tools" class="hero-banner anim">
   <div class="hero-badge anim">
     <span class="badge-dot"></span>
     <span data-cs="Aktuální verze: v<?= htmlspecialchars($version) ?>" data-en="Latest version: v<?= htmlspecialchars($version) ?>">

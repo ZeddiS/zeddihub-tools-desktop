@@ -174,12 +174,26 @@ class GameToolsPanel(ctk.CTkFrame):
         ctk.CTkEntry(src_row, textvariable=self._src_dpi_var,
                      fg_color=th["secondary"], text_color=th["text"],
                      font=ctk.CTkFont("Segoe UI", 13), height=36, width=80
-                     ).pack(side="left")
+                     ).pack(side="left", padx=(0, 12))
         self._src_dpi_var.trace_add("write", lambda *_: self._recalc_sens())
+
+        # "Načíst z Windows" – registry-based detection (N-14)
+        ctk.CTkButton(
+            src_row, text=" " + t("win_sens_detect"),
+            image=icons.icon("windows", 14, "#ffffff"), compound="left",
+            fg_color=th["primary"], hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 11), height=36, width=160,
+            command=self._load_win_sens,
+        ).pack(side="left")
 
         # cm/360 display
         self._cm360_var = ctk.StringVar(value="")
         _label(inp_card, "", 11, color=th["text_dim"], textvariable=self._cm360_var
+               ).pack(padx=14, pady=(0, 4), anchor="w")
+
+        self._win_sens_hint_var = ctk.StringVar(value=t("win_sens_detect_hint"))
+        _label(inp_card, "", 10, color=th["text_dim"], textvariable=self._win_sens_hint_var,
+               wraplength=700, justify="left"
                ).pack(padx=14, pady=(0, 12), anchor="w")
 
         # ── Output card ───────────────────────────────────────────────────────
@@ -275,6 +289,41 @@ class GameToolsPanel(ctk.CTkFrame):
             self._sens_result_var.set("—")
             self._cm360_var.set("")
             self._sens_detail_var.set("")
+
+    def _load_win_sens(self):
+        """N-14: Načte aktuální citlivost myši z Windows Registry
+        (HKCU\\Control Panel\\Mouse\\MouseSensitivity).
+        Hodnota 1..20 (výchozí 10 = 1:1). Převedeme na ratio a nastavíme
+        jako sensitivity zdrojové hry (DPI nechá uživatel)."""
+        try:
+            import winreg  # pouze Windows; na jiných systémech raise ImportError
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Mouse")
+            try:
+                raw, _ = winreg.QueryValueEx(key, "MouseSensitivity")
+            finally:
+                winreg.CloseKey(key)
+            # MouseSensitivity: 1..20, 10 = default (1.0)
+            val = int(str(raw))
+            val = max(1, min(20, val))
+            # Jednoduché lineární mapování na multiplikátor 0.1 .. 2.0 (10 = 1.0)
+            mult_table = {
+                1: 0.03125, 2: 0.0625, 3: 0.125, 4: 0.25, 5: 0.375,
+                6: 0.5, 7: 0.625, 8: 0.75, 9: 0.875, 10: 1.0,
+                11: 1.25, 12: 1.5, 13: 1.75, 14: 2.0, 15: 2.25,
+                16: 2.5, 17: 2.75, 18: 3.0, 19: 3.25, 20: 3.5,
+            }
+            ratio = mult_table.get(val, 1.0)
+            self._src_sens_var.set(f"{ratio:.3f}")
+            self._win_sens_hint_var.set(
+                f"✓ Windows MouseSensitivity = {val}/20  →  sens ratio {ratio:.3f}"
+            )
+            self._recalc_sens()
+        except ImportError:
+            self._win_sens_hint_var.set("! winreg není k dispozici (pouze Windows).")
+        except FileNotFoundError:
+            self._win_sens_hint_var.set("! Klíč HKCU\\Control Panel\\Mouse\\MouseSensitivity neexistuje.")
+        except Exception as e:
+            self._win_sens_hint_var.set(f"! Chyba při čtení registru: {e}")
 
     # ── eDPI KALKULAČKA ───────────────────────────────────────────────────────
 

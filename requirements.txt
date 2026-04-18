@@ -9,5 +9,10 @@ psutil>=5.9.0
 # Network
 requests>=2.31.0
 
+# PC Tools (N-01)
+pyautogui>=0.9.54       # Autoclicker — simulace kliknutí myši
+pynput>=1.7.6           # Autoclicker — globální hotkey (funguje i při minimalizaci do tray)
+# yt-dlp se stahuje na vyžádání (N-01) — není v requirements, instaluje se přes UI
+
 # Standard library (included with Python):
 # tkinter, json, os, sys, socket, struct, re, time, shutil, threading, urllib

@@ -165,6 +165,63 @@ class SettingsPanel(ctk.CTkFrame):
                       command=self._check_updates
                       ).pack(padx=14, pady=(0, 14), anchor="w")
 
+        # Autostart section (N-15: run at Windows startup)
+        autostart_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        autostart_card.pack(fill="x", pady=6)
+
+        _label(autostart_card, " " + t("autostart_section"), 13, bold=True, color=th["primary"],
+               image=icons.icon("power-off", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(autostart_card, t("autostart_hint"),
+               10, color=th["text_dim"], wraplength=700, justify="left"
+               ).pack(padx=14, pady=(0, 8), anchor="w")
+
+        self._autostart_var = ctk.BooleanVar(value=self._is_autostart_enabled())
+        self._autostart_switch = ctk.CTkSwitch(
+            autostart_card, text=t("autostart_enable"),
+            variable=self._autostart_var,
+            command=self._toggle_autostart,
+            fg_color=th["secondary"], progress_color=th["primary"],
+            font=ctk.CTkFont("Segoe UI", 11),
+        )
+        self._autostart_switch.pack(padx=14, pady=(0, 6), anchor="w")
+
+        self._autostart_status = _label(autostart_card, "", 10, color=th["text_dim"])
+        self._autostart_status.pack(padx=14, pady=(0, 14), anchor="w")
+
+        # Close behavior section (F-07: minimize to tray vs. quit)
+        close_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        close_card.pack(fill="x", pady=6)
+
+        _label(close_card, " " + t("close_behavior_section"), 13, bold=True, color=th["primary"],
+               image=icons.icon("window-close", 15, th["primary"]), compound="left"
+               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(close_card, t("close_behavior_hint"),
+               10, color=th["text_dim"], wraplength=700, justify="left"
+               ).pack(padx=14, pady=(0, 8), anchor="w")
+
+        current_close = load_settings().get("close_behavior", "minimize")
+        self._close_var = ctk.StringVar(value=current_close)
+
+        close_row = ctk.CTkFrame(close_card, fg_color="transparent")
+        close_row.pack(padx=14, pady=(0, 14), anchor="w")
+
+        ctk.CTkRadioButton(
+            close_row, text=t("close_behavior_minimize"),
+            variable=self._close_var, value="minimize",
+            command=self._save_close_behavior,
+            fg_color=th["primary"], hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 11),
+        ).pack(side="left", padx=(0, 16))
+
+        ctk.CTkRadioButton(
+            close_row, text=t("close_behavior_quit"),
+            variable=self._close_var, value="quit",
+            command=self._save_close_behavior,
+            fg_color=th["primary"], hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 11),
+        ).pack(side="left")
+
         # Data folder section
         data_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
         data_card.pack(fill="x", pady=6)
@@ -351,6 +408,74 @@ class SettingsPanel(ctk.CTkFrame):
             set_data_dir(new_dir)
             self._data_dir_label.configure(text=str(new_dir))
 
+    # ─── AUTOSTART (N-15) ─────────────────────────────────────────────────────
+
+    AUTOSTART_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    AUTOSTART_VALUE_NAME = "ZeddiHubTools"
+
+    def _get_autostart_target(self) -> str:
+        """Vrátí cestu, která se má spouštět při startu Windows."""
+        import sys as _sys
+        if getattr(_sys, "frozen", False):
+            # PyInstaller build → samotný exe
+            return f'"{_sys.executable}"'
+        # Dev režim → python app.py
+        app_py = Path(__file__).parent.parent.parent / "app.py"
+        return f'"{_sys.executable}" "{app_py}"'
+
+    def _is_autostart_enabled(self) -> bool:
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.AUTOSTART_KEY) as k:
+                val, _ = winreg.QueryValueEx(k, self.AUTOSTART_VALUE_NAME)
+                return bool(val)
+        except (ImportError, FileNotFoundError, OSError):
+            return False
+
+    def _toggle_autostart(self):
+        try:
+            import winreg
+            if self._autostart_var.get():
+                target = self._get_autostart_target()
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.AUTOSTART_KEY,
+                                    0, winreg.KEY_SET_VALUE) as k:
+                    winreg.SetValueEx(k, self.AUTOSTART_VALUE_NAME, 0, winreg.REG_SZ, target)
+                self._autostart_status.configure(
+                    text=f"✅ Autostart aktivován:\n{target}",
+                    text_color=self.theme["success"],
+                )
+            else:
+                try:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.AUTOSTART_KEY,
+                                        0, winreg.KEY_SET_VALUE) as k:
+                        winreg.DeleteValue(k, self.AUTOSTART_VALUE_NAME)
+                except FileNotFoundError:
+                    pass
+                self._autostart_status.configure(
+                    text="ℹ Autostart deaktivován.",
+                    text_color=self.theme["text_dim"],
+                )
+        except ImportError:
+            self._autostart_status.configure(
+                text="! winreg není k dispozici (pouze Windows).",
+                text_color=self.theme["warning"],
+            )
+            self._autostart_var.set(False)
+        except Exception as e:
+            self._autostart_status.configure(
+                text=f"✗ Chyba při zápisu do registru: {e}",
+                text_color=self.theme["error"],
+            )
+
+    def _save_close_behavior(self):
+        """F-07: uloží volbu chování tlačítka zavřít (minimize vs. quit)."""
+        try:
+            settings = load_settings()
+            settings["close_behavior"] = self._close_var.get()
+            save_settings(settings)
+        except Exception:
+            pass
+
     # ─── ACCOUNT ──────────────────────────────────────────────────────────────
 
     def _build_account(self, tab):
@@ -380,9 +505,9 @@ class SettingsPanel(ctk.CTkFrame):
                           command=self._do_logout
                           ).pack(padx=14, pady=(0, 14), anchor="w")
         else:
-            _label(auth_card, " " + t("not_logged_in"),
+            _label(auth_card, " " + t("not_logged_in"), 12,
                    image=icons.icon("unlock", 13, th["text_dim"]), compound="left",
-                   12, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
+                   color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
             _label(auth_card, t("server_tools_locked"),
                    10, color=th["text_dim"]).pack(padx=14, pady=(0, 10), anchor="w")
             ctk.CTkFrame(auth_card, fg_color="transparent", height=6).pack()

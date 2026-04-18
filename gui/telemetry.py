@@ -13,7 +13,7 @@ import urllib.error
 import hashlib
 
 TELEMETRY_URL = "https://zeddihub.eu/tools/telemetry.php"
-_APP_VERSION = "1.6.0"
+_APP_VERSION = "1.7.0"
 _enabled = True  # can be disabled via settings
 
 

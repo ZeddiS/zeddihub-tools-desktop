@@ -64,10 +64,12 @@ NAV_GAME_MAP = {
     "home": "default", "pc_tools": "default", "translator": "default",
     "game_tools": "default",
     "links": "default", "settings": "default", "watchdog": "default",
+    "about": "default",
 }
 
 # nav_ids that show NO game badge in header
-NO_BADGE_IDS = {"home", "pc_tools", "translator", "game_tools", "links", "settings", "watchdog"}
+NO_BADGE_IDS = {"home", "pc_tools", "translator", "game_tools", "links",
+                "settings", "watchdog", "about"}
 
 
 class AuthDialog(ctk.CTkToplevel):
@@ -160,8 +162,8 @@ class AuthDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(btn_row, text=t("cancel"),
                       fg_color=th["secondary"], hover_color="#3a3a4a",
-                      font=ctk.CTkFont("Segoe UI", 12), height=38,
-                      command=self.destroy).pack(side="left", width=100)
+                      font=ctk.CTkFont("Segoe UI", 12), height=38, width=100,
+                      command=self.destroy).pack(side="left")
 
     def _build_register_tab(self, tab, th):
         ctk.CTkLabel(tab,
@@ -384,6 +386,15 @@ class MainWindow(ctk.CTk):
         )
         self._mode_btn.pack(side="right", padx=4)
         self._update_mode_btn()
+
+        # N-12: "About" / "Info" tlačítko (ⓘ) vedle mode toggle
+        self._about_btn = ctk.CTkButton(
+            right, image=icons.icon("circle-info", 15, "#666666"), text="",
+            width=34, height=28,
+            fg_color="transparent", hover_color="#2a2a2a",
+            command=lambda: self._navigate("about"),
+        )
+        self._about_btn.pack(side="right", padx=4)
 
     def _build_sidebar(self):
         th = self._get_current_theme()
@@ -781,6 +792,10 @@ class MainWindow(ctk.CTk):
         elif nav_id == "watchdog":
             from .panels.watchdog import WatchdogPanel
             panel = WatchdogPanel(container, theme=_th())
+        elif nav_id == "about":
+            # N-12: O aplikaci panel
+            from .panels.about import AboutPanel
+            panel = AboutPanel(container, theme=_th(), nav_callback=self._navigate)
 
         if panel:
             panel.pack(fill="both", expand=True)
@@ -917,8 +932,14 @@ class MainWindow(ctk.CTk):
             pass
 
     def _minimize_to_tray(self):
-        """Hide window to tray on first close; show one-time info dialog."""
+        """Hide window to tray on first close; show one-time info dialog.
+        F-07: respektuje uživatelskou volbu 'close_behavior' (minimize/quit).
+        """
         settings = load_settings()
+        # F-07: pokud uživatel zvolil 'quit', rovnou ukončit aplikaci
+        if settings.get("close_behavior", "minimize") == "quit":
+            self._quit_app()
+            return
         if self._tray is not None:
             if not settings.get("tray_close_shown", False):
                 settings["tray_close_shown"] = True
@@ -926,6 +947,15 @@ class MainWindow(ctk.CTk):
                 self._show_tray_notice()
                 return  # notice has its own close/minimize buttons
             self.withdraw()
+            # F-07: volitelná tray notifikace
+            try:
+                if hasattr(self._tray, "show_notification"):
+                    self._tray.show_notification(
+                        "ZeddiHub Tools",
+                        "Aplikace běží v systémové liště. Pro ukončení klikni pravým na tray ikonu.",
+                    )
+            except Exception:
+                pass
         else:
             self._quit_app()
 
@@ -1137,6 +1167,8 @@ class MainWindow(ctk.CTk):
 
 
 class _LogoutDialog(ctk.CTkToplevel):
+    """Potvrzovací dialog pro odhlaseni."""
+
     def __init__(self, parent, theme: dict, user: str):
         super().__init__(parent)
         self.result = None
@@ -1157,12 +1189,22 @@ class _LogoutDialog(ctk.CTkToplevel):
                       text=" " + t("logout"),
                       compound="left",
                       fg_color="#8b2020", hover_color="#6b1818",
-                      height=40, command=self._logout
+                      font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                      height=40, command=self._do_logout
                       ).pack(side="left", fill="x", expand=True, padx=(0, 8))
-        ctk.CTkButton(row, text=t("cancel"),
-                      fg_color=theme["secondary"], height=40,
-                      command=self.destroy).pack(side="left", width=100)
 
-    def _logout(self):
+        ctk.CTkButton(row,
+                      text=t("cancel"),
+                      fg_color=theme["secondary"], hover_color=theme["primary"],
+                      font=ctk.CTkFont("Segoe UI", 12),
+                      height=40, width=110,
+                      command=self._cancel
+                      ).pack(side="left")
+
+    def _do_logout(self):
         self.result = "logout"
+        self.destroy()
+
+    def _cancel(self):
+        self.result = None
         self.destroy()

@@ -190,6 +190,9 @@ class HomePanel(ctk.CTkFrame):
         self._rec_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         self._rec_frame.pack(fill="x", padx=20, pady=4)
 
+        # ── GitHub Checker (N-05) + Novinky z Releases (N-13) ────────────
+        self._build_github_section(scroll)
+
 
     def _build_banner(self, parent):
         th = self.theme
@@ -476,3 +479,153 @@ class HomePanel(ctk.CTkFrame):
 
         for c in range(cols):
             self._rec_frame.grid_columnconfigure(c, weight=1)
+
+    # ─── GitHub Checker (N-05) + Novinky z Releases (N-13) ────────────────
+    GITHUB_REPO_API   = "https://api.github.com/repos/ZeddiS/zeddihub-tools-desktop"
+    GITHUB_ISSUES_API = "https://api.github.com/repos/ZeddiS/zeddihub-tools-desktop/issues?state=open&per_page=1"
+    GITHUB_RELS_API   = "https://api.github.com/repos/ZeddiS/zeddihub-tools-desktop/releases?per_page=5"
+
+    def _build_github_section(self, parent):
+        th = self.theme
+
+        # Hlavička GitHub Checker
+        gh_header = ctk.CTkFrame(parent, fg_color="transparent")
+        gh_header.pack(fill="x", padx=20, pady=(20, 4))
+        _label(gh_header, " " + t("github_checker_section"), 16, bold=True,
+               color=th["primary"],
+               image=icons.icon("github", 18, th["primary"]), compound="left"
+               ).pack(side="left")
+
+        # Čtyři statistické karty (Issues, Stars, Forks, Downloads)
+        stats = ctk.CTkFrame(parent, fg_color="transparent")
+        stats.pack(fill="x", padx=20, pady=(4, 6))
+        for c in range(4):
+            stats.grid_columnconfigure(c, weight=1)
+
+        self._gh_stat_labels: dict = {}
+        stat_defs = [
+            ("issues",    t("github_issues"),    "#f87171"),
+            ("stars",     t("github_stars"),     "#fbbf24"),
+            ("forks",     t("github_forks"),     "#5b9cf6"),
+            ("downloads", t("github_downloads"), "#4ade80"),
+        ]
+        for i, (key, label, color) in enumerate(stat_defs):
+            card = ctk.CTkFrame(stats, fg_color=th["card_bg"], corner_radius=8)
+            card.grid(row=0, column=i, padx=6, pady=4, sticky="nsew")
+            ctk.CTkFrame(card, fg_color=color, height=3, corner_radius=0).pack(fill="x")
+            val_lbl = _label(card, "…", 18, bold=True, color=color)
+            val_lbl.pack(padx=12, pady=(8, 0), anchor="w")
+            _label(card, label, 10, color=th["text_dim"]).pack(padx=12, pady=(0, 8), anchor="w")
+            self._gh_stat_labels[key] = val_lbl
+
+        # Novinky (Releases)
+        news_header = ctk.CTkFrame(parent, fg_color="transparent")
+        news_header.pack(fill="x", padx=20, pady=(14, 4))
+        _label(news_header, " " + t("news_section"), 16, bold=True,
+               color=th["primary"],
+               image=icons.icon("newspaper", 18, th["primary"]), compound="left"
+               ).pack(side="left")
+
+        self._news_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._news_frame.pack(fill="x", padx=20, pady=(0, 16))
+        self._news_loading_lbl = _label(self._news_frame, t("news_loading"),
+                                         11, color=th["text_dim"])
+        self._news_loading_lbl.pack(padx=4, pady=8, anchor="w")
+
+        # Fetch na pozadí
+        threading.Thread(target=self._gh_fetch_worker, daemon=True).start()
+
+    def _gh_fetch_worker(self):
+        """Načte GitHub statistiky + Releases v pozadí. Fire-and-forget s fallbackem."""
+        headers = {"Accept": "application/vnd.github.v3+json",
+                   "User-Agent": "ZeddiHub-Tools"}
+        stats = {"issues": "?", "stars": "?", "forks": "?", "downloads": "?"}
+        releases: list = []
+        try:
+            # Repo info
+            req = urllib.request.Request(self.GITHUB_REPO_API, headers=headers)
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                info = json.loads(resp.read().decode("utf-8", errors="replace"))
+                stats["stars"] = str(info.get("stargazers_count", 0))
+                stats["forks"] = str(info.get("forks_count", 0))
+                stats["issues"] = str(info.get("open_issues_count", 0))
+        except Exception:
+            pass
+
+        try:
+            # Releases — downloads = suma asset.download_count
+            req = urllib.request.Request(self.GITHUB_RELS_API, headers=headers)
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                rels = json.loads(resp.read().decode("utf-8", errors="replace"))
+                total_dl = 0
+                for r in rels:
+                    for a in r.get("assets", []):
+                        total_dl += int(a.get("download_count", 0) or 0)
+                stats["downloads"] = str(total_dl)
+                releases = rels[:5]
+        except Exception:
+            pass
+
+        # UI update na main threadu (thread safety dle CLAUDE.md §3.5)
+        try:
+            self.after(0, self._gh_apply_stats, stats)
+            self.after(0, self._gh_apply_news, releases)
+        except Exception:
+            pass
+
+    def _gh_apply_stats(self, stats: dict):
+        for key, val in stats.items():
+            lbl = self._gh_stat_labels.get(key)
+            if lbl is not None:
+                try:
+                    lbl.configure(text=val)
+                except Exception:
+                    pass
+
+    def _gh_apply_news(self, releases: list):
+        th = self.theme
+        try:
+            self._news_loading_lbl.destroy()
+        except Exception:
+            pass
+        for w in list(self._news_frame.winfo_children()):
+            try:
+                w.destroy()
+            except Exception:
+                pass
+
+        if not releases:
+            _label(self._news_frame, t("news_no_items"), 11, color=th["text_dim"]
+                   ).pack(padx=4, pady=8, anchor="w")
+            return
+
+        for rel in releases:
+            tag = rel.get("tag_name", "?")
+            name = rel.get("name") or tag
+            body = (rel.get("body") or "").strip()
+            published = (rel.get("published_at") or "")[:10]
+            html_url = rel.get("html_url", "")
+
+            card = ctk.CTkFrame(self._news_frame, fg_color=th["card_bg"], corner_radius=8)
+            card.pack(fill="x", pady=4)
+            top = ctk.CTkFrame(card, fg_color=th["primary"], height=3, corner_radius=0)
+            top.pack(fill="x")
+            head_row = ctk.CTkFrame(card, fg_color="transparent")
+            head_row.pack(fill="x", padx=12, pady=(8, 0))
+            _label(head_row, f"{name}  ({tag})", 13, bold=True, color=th["text"]
+                   ).pack(side="left")
+            if published:
+                _label(head_row, published, 10, color=th["text_dim"]
+                       ).pack(side="right")
+            # Body — první 3 řádky
+            body_short = "\n".join(body.splitlines()[:3]).strip()
+            if body_short:
+                _label(card, body_short, 10, color=th["text_dim"],
+                       wraplength=700, justify="left"
+                       ).pack(padx=12, pady=(4, 4), anchor="w")
+            if html_url:
+                ctk.CTkButton(card, text=t("open_github"), height=26, width=120,
+                              fg_color=th["secondary"], hover_color=th["primary"],
+                              font=ctk.CTkFont("Segoe UI", 10),
+                              command=lambda u=html_url: webbrowser.open(u)
+                              ).pack(padx=12, pady=(0, 10), anchor="w")

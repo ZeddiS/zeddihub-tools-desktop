@@ -104,6 +104,12 @@ KEYBOARD_ROWS = [
     [("LCTRL", "Ctrl", 1.5), ("LALT", "Alt", 1.25), ("SPACE", "SPACE", 5.5),
      ("RALT", "Alt", 1.25), ("RCTRL", "Ctrl", 1.5),
      ("LEFT", "◄", 1.0), ("UP", "▲", 1.0), ("DOWN", "▼", 1.0), ("RIGHT", "►", 1.0)],
+    # Row 6: Numpad (F-08)
+    [("NUMLOCK", "NumLk", 1.0), ("KP_SLASH", "/", 1.0), ("KP_MULTIPLY", "*", 1.0),
+     ("KP_MINUS", "-", 1.0), ("KP_7", "7", 1.0), ("KP_8", "8", 1.0), ("KP_9", "9", 1.0),
+     ("KP_4", "4", 1.0), ("KP_5", "5", 1.0), ("KP_6", "6", 1.0), ("KP_PLUS", "+", 1.0),
+     ("KP_1", "1", 1.0), ("KP_2", "2", 1.0), ("KP_3", "3", 1.0),
+     ("KP_0", "0", 1.0), ("KP_DEL", ".", 1.0), ("KP_ENTER", "Enter", 1.5)],
 ]
 
 KEY_W = 38
@@ -148,7 +154,7 @@ class KeybindPanel(ctk.CTkFrame):
         self.kb_canvas = tk.Canvas(
             kb_frame, bg=self.theme["card_bg"],
             highlightthickness=0,
-            height=(KEY_H + KEY_GAP) * 6 + KEY_GAP * 2 + 8
+            height=(KEY_H + KEY_GAP) * 7 + KEY_GAP * 2 + 8
         )
         self.kb_canvas.pack(padx=10, pady=10, fill="x")
 

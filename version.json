@@ -1,7 +1,7 @@
 {
-  "version": "1.3.0",
-  "release_date": "2026-04-11",
-  "changelog": "Systémová lišta (tray icon): ikona v oznámení, pravý klik → Otevřít / Nástroje / Nastavení / Zavřít.\nNástroje v tray liště konfigurovatelné přes webhosting (tray_tools.json).\nWebový admin panel (PHP): správa klientů, doporučené nástroje, tray položky, servery.\nZavření okna schová aplikaci do lišty místo ukončení.",
+  "version": "1.7.0",
+  "release_date": "2026-04-18",
+  "changelog": "N-12: Nový panel 'O aplikaci' + tlačítko ⓘ v záhlaví.\nN-13: Novinky z GitHub Releases přímo v Home panelu.\nN-05: GitHub Checker – Issues, Stars, Forks, Downloads.\nN-14: Detekce citlivosti myši z Windows Registry.\nN-15: Spouštění při startu Windows (autostart přes HKCU\\Run).\nF-07: Volba chování tlačítka Zavřít (minimize / quit) + tray notifikace.\nF-08: Keybind Generator – přidán numpad (Num0–9, /, *, +, -, NumLock, Enter).\nYouTube Downloader (on-demand yt-dlp), Autoclicker (globální), Sticky Notes (perzistentní).\nOpravy: fix .pack(width=) bugů, kompletace AuthDialog/LogoutDialog.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

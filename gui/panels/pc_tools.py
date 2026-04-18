@@ -29,6 +29,21 @@ except ImportError:
     PSUTIL_OK = False
 
 try:
+    import pyautogui
+    PYAUTOGUI_OK = True
+    pyautogui.FAILSAFE = True
+    pyautogui.PAUSE = 0.0
+except ImportError:
+    PYAUTOGUI_OK = False
+
+try:
+    from pynput import keyboard as _pynput_keyboard
+    PYNPUT_OK = True
+except ImportError:
+    PYNPUT_OK = False
+    _pynput_keyboard = None
+
+try:
     from ..locale import t
 except ImportError:
     def t(key, **kw):
@@ -107,7 +122,19 @@ class PCToolsPanel(ctk.CTkFrame):
         super().__init__(parent, fg_color=theme["content_bg"], **kwargs)
         self.theme = theme
         self._shutdown_running = False
+        # ── Autoclicker state ──────────────────────────────────────────────
+        self._ac_running = False
+        self._ac_thread = None
+        self._ac_stop_event = threading.Event()
+        self._ac_hotkey_listener = None
+        # ── Sticky Notes state ─────────────────────────────────────────────
+        self._notes: list = []
+        self._notes_windows: list = []
+        self._notes_file = self._get_notes_file()
+        self._load_notes_from_file()
         self._build()
+        # Otevři persistentní okna poznámek až po sestavení UI
+        self.after(600, self._open_persistent_notes)
 
     def _build(self):
         t_theme = self.theme
@@ -118,11 +145,17 @@ class PCToolsPanel(ctk.CTkFrame):
         tab.add(t("dns_temp"))
         tab.add("📡 " + t("net_tools"))
         tab.add(t("utility"))
+        tab.add("🖱 Autoclicker")
+        tab.add("▶ YouTube DL")
+        tab.add("📝 Sticky Notes")
 
         self._build_sysinfo(tab.tab(t("sys_info")))
         self._build_dns_temp(tab.tab(t("dns_temp")))
         self._build_nettools(tab.tab("📡 " + t("net_tools")))
         self._build_utility(tab.tab(t("utility")))
+        self._build_autoclicker(tab.tab("🖱 Autoclicker"))
+        self._build_ytdl(tab.tab("▶ YouTube DL"))
+        self._build_stickynotes(tab.tab("📝 Sticky Notes"))
 
     # ─── SYSTEM INFO ──────────────────────────────────────────────────────────
 
@@ -1168,6 +1201,700 @@ class PCToolsPanel(ctk.CTkFrame):
 
         threading.Thread(target=run, daemon=True).start()
         self._set_textbox(textbox, "Načítám procesy...")
+
+    # ─── AUTOCLICKER ──────────────────────────────────────────────────────────
+
+    def _build_autoclicker(self, tab):
+        th = self.theme
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        _label(scroll, "🖱 Autoclicker", 16, bold=True, color=th["primary"]).pack(
+            padx=4, pady=(4, 10), anchor="w")
+
+        if not PYAUTOGUI_OK:
+            warn_card = _card(scroll, th)
+            warn_card.pack(fill="x", pady=6)
+            _label(warn_card, "⚠ Chybí pyautogui", 13, bold=True, color=th["warning"]
+                   ).pack(padx=14, pady=(12, 4), anchor="w")
+            _label(warn_card, "Spusť příkaz: pip install pyautogui",
+                   10, color=th["text_dim"]).pack(padx=14, anchor="w")
+            ctk.CTkButton(warn_card, text="Nainstalovat pyautogui",
+                          fg_color=th["primary"], hover_color=th["primary_hover"],
+                          font=ctk.CTkFont("Segoe UI", 12), height=36,
+                          command=self._install_pyautogui
+                          ).pack(padx=14, pady=10, anchor="w")
+            return
+
+        cfg_card = _card(scroll, th)
+        cfg_card.pack(fill="x", pady=6)
+
+        _label(cfg_card, "Nastavení", 13, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(12, 6), anchor="w")
+
+        # CPS
+        cps_row = ctk.CTkFrame(cfg_card, fg_color="transparent")
+        cps_row.pack(fill="x", padx=14, pady=4)
+        _label(cps_row, "Kliknutí/s (CPS):", 11, color=th["text_dim"]
+               ).pack(side="left", padx=(0, 8))
+        self._ac_cps_var = ctk.StringVar(value="10")
+        ctk.CTkEntry(cps_row, textvariable=self._ac_cps_var,
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 12), height=32, width=80
+                     ).pack(side="left")
+
+        # Tlačítko myši
+        btn_row2 = ctk.CTkFrame(cfg_card, fg_color="transparent")
+        btn_row2.pack(fill="x", padx=14, pady=4)
+        _label(btn_row2, "Tlačítko myši:", 11, color=th["text_dim"]
+               ).pack(side="left", padx=(0, 8))
+        self._ac_button_var = ctk.StringVar(value="left")
+        ctk.CTkOptionMenu(btn_row2, variable=self._ac_button_var,
+                          values=["left", "right", "middle"],
+                          fg_color=th["secondary"], button_color=th["primary"],
+                          font=ctk.CTkFont("Segoe UI", 11), height=30, width=100
+                          ).pack(side="left")
+
+        # Hotkey
+        hotkey_row = ctk.CTkFrame(cfg_card, fg_color="transparent")
+        hotkey_row.pack(fill="x", padx=14, pady=4)
+        _label(hotkey_row, "Klávesa (toggle):", 11, color=th["text_dim"]
+               ).pack(side="left", padx=(0, 8))
+        self._ac_hotkey_var = ctk.StringVar(value="F6")
+        ctk.CTkEntry(hotkey_row, textvariable=self._ac_hotkey_var,
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 12), height=32, width=80
+                     ).pack(side="left")
+        _label(hotkey_row, "(globální, funguje i z tray)", 10, color=th["text_dim"]
+               ).pack(side="left", padx=(8, 0))
+
+        # Varování pokud chybí pynput — globální hotkey by jinak nefungoval při minimalizaci
+        if not PYNPUT_OK:
+            pynput_row = ctk.CTkFrame(cfg_card, fg_color="transparent")
+            pynput_row.pack(fill="x", padx=14, pady=(6, 2))
+            _label(pynput_row,
+                   "⚠ Pro globální hotkey (funguje i při minimalizaci) je třeba pynput.",
+                   10, color=th["warning"], wraplength=500, justify="left"
+                   ).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(pynput_row, text="Nainstalovat pynput",
+                          fg_color=th["primary"], hover_color=th["primary_hover"],
+                          font=ctk.CTkFont("Segoe UI", 10), height=28, width=150,
+                          command=self._install_pynput
+                          ).pack(side="right")
+
+        ctk.CTkFrame(cfg_card, fg_color=th["border"], height=1).pack(fill="x", padx=14, pady=8)
+
+        # Start / Stop
+        ctrl_row = ctk.CTkFrame(cfg_card, fg_color="transparent")
+        ctrl_row.pack(fill="x", padx=14, pady=(0, 14))
+
+        self._ac_start_btn = ctk.CTkButton(
+            ctrl_row, text=" ▶ Spustit",
+            fg_color=th["primary"], hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36,
+            command=self._toggle_autoclicker
+        )
+        self._ac_start_btn.pack(side="left", padx=(0, 12))
+
+        self._ac_status_label = _label(ctrl_row, "Zastaven", 11, color=th["text_dim"])
+        self._ac_status_label.pack(side="left")
+
+        # Spustit listener pro globální hotkey
+        self._ac_setup_hotkey()
+
+        # Info
+        info_card = _card(scroll, th)
+        info_card.pack(fill="x", pady=6)
+        _label(info_card,
+               "ℹ Přesuňte myš do rohu obrazovky pro nouzové zastavení (pyautogui FAILSAFE).",
+               10, color=th["text_dim"], wraplength=500, justify="left"
+               ).pack(padx=14, pady=12, anchor="w")
+
+    def _install_pyautogui(self):
+        import subprocess as sp
+        import sys as _sys
+        try:
+            sp.check_call([_sys.executable, "-m", "pip", "install", "pyautogui"],
+                          creationflags=0x08000000)
+            messagebox.showinfo("Nainstalováno",
+                                "pyautogui byl nainstalován.\nRestartuj aplikaci pro aktivaci.")
+        except Exception as e:
+            messagebox.showerror("Chyba instalace", f"Nepodařilo se nainstalovat:\n{e}")
+
+    def _install_pynput(self):
+        """Nainstaluje pynput pro globální hotkey (funguje i při minimalizaci do tray)."""
+        import subprocess as sp
+        import sys as _sys
+        try:
+            sp.check_call([_sys.executable, "-m", "pip", "install", "pynput"],
+                          creationflags=0x08000000)
+            messagebox.showinfo("Nainstalováno",
+                                "pynput byl nainstalován.\n"
+                                "Restartuj aplikaci pro aktivaci globálního hotkey.")
+        except Exception as e:
+            messagebox.showerror("Chyba instalace", f"Nepodařilo se nainstalovat pynput:\n{e}")
+
+    def _ac_setup_hotkey(self):
+        """Spustí pynput listener pro globální toggle hotkey — funguje i při minimalizaci do tray."""
+        if not PYNPUT_OK:
+            return  # pynput není nainstalován — varování a tlačítko pro instalaci jsou v UI
+        try:
+            from pynput import keyboard as _kb
+
+            def _on_press(key):
+                try:
+                    hotkey_str = self._ac_hotkey_var.get().strip().upper()
+                    # Funkční klávesy (F1–F12)
+                    if hotkey_str.startswith("F") and hotkey_str[1:].isdigit():
+                        expected = f"f{hotkey_str[1:]}"
+                        if hasattr(key, "name") and key.name == expected:
+                            self.after(0, self._toggle_autoclicker)
+                    else:
+                        # Znakové klávesy
+                        key_name = None
+                        if hasattr(key, "char") and key.char:
+                            key_name = key.char.upper()
+                        elif hasattr(key, "name") and key.name:
+                            key_name = key.name.upper()
+                        if key_name == hotkey_str:
+                            self.after(0, self._toggle_autoclicker)
+                except Exception:
+                    pass
+
+            listener = _kb.Listener(on_press=_on_press)
+            listener.daemon = True
+            listener.start()
+            self._ac_hotkey_listener = listener
+        except ImportError:
+            pass  # pynput není nainstalován — hotkey nefunguje, tlačítko funguje
+
+    def _toggle_autoclicker(self):
+        if self._ac_running:
+            self._stop_autoclicker()
+        else:
+            self._start_autoclicker()
+
+    def _start_autoclicker(self):
+        if self._ac_running or not PYAUTOGUI_OK:
+            return
+        try:
+            cps = float(self._ac_cps_var.get().strip())
+            if cps <= 0 or cps > 100:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Autoclicker", "CPS musí být číslo 1–100.")
+            return
+
+        button = self._ac_button_var.get()
+        self._ac_running = True
+        self._ac_stop_event.clear()
+        th = self.theme
+        if hasattr(self, "_ac_start_btn"):
+            self._ac_start_btn.configure(
+                text=" ⏹ Zastavit", fg_color="#8b2020", hover_color="#6b1818")
+        if hasattr(self, "_ac_status_label"):
+            self._ac_status_label.configure(
+                text=f"Běží — {cps} CPS ({button})",
+                text_color=th.get("success", "#4ade80"))
+
+        interval = 1.0 / cps
+
+        def _worker():
+            while not self._ac_stop_event.is_set():
+                try:
+                    pyautogui.click(button=button)
+                except Exception:
+                    break
+                self._ac_stop_event.wait(interval)
+
+        self._ac_thread = threading.Thread(target=_worker, daemon=True)
+        self._ac_thread.start()
+
+    def _stop_autoclicker(self):
+        self._ac_running = False
+        self._ac_stop_event.set()
+        th = self.theme
+        if hasattr(self, "_ac_start_btn"):
+            self._ac_start_btn.configure(
+                text=" ▶ Spustit",
+                fg_color=th["primary"], hover_color=th["primary_hover"])
+        if hasattr(self, "_ac_status_label"):
+            self._ac_status_label.configure(text="Zastaven", text_color=th["text_dim"])
+
+    # ─── YOUTUBE DOWNLOADER ───────────────────────────────────────────────────
+
+    def _build_ytdl(self, tab):
+        th = self.theme
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        _label(scroll, "▶ YouTube Downloader", 16, bold=True, color=th["primary"]
+               ).pack(padx=4, pady=(4, 4), anchor="w")
+        _label(scroll,
+               "Ke stahování videí používá yt-dlp. Stáhne se externě až po potvrzení, "
+               "do té doby je nástroj neaktivní.",
+               10, color=th["text_dim"], wraplength=600, justify="left"
+               ).pack(padx=4, pady=(0, 10), anchor="w")
+
+        # Status label — zobrazuje stav instalace yt-dlp
+        self._ytdl_status_var = ctk.StringVar(value="")
+        if self._ytdl_check_installed():
+            self._ytdl_status_var.set("✓ yt-dlp je nainstalován — nástroj je aktivní.")
+            _status_color = th.get("success", "#4ade80")
+        else:
+            self._ytdl_status_var.set(
+                "⚠ yt-dlp není nainstalován — nástroj je neaktivní. "
+                "Bude staženo po kliknutí na 'Stáhnout'.")
+            _status_color = th["warning"]
+        ctk.CTkLabel(scroll, textvariable=self._ytdl_status_var,
+                     font=ctk.CTkFont("Segoe UI", 10),
+                     text_color=_status_color, wraplength=600, justify="left"
+                     ).pack(padx=4, anchor="w")
+
+        # URL input
+        url_card = _card(scroll, th)
+        url_card.pack(fill="x", pady=6)
+
+        _label(url_card, "URL videa", 13, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(12, 6), anchor="w")
+        self._ytdl_url_entry = ctk.CTkEntry(
+            url_card, placeholder_text="https://www.youtube.com/watch?v=...",
+            fg_color=th["secondary"], text_color=th["text"],
+            font=ctk.CTkFont("Segoe UI", 12), height=36)
+        self._ytdl_url_entry.pack(fill="x", padx=14, pady=(0, 10))
+
+        # Kvalita
+        fmt_row = ctk.CTkFrame(url_card, fg_color="transparent")
+        fmt_row.pack(fill="x", padx=14, pady=(0, 8))
+        _label(fmt_row, "Kvalita:", 11, color=th["text_dim"]).pack(side="left", padx=(0, 8))
+        self._ytdl_fmt_var = ctk.StringVar(value="best")
+        ctk.CTkOptionMenu(fmt_row, variable=self._ytdl_fmt_var,
+                          values=["best", "1080p", "720p", "480p", "360p", "audio only (mp3)"],
+                          fg_color=th["secondary"], button_color=th["primary"],
+                          font=ctk.CTkFont("Segoe UI", 11), height=30, width=180
+                          ).pack(side="left")
+
+        # Cílová složka
+        dir_row = ctk.CTkFrame(url_card, fg_color="transparent")
+        dir_row.pack(fill="x", padx=14, pady=(0, 10))
+        _label(dir_row, "Uložit do:", 11, color=th["text_dim"]
+               ).pack(side="left", padx=(0, 8))
+        self._ytdl_outdir_var = ctk.StringVar(value=str(Path.home() / "Downloads"))
+        ctk.CTkEntry(dir_row, textvariable=self._ytdl_outdir_var,
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 11), height=30
+                     ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkButton(dir_row, text="...", width=40, height=30,
+                      fg_color=th["secondary"], hover_color=th["primary"],
+                      font=ctk.CTkFont("Segoe UI", 11),
+                      command=self._ytdl_browse
+                      ).pack(side="left")
+
+        ctk.CTkButton(url_card, text=" ⬇ Stáhnout",
+                      image=icons.icon("download", 16, "#ffffff"), compound="left",
+                      fg_color=th["primary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 13, "bold"), height=40,
+                      command=self._ytdl_start
+                      ).pack(padx=14, pady=(0, 14), anchor="w")
+
+        # Průběh
+        log_card = _card(scroll, th)
+        log_card.pack(fill="x", pady=6)
+        _label(log_card, "Průběh stahování", 12, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(10, 4), anchor="w")
+        self._ytdl_progress = ctk.CTkProgressBar(log_card, height=10,
+                                                   progress_color=th["primary"])
+        self._ytdl_progress.pack(fill="x", padx=14, pady=(0, 6))
+        self._ytdl_progress.set(0)
+        self._ytdl_log = ctk.CTkTextbox(log_card, height=140,
+                                         fg_color=th["secondary"], text_color=th["text"],
+                                         font=ctk.CTkFont("Courier New", 9), state="disabled")
+        self._ytdl_log.pack(fill="x", padx=14, pady=(0, 14))
+
+    def _ytdl_browse(self):
+        from tkinter import filedialog
+        d = filedialog.askdirectory(initialdir=self._ytdl_outdir_var.get())
+        if d:
+            self._ytdl_outdir_var.set(d)
+
+    def _ytdl_check_installed(self) -> bool:
+        """Zkontroluje, zda je yt-dlp dostupný jako příkaz nebo Python modul."""
+        import shutil
+        if shutil.which("yt-dlp"):
+            return True
+        try:
+            import importlib
+            importlib.import_module("yt_dlp")
+            return True
+        except ImportError:
+            return False
+
+    def _ytdl_start(self):
+        url = self._ytdl_url_entry.get().strip()
+        if not url:
+            messagebox.showerror("YouTube DL", "Zadejte URL videa.")
+            return
+
+        if not self._ytdl_check_installed():
+            answer = messagebox.askyesno(
+                "Nainstalovat yt-dlp?",
+                "Nástroj yt-dlp není nainstalován.\n\n"
+                "Je nezbytný pro stahování videí a stáhne se\n"
+                "automaticky (~10 MB).\n\n"
+                "Chceš nainstalovat yt-dlp nyní?"
+            )
+            if not answer:
+                self._ytdl_status_var.set("Stahování zrušeno — yt-dlp není nainstalován.")
+                return
+
+            self._ytdl_status_var.set("Instaluji yt-dlp, čekejte...")
+            self._set_textbox(self._ytdl_log, "Instaluji yt-dlp...")
+            self._ytdl_progress.set(0.05)
+
+            def _install():
+                import subprocess as _sp, sys as _sys
+                try:
+                    _sp.check_call(
+                        [_sys.executable, "-m", "pip", "install", "yt-dlp"],
+                        creationflags=0x08000000
+                    )
+                    self.after(0, self._ytdl_status_var.set, "yt-dlp nainstalován. Spouštím stahování...")
+                    self.after(0, lambda: self._ytdl_run(url))
+                except Exception as e:
+                    self.after(0, self._set_textbox, self._ytdl_log, f"Chyba instalace yt-dlp:\n{e}")
+                    self.after(0, self._ytdl_status_var.set, "❌ Chyba instalace yt-dlp.")
+                    self.after(0, self._ytdl_progress.set, 0)
+
+            threading.Thread(target=_install, daemon=True).start()
+            return
+
+        self._ytdl_run(url)
+
+    def _ytdl_run(self, url: str):
+        import re as _re, sys as _sys, shutil as _shutil
+        fmt_choice = self._ytdl_fmt_var.get()
+        outdir = self._ytdl_outdir_var.get().strip() or str(Path.home() / "Downloads")
+
+        if fmt_choice == "audio only (mp3)":
+            fmt_args = ["-x", "--audio-format", "mp3"]
+        elif fmt_choice in ("1080p", "720p", "480p", "360p"):
+            h = fmt_choice.replace("p", "")
+            fmt_args = ["-f", f"bestvideo[height<={h}]+bestaudio/best[height<={h}]",
+                        "--merge-output-format", "mp4"]
+        else:
+            fmt_args = ["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"]
+
+        yt_cmd = _shutil.which("yt-dlp")
+        if yt_cmd:
+            cmd = [yt_cmd] + fmt_args + ["-o", f"{outdir}/%(title)s.%(ext)s", url]
+        else:
+            cmd = [_sys.executable, "-m", "yt_dlp"] + fmt_args + [
+                "-o", f"{outdir}/%(title)s.%(ext)s", url]
+
+        self._ytdl_status_var.set("Stahuji...")
+        self._ytdl_progress.set(0.05)
+        self._set_textbox(self._ytdl_log,
+                          f"URL: {url}\nFormát: {fmt_choice}\nCíl: {outdir}\n\nSpouštím yt-dlp...")
+
+        def _run():
+            import subprocess as _sp
+            try:
+                proc = _sp.Popen(
+                    cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT,
+                    text=True, encoding="utf-8", errors="replace",
+                    creationflags=0x08000000
+                )
+                log_lines: list = []
+                for line in proc.stdout:
+                    line = line.rstrip()
+                    log_lines.append(line)
+                    m = _re.search(r'(\d+(?:\.\d+)?)%', line)
+                    if m:
+                        pct = min(float(m.group(1)) / 100.0, 0.99)
+                        self.after(0, self._ytdl_progress.set, pct)
+                    if len(log_lines) > 200:
+                        log_lines = log_lines[-150:]
+                    self.after(0, self._set_textbox, self._ytdl_log, "\n".join(log_lines))
+                proc.wait()
+                if proc.returncode == 0:
+                    self.after(0, self._ytdl_progress.set, 1.0)
+                    self.after(0, self._ytdl_status_var.set, "✅ Stahování dokončeno!")
+                else:
+                    self.after(0, self._ytdl_status_var.set,
+                               f"❌ yt-dlp skončil s kódem {proc.returncode}")
+                    self.after(0, self._ytdl_progress.set, 0)
+            except Exception as e:
+                self.after(0, self._set_textbox, self._ytdl_log, f"Chyba: {e}")
+                self.after(0, self._ytdl_status_var.set, "❌ Chyba při stahování.")
+                self.after(0, self._ytdl_progress.set, 0)
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    # ─── STICKY NOTES ─────────────────────────────────────────────────────────
+
+    def _get_notes_file(self) -> Path:
+        try:
+            from ..config import get_data_dir
+            return get_data_dir() / "sticky_notes.json"
+        except Exception:
+            return Path.home() / ".zeddihub_sticky_notes.json"
+
+    def _load_notes_from_file(self):
+        """Načte seznam notes z JSON bez otevírání oken."""
+        try:
+            if self._notes_file.exists():
+                with open(self._notes_file, "r", encoding="utf-8") as fh:
+                    self._notes = json.load(fh)
+        except Exception:
+            self._notes = []
+
+    def _open_persistent_notes(self):
+        """Otevře okna pro všechny uložené notes (voláno po sestavení UI)."""
+        for note in list(self._notes):
+            self._open_note_window(note)
+
+    def _save_notes(self):
+        try:
+            self._notes_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._notes_file, "w", encoding="utf-8") as fh:
+                json.dump(self._notes, fh, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def _build_stickynotes(self, tab):
+        th = self.theme
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
+        header_row = ctk.CTkFrame(scroll, fg_color="transparent")
+        header_row.pack(fill="x", pady=(4, 6))
+        _label(header_row, "📝 Sticky Notes", 16, bold=True, color=th["primary"]
+               ).pack(side="left", padx=4)
+        ctk.CTkButton(header_row, text="+ Nová poznámka",
+                      fg_color=th["primary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 12, "bold"), height=34,
+                      command=self._new_note
+                      ).pack(side="right", padx=4)
+
+        _label(scroll,
+               "Poznámky se zobrazují jako plovoucí okna a přežijí restart aplikace. "
+               "Zavřením okna zůstane poznámka uložena — smazat ji lze tlačítkem 🗑 "
+               "nebo nastavením auto-smazání při vytvoření.",
+               10, color=th["text_dim"]
+               ).pack(padx=4, pady=(0, 10), anchor="w")
+
+        self._notes_list_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        self._notes_list_frame.pack(fill="x")
+        self._refresh_notes_list()
+
+    def _refresh_notes_list(self):
+        if not hasattr(self, "_notes_list_frame"):
+            return
+        for w in self._notes_list_frame.winfo_children():
+            w.destroy()
+        th = self.theme
+        if not self._notes:
+            _label(self._notes_list_frame,
+                   "Žádné poznámky. Klikni na '+ Nová poznámka'.",
+                   11, color=th["text_dim"]).pack(padx=8, pady=16, anchor="w")
+            return
+        for note in self._notes:
+            card = ctk.CTkFrame(self._notes_list_frame, fg_color=th["card_bg"], corner_radius=8)
+            card.pack(fill="x", pady=4)
+            accent = ctk.CTkFrame(card, fg_color=note.get("color", th["primary"]),
+                                   corner_radius=0, height=3)
+            accent.pack(fill="x")
+            row = ctk.CTkFrame(card, fg_color="transparent")
+            row.pack(fill="x", padx=12, pady=8)
+            _label(row, note.get("title", "Poznámka"), 12, bold=True, color=th["text"]
+                   ).pack(side="left")
+            if note.get("expires_at"):
+                rem = max(0, int(note["expires_at"] - time.time()))
+                _label(row, f"  ⏱ {_fmt_time(rem)}", 10, color=th["warning"]
+                       ).pack(side="left")
+            ctk.CTkButton(row, text="Otevřít", height=26, width=76,
+                          fg_color=th["secondary"], hover_color=th["primary"],
+                          font=ctk.CTkFont("Segoe UI", 10),
+                          command=lambda n=note: self._open_note_window(n)
+                          ).pack(side="right", padx=(4, 0))
+            ctk.CTkButton(row, text="🗑 Smazat", height=26, width=76,
+                          fg_color=th["secondary"], hover_color="#8b2020",
+                          font=ctk.CTkFont("Segoe UI", 10),
+                          command=lambda n=note: self._delete_note(n)
+                          ).pack(side="right", padx=(4, 0))
+
+    def _delete_note(self, note: dict):
+        if note in self._notes:
+            self._notes.remove(note)
+        self._save_notes()
+        self._refresh_notes_list()
+
+    def _new_note(self):
+        """Dialog pro vytvoření nové poznámky."""
+        th = self.theme
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Nová poznámka")
+        dlg.geometry("420x400")
+        dlg.configure(fg_color=th["content_bg"])
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        dlg.after(100, dlg.lift)
+
+        _label(dlg, "📝 Nová poznámka", 15, bold=True, color=th["primary"]
+               ).pack(padx=20, pady=(16, 8), anchor="w")
+
+        # Název
+        _label(dlg, "Název:", 11, color=th["text_dim"]).pack(padx=20, anchor="w")
+        title_entry = ctk.CTkEntry(dlg, fg_color=th["secondary"], text_color=th["text"],
+                                   font=ctk.CTkFont("Segoe UI", 12), height=34)
+        title_entry.pack(fill="x", padx=20, pady=(2, 8))
+
+        # Obsah
+        _label(dlg, "Obsah:", 11, color=th["text_dim"]).pack(padx=20, anchor="w")
+        content_box = ctk.CTkTextbox(dlg, fg_color=th["secondary"], text_color=th["text"],
+                                     font=ctk.CTkFont("Segoe UI", 11), height=100)
+        content_box.pack(fill="x", padx=20, pady=(2, 8))
+
+        # Barva
+        color_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        color_row.pack(fill="x", padx=20, pady=(0, 8))
+        _label(color_row, "Barva:", 11, color=th["text_dim"]).pack(side="left", padx=(0, 8))
+        color_var = ctk.StringVar(value=th["primary"])
+        NOTE_COLORS = [
+            ("#f0a500", "Zlatá"), ("#4ade80", "Zelená"), ("#f87171", "Červená"),
+            ("#5b9cf6", "Modrá"), ("#a78bfa", "Fialová"), ("#fb923c", "Oranžová"),
+        ]
+        for hex_c, _ in NOTE_COLORS:
+            ctk.CTkButton(color_row, text="", width=26, height=26,
+                          fg_color=hex_c, hover_color=hex_c, corner_radius=13,
+                          command=lambda c=hex_c: color_var.set(c)
+                          ).pack(side="left", padx=2)
+
+        # Časovač auto-smazání
+        timer_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        timer_row.pack(fill="x", padx=20, pady=(0, 10))
+        _label(timer_row, "Auto-smazat za (min, 0 = nikdy):", 11, color=th["text_dim"]
+               ).pack(side="left", padx=(0, 8))
+        timer_var = ctk.StringVar(value="0")
+        ctk.CTkEntry(timer_row, textvariable=timer_var,
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 12), height=30, width=70
+                     ).pack(side="left")
+
+        # Tlačítka
+        btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=8)
+
+        def _create():
+            title = title_entry.get().strip() or "Poznámka"
+            content = content_box.get("1.0", "end").strip()
+            color = color_var.get()
+            try:
+                timer_min = int(timer_var.get().strip())
+            except ValueError:
+                timer_min = 0
+            expires_at = (time.time() + timer_min * 60) if timer_min > 0 else None
+            new_note = {
+                "id": str(int(time.time() * 1000)),
+                "title": title,
+                "content": content,
+                "color": color,
+                "expires_at": expires_at,
+            }
+            self._notes.append(new_note)
+            self._save_notes()
+            self._refresh_notes_list()
+            self._open_note_window(new_note)
+            dlg.destroy()
+
+        ctk.CTkButton(btn_row, text="✓ Vytvořit",
+                      fg_color=th["primary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36,
+                      command=_create
+                      ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkButton(btn_row, text="Zrušit", width=90,
+                      fg_color=th["secondary"], height=36,
+                      command=dlg.destroy).pack(side="left")
+
+    def _open_note_window(self, note: dict):
+        """Otevře plovoucí CTkToplevel okno pro danou poznámku."""
+        th = self.theme
+        color = note.get("color", th["primary"])
+        note_id = note.get("id")
+
+        # Zabránit duplicitám
+        for win_ref in list(self._notes_windows):
+            try:
+                if win_ref.winfo_exists() and getattr(win_ref, "_note_id", None) == note_id:
+                    win_ref.focus()
+                    return
+            except Exception:
+                self._notes_windows.remove(win_ref)
+
+        win = ctk.CTkToplevel()
+        win._note_id = note_id
+        win.title(f"📝 {note.get('title', 'Poznámka')}")
+        win.geometry("300x250")
+        win.configure(fg_color=th["content_bg"])
+        win.attributes("-topmost", True)
+        win.after(100, win.lift)
+        self._notes_windows.append(win)
+
+        # Barevný proužek nahoře
+        ctk.CTkFrame(win, fg_color=color, height=4, corner_radius=0).pack(fill="x")
+
+        # Nadpis
+        _label(win, note.get("title", "Poznámka"), 13, bold=True, color=color
+               ).pack(padx=12, pady=(8, 4), anchor="w")
+
+        # Textový obsah (editovatelný — změny se okamžitě ukládají)
+        box = ctk.CTkTextbox(win, fg_color=th["card_bg"], text_color=th["text"],
+                             font=ctk.CTkFont("Segoe UI", 11))
+        box.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        box.insert("1.0", note.get("content", ""))
+
+        def _on_content_change(*_):
+            note["content"] = box.get("1.0", "end").strip()
+            self._save_notes()
+
+        box.bind("<KeyRelease>", _on_content_change)
+
+        # Časovač (pokud je nastaven)
+        if note.get("expires_at"):
+            timer_lbl = _label(win, "", 10, color=th["warning"])
+            timer_lbl.pack(padx=12, pady=(0, 6), anchor="w")
+
+            def _tick():
+                if not win.winfo_exists():
+                    return
+                rem = max(0, int(note["expires_at"] - time.time()))
+                timer_lbl.configure(text=f"⏱ Zbývá: {_fmt_time(rem)}")
+                if rem <= 0:
+                    if note in self._notes:
+                        self._notes.remove(note)
+                    self._save_notes()
+                    self.after(0, self._refresh_notes_list)
+                    try:
+                        win.destroy()
+                    except Exception:
+                        pass
+                    return
+                win.after(1000, _tick)
+
+            win.after(1000, _tick)
+
+        def _on_close():
+            # Zavření okna poznámku NEMAŽE — persistence přes restart (N-01, odpověď uživatele).
+            # Smazat lze tlačítkem 🗑 v seznamu Sticky Notes nebo vypršením timeru.
+            self._save_notes()
+            if win in self._notes_windows:
+                self._notes_windows.remove(win)
+            try:
+                win.destroy()
+            except Exception:
+                pass
+
+        win.protocol("WM_DELETE_WINDOW", _on_close)
 
     # ─── HELPERS ──────────────────────────────────────────────────────────────
 

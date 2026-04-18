@@ -1,6 +1,8 @@
 dist/
 build/
 *.spec
+!ZeddiHubTools.spec
+!ZeddiHub.Tools.spec
 __pycache__/
 *.pyc
 *.pyo
@@ -13,3 +15,10 @@ assets/logo.png
 Thumbs.db
 .claude/
 assets/web_favicon.ico
+
+# Secrets
+.env
+.env.local
+*.token
+.gh_token
+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
