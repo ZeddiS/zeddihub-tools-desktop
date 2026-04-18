@@ -16,9 +16,9 @@ Thumbs.db
 .claude/
 assets/web_favicon.ico
 
-# Secrets
+# Secrets (POZOR: .gitignore neCHRANI tajemstvi - pouze zamezuje pridani souboru do commitu)
+# Samotny token NIKDY nevkladat do .gitignore jako radek!
 .env
 .env.local
 *.token
 .gh_token
-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
