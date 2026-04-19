@@ -1,4 +1,7 @@
 {
   "version": "2.0.0",
   "release_date": "2026-04-19",
-  "changelog": "Major release: completely redesigned release manager (zeddihub.bat) with ANSI colors and wizard flow, fixed build icon regeneration, unified release notes format. Includes all v1.9.0 work (Win11 Dark Gaming theme, admin dashboard redesign, updater fixes, single-source version, favicon sy
+  "changelog": "Major release: completely redesigned release manager (zeddihub.bat) with ANSI colors and wizard flow, fixed build icon regeneration, unified release notes format. Includes all v1.9.0 work (Win11 Dark Gaming theme, admin dashboard redesign, updater fixes, single-source version, favicon sync).",
+  "mandatory": false,
+  "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
+}

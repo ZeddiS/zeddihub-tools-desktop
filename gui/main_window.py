@@ -940,20 +940,36 @@ class MainWindow(ctk.CTk):
             self._current_panel = panel
             telemetry.on_panel_open(nav_id, get_current_user())
 
-    def _show_auth_dialog(self):
+    def _open_auth_dialog(self, on_success=None):
+        """N-11: Public wrapper — opens login/logout dialog with optional success callback.
+        Called by HomePanel login card to sync auth state back to the header + panel.
+        """
+        def _combined_success():
+            self.after(0, self._update_auth_ui)
+            if on_success:
+                self.after(0, on_success)
+
         if is_authenticated():
             user = get_current_user()
             dialog = _LogoutDialog(self, get_theme(self._current_game), user)
             self.wait_window(dialog)
             if dialog.result == "logout":
                 logout()
-                self._update_auth_ui()
+                self.after(0, self._update_auth_ui)
+                if on_success:
+                    self.after(50, on_success)
         else:
             dialog = AuthDialog(self, get_theme(self._current_game),
-                                on_success=lambda: self.after(0, self._update_auth_ui))
+                                on_success=_combined_success)
             self.wait_window(dialog)
             if dialog.result:
-                self._update_auth_ui()
+                self.after(0, self._update_auth_ui)
+                if on_success:
+                    self.after(50, on_success)
+
+    def _show_auth_dialog(self):
+        """Sidebar auth button — delegates to _open_auth_dialog without extra callback."""
+        self._open_auth_dialog()
 
     def _update_auth_ui(self):
         if is_authenticated():
@@ -997,6 +1013,14 @@ class MainWindow(ctk.CTk):
                 image=icons.icon("right-to-bracket", 15, "#888888"),
                 text=" " + t("login"), text_color="#888888")
 
+        # N-11: propagate auth state change to HomePanel login card if it is visible
+        try:
+            if hasattr(self, "_current_panel") and hasattr(self._current_panel, "_refresh_login_card"):
+                self._current_panel._refresh_login_card()
+        except Exception:
+            pass
+
+        if not is_authenticated():
             # Re-lock nav items
             th = self._get_current_theme()
             for entry in NAV_SECTIONS:

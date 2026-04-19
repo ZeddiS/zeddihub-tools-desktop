@@ -5,4 +5,51 @@
 # lokalni cache a tajemstvi ZUSTAVAJI lokalne.
 # =========================================================================
 
-# --- Build arte
+# --- Build artefakty ---
+dist/
+build/
+*.spec
+!ZeddiHubTools.spec
+
+# --- Python cache ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- IDE/editor ---
+.vscode/
+.idea/
+
+# --- Runtime data (uzivatelska) ---
+/data/
+*.enc
+Thumbs.db
+
+# --- Claude / agent worktrees ---
+.claude/
+
+# --- Assets stazene z CDN za behu (negenerujeme je do repa) ---
+assets/banner.png
+assets/logo.png
+assets/web_favicon.ico
+
+# --- Serverova cast (NEJDE na GitHub; hesla, data) ---
+webhosting/
+
+# --- Google Apps Script (neni app source) ---
+ZeddiHub App/
+
+# --- Obsoletni/pracovni soubory ---
+backlog_export_*.csv
+RELEASE_NOTES_v1.7.0.md
+release_1_8_0.*
+
+# =========================================================================
+# Secrets
+# POZOR: .gitignore neCHRANI tajemstvi - pouze zamezuje pridani souboru.
+# Hodnotu tokenu NIKDY nevkladat do .gitignore jako radek!
+# =========================================================================
+.env
+.env.local
+*.token
+.gh_token

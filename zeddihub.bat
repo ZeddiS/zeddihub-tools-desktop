@@ -707,4 +707,444 @@ goto pause_and_return_rescan
 
 REM =======================================================================
 REM  [7] GIT STATUS
-REM ========================================
+REM =======================================================================
+:git_status
+call :header "[7] Git status"
+echo   !C_YEL!-- git status --!C_R!
+git status
+echo.
+echo   !C_YEL!-- git branch -vv --!C_R!
+git branch -vv
+echo.
+echo   !C_YEL!-- posledni commity --!C_R!
+git log --oneline -10 2>nul
+echo.
+echo   !C_YEL!-- tagy (poslednich 10) --!C_R!
+git for-each-ref --count=10 --sort=-creatordate --format="  %%(refname:short)  %%(creatordate:short)" refs/tags 2>nul
+goto pause_and_return
+
+REM =======================================================================
+REM  [8] SMAZAT TAG
+REM =======================================================================
+:delete_tag
+call :header "[8] Smazat tag %TAG%"
+call :warn "Pouzivat POUZE pokud push selhal a potrebujes zacit znovu."
+echo.
+choice /c AN /n /m "  [A]no pokracovat / [N]e zrusit: "
+if errorlevel 2 goto render
+echo.
+git tag -d %TAG% 2>nul && call :ok "Lokalni tag %TAG% smazan." || call :info "(lokalni tag neexistoval)"
+if defined GITHUB_TOKEN (
+    set "REMOTE_URL=https://%GITHUB_TOKEN%@github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git"
+    git push "!REMOTE_URL!" --delete %TAG% 2>nul && (
+        call :ok "Remote tag smazan."
+    ) || (
+        call :info "(remote tag neexistoval nebo chyba permissions)"
+    )
+) else (
+    call :warn ".env nema token - remote tag smazte rucne na GitHubu."
+)
+goto pause_and_return_rescan
+
+REM =======================================================================
+REM  [9] OTEVRIT GITHUB
+REM =======================================================================
+:open_github
+call :header "[9] Otevrit GitHub v prohlizeci"
+echo   Otevirani stranek...
+start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%"
+start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases"
+start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions"
+call :ok "Otevreno v prohlizeci."
+goto pause_and_return
+
+REM =======================================================================
+REM  [11] QUICK PUSH (bez tagu, bez verze bumpu) + preview
+REM =======================================================================
+:quick_push
+call :header "[11] Rychla push (quick commit)"
+call :preflight "Quick Push" 1 0
+if errorlevel 1 goto pause_and_return
+
+if exist ".git\index.lock" del /f /q ".git\index.lock" 2>nul
+git add -A
+git reset HEAD -- webhosting/data/auth.json 2>nul
+git reset HEAD -- .env 2>nul
+echo.
+echo   !C_YEL!Zmeny, ktere se commitnou:!C_R!
+git diff --cached --stat
+echo.
+set /p "QMSG=  Commit message: "
+if "!QMSG!"=="" (
+    call :err "Prazdna zprava - preruseno."
+    goto pause_and_return
+)
+
+call :push_preview "Quick Push: !QMSG!"
+if errorlevel 1 goto pause_and_return
+
+git commit -m "!QMSG!" || (
+    call :info "(nic k commitnuti)"
+    goto pause_and_return
+)
+echo.
+echo   Push master...
+git push origin %GITHUB_DEFAULT_BRANCH% > .zh_push.log 2>&1
+type .zh_push.log
+findstr /C:"Push cannot contain secrets" /C:"GH013" .zh_push.log >nul
+if not errorlevel 1 (
+    del .zh_push.log 2>nul
+    call :err "Push blokovan push-protection - spust [12] Cleanup: PAT secret v historii."
+    goto pause_and_return
+)
+findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
+if not errorlevel 1 (
+    del .zh_push.log 2>nul
+    call :err "Push selhal."
+    goto pause_and_return
+)
+del .zh_push.log 2>nul
+call :ok "Pushnuto."
+goto pause_and_return_rescan
+
+REM =======================================================================
+REM  [12] CLEANUP: PAT SECRET V HISTORII
+REM =======================================================================
+:cleanup_secret
+call :header "[12] Cleanup: PAT secret v historii (filter-repo)"
+echo.
+echo   Tato akce TRVALE prepise git historii a odstrani vsechny GitHub
+echo   Personal Access Tokeny (vzory: github_pat_..., ghp_..., ghs_...).
+echo.
+echo   Dva mody:
+echo     !C_GRN![A]!C_R! Allow-list pres GitHub UI (nejrychlejsi, secret vsak zustava)
+echo     !C_YEL![B]!C_R! Automaticke prepsani historie pres git filter-repo (cisty)
+echo     !C_DIM![X]!C_R! Zrusit
+echo.
+choice /c ABX /n /m "  Volba: "
+if errorlevel 3 goto pause_and_return
+if errorlevel 2 goto cleanup_filter_repo
+
+echo.
+echo   Otevirani GitHub Secret Scanning stranky...
+start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/security/secret-scanning"
+echo.
+call :info "Na webu: najdi blokovany secret, klikni Allow a vyber duvod."
+call :info "Typicke duvody: 'Used in tests' / 'Revoked'."
+echo.
+call :warn "DOPORUCENI: pred Allow zneplatni token na https://github.com/settings/tokens"
+goto pause_and_return
+
+:cleanup_filter_repo
+echo.
+call :warn "Toto PREPISE historii. Budes muset force-pushnout."
+call :warn "Pokud je repo sdileny s jinymi lidmi, koordinuj s nimi!"
+echo.
+choice /c AN /n /m "  [A]no pokracovat / [N]e zrusit: "
+if errorlevel 2 goto pause_and_return
+echo.
+echo   Kontrola git-filter-repo...
+where git-filter-repo >nul 2>&1
+if errorlevel 1 (
+    echo   Neni nainstalovan. Instaluji pres pip...
+    python -m pip install git-filter-repo
+    if errorlevel 1 (
+        call :err "Instalace selhala. Zkus rucne: python -m pip install git-filter-repo"
+        goto pause_and_return
+    )
+)
+echo.
+echo   Vytvarim .zh_replacements.txt s token patterny...
+(
+    echo regex:github_pat_[A-Za-z0-9_]+==^>***REMOVED_PAT***
+    echo regex:ghp_[A-Za-z0-9]+==^>***REMOVED_PAT***
+    echo regex:ghs_[A-Za-z0-9]+==^>***REMOVED_PAT***
+    echo regex:gho_[A-Za-z0-9]+==^>***REMOVED_PAT***
+    echo regex:ghu_[A-Za-z0-9]+==^>***REMOVED_PAT***
+    echo regex:ghr_[A-Za-z0-9]+==^>***REMOVED_PAT***
+) > .zh_replacements.txt
+echo.
+echo   Spoustim git filter-repo...
+git-filter-repo --replace-text .zh_replacements.txt --force
+if errorlevel 1 (
+    del .zh_replacements.txt 2>nul
+    call :err "filter-repo selhalo. Overit: python -m git_filter_repo --help"
+    goto pause_and_return
+)
+del .zh_replacements.txt 2>nul
+echo.
+call :ok "Historie prepsana. Tokeny nahrazeny ***REMOVED_PAT***."
+echo.
+echo   Obnovuji remote origin (filter-repo ho odstranuje)...
+git remote add origin "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git" 2>nul
+git remote set-url origin "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git"
+echo.
+call :warn "Nyni musis FORCE PUSH: git push origin %GITHUB_DEFAULT_BRANCH% --force"
+echo.
+choice /c AN /n /m "  Provest force push HNED? [A]no / [N]e zrusit: "
+if errorlevel 2 (
+    call :info "Force push preskocen. Spust rucne, az budes pripraven."
+    goto pause_and_return
+)
+echo.
+git push origin %GITHUB_DEFAULT_BRANCH% --force > .zh_push.log 2>&1
+type .zh_push.log
+findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
+if not errorlevel 1 (
+    del .zh_push.log 2>nul
+    call :err "Force push selhal. Zkontroluj branch protection rules."
+    goto pause_and_return
+)
+del .zh_push.log 2>nul
+call :ok "Force push hotov. Historie na GitHubu je cista."
+call :info "Nyni muzes znovu spustit [5] Auto Release pro tagovani %TAG%."
+goto pause_and_return_rescan
+
+REM =======================================================================
+REM  [W] RELEASE WIZARD - step-by-step novy release
+REM =======================================================================
+:release_wizard
+cls
+call :draw_banner
+echo.
+echo   !C_B!!C_WHT!RELEASE WIZARD!C_R!  !C_DIM!(krokovy pruvodce pro novy release)!C_R!
+echo.
+echo   Aktualni verze v !C_CYN!gui/version.py!C_R!: !C_YEL!%VERSION%!C_R!
+echo.
+set "NEW_VERSION="
+set /p "NEW_VERSION=  Zadej novou verzi (napr. 2.0.1, Enter = zrusit): "
+if "!NEW_VERSION!"=="" (
+    call :info "Wizard zrusen."
+    goto pause_and_return
+)
+
+echo !NEW_VERSION! | findstr /R "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
+if errorlevel 1 (
+    call :err "Neplatny format verze. Ocekavano X.Y.Z (napr. 2.0.1)."
+    goto pause_and_return
+)
+
+set "NEW_TAG=v!NEW_VERSION!"
+
+echo.
+echo   !C_DIM!--- Shrnuti ---!C_R!
+echo   Stara verze: !C_GRY!%VERSION%!C_R!  =^>  Nova verze: !C_GRN!!NEW_VERSION!!C_R!
+echo   Stary tag:   !C_GRY!%TAG%!C_R!     =^>  Novy tag:   !C_GRN!!NEW_TAG!!C_R!
+echo.
+choice /c AN /n /m "  Pokracovat wizardem? [A]no / [N]e: "
+if errorlevel 2 goto pause_and_return
+
+call :step "1/7" "Pre-flight kontroly"
+call :preflight "Release Wizard !NEW_TAG!" 1 0
+if errorlevel 1 goto pause_and_return
+
+call :step "2/7" "Bump verze v souborech"
+echo   Aktualizuji:
+echo     - gui\version.py
+echo     - version.json
+echo     - webhosting\data\version.json
+echo     - webhosting\admin\_lib.php
+echo.
+
+if exist "gui\version.py" (
+    powershell -NoProfile -Command "$p='gui\version.py'; (Get-Content $p -Raw) -replace 'APP_VERSION = \"%VERSION%\"','APP_VERSION = \"!NEW_VERSION!\"' | Set-Content -NoNewline $p" 2>nul
+    if errorlevel 1 (
+        call :warn "Powershell update gui\version.py selhal - uprav rucne."
+    ) else (
+        call :ok "gui\version.py bumpnut na !NEW_VERSION!"
+    )
+) else (
+    call :warn "gui\version.py nenalezen."
+)
+
+if exist "version.json" (
+    powershell -NoProfile -Command "$p='version.json'; $j=Get-Content $p -Raw | ConvertFrom-Json; $j.version='!NEW_VERSION!'; $j.release_date=(Get-Date -Format 'yyyy-MM-dd'); $j | ConvertTo-Json -Depth 5 | Set-Content -NoNewline $p" 2>nul
+    if errorlevel 1 (
+        call :warn "Powershell update version.json selhal - uprav rucne."
+    ) else (
+        call :ok "version.json bumpnut."
+    )
+) else (
+    call :warn "version.json nenalezen."
+)
+
+if exist "webhosting\data\version.json" (
+    powershell -NoProfile -Command "$p='webhosting\data\version.json'; $j=Get-Content $p -Raw | ConvertFrom-Json; $j.version='!NEW_VERSION!'; $j.release_date=(Get-Date -Format 'yyyy-MM-dd'); $j | ConvertTo-Json -Depth 5 | Set-Content -NoNewline $p" 2>nul
+    if errorlevel 1 (
+        call :warn "Powershell update webhosting\data\version.json selhal - uprav rucne."
+    ) else (
+        call :ok "webhosting\data\version.json bumpnut."
+    )
+) else (
+    call :warn "webhosting\data\version.json nenalezen."
+)
+
+if exist "webhosting\admin\_lib.php" (
+    powershell -NoProfile -Command "$p='webhosting\admin\_lib.php'; (Get-Content $p -Raw) -replace \"APP_VERSION', '%VERSION%'\",\"APP_VERSION', '!NEW_VERSION!'\" | Set-Content -NoNewline $p" 2>nul
+    if errorlevel 1 (
+        call :warn "Powershell update _lib.php selhal - uprav rucne."
+    ) else (
+        call :ok "webhosting\admin\_lib.php bumpnut."
+    )
+) else (
+    call :warn "webhosting\admin\_lib.php nenalezen."
+)
+
+echo.
+call :warn "DULEZITE: rucne aktualizuj CHANGELOG.md a release_notes_!NEW_TAG!.md"
+echo.
+set "SKIP_RN="
+set /p "SKIP_RN=  Mas release_notes_!NEW_TAG!.md? (Enter = otevrit v notepad a upravit, X = preskocit): "
+if /i not "!SKIP_RN!"=="X" (
+    if not exist "release_notes_!NEW_TAG!.md" (
+        echo.
+        call :info "Vytvarim sablonu release_notes_!NEW_TAG!.md..."
+        (
+            echo # ZeddiHub Tools Desktop !NEW_TAG! - [short title]
+            echo.
+            echo **Vydano / Released:** %DATE:~-10%
+            echo.
+            echo ## Highlights
+            echo.
+            echo -
+            echo.
+            echo ## Added
+            echo.
+            echo -
+            echo.
+            echo ## Changed
+            echo.
+            echo -
+            echo.
+            echo ## Fixed
+            echo.
+            echo -
+            echo.
+            echo ---
+            echo.
+            echo **Plny changelog:** [CHANGELOG.md]^(https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/blob/master/CHANGELOG.md^)
+        ) > "release_notes_!NEW_TAG!.md"
+        call :ok "Sablona vytvorena: release_notes_!NEW_TAG!.md"
+    )
+    start "" notepad "release_notes_!NEW_TAG!.md"
+    echo.
+    echo   Uprav release notes, ulozi a stiskni libovolnou klavesu pro pokracovani...
+    pause >nul
+)
+
+call :step "3/7" "Dependencies check"
+python -c "import customtkinter, PIL, cryptography, pystray" 2>nul
+if errorlevel 1 (
+    call :warn "Nektere Python baliky chybi."
+    choice /c AN /n /m "  Nainstalovat ted? [A]no / [N]e pokracovat: "
+    if errorlevel 2 goto wiz_dep_skip
+    python -m pip install -r requirements.txt
+    python -m pip install pyinstaller
+) else (
+    call :ok "Python baliky jsou v poradku."
+)
+:wiz_dep_skip
+
+call :step "4/7" "Build .exe (s icon regenerace)"
+choice /c AN /n /m "  Spustit local build? [A]no (doporuceno) / [N]e preskocit: "
+if errorlevel 2 goto wiz_build_skip
+if exist "assets\web_favicon.ico" (
+    copy /Y "assets\web_favicon.ico" "assets\icon.ico" >nul
+    call :ok "icon.ico regeneruje z web_favicon.ico (F-14)."
+)
+if exist "ZeddiHubTools.spec" (
+    python -m PyInstaller ZeddiHubTools.spec --clean --noconfirm
+    if exist "dist\ZeddiHubTools.exe" (
+        call :ok "Build OK: dist\ZeddiHubTools.exe"
+    ) else (
+        call :err "Build selhal."
+        choice /c AN /n /m "  Pokracovat i tak? [A]no / [N]e zrusit: "
+        if errorlevel 2 goto pause_and_return
+    )
+) else (
+    call :warn "ZeddiHubTools.spec nenalezen - preskakuji build."
+)
+:wiz_build_skip
+
+call :step "5/7" "Git commit"
+git config user.name "%GIT_AUTHOR_NAME%" 2>nul
+if defined GIT_AUTHOR_EMAIL git config user.email "%GIT_AUTHOR_EMAIL%" 2>nul
+if exist ".git\index.lock" del /f /q ".git\index.lock" 2>nul
+git add -A
+git reset HEAD -- webhosting/data/auth.json 2>nul
+git reset HEAD -- .env 2>nul
+echo.
+echo   !C_YEL!Zmeny, ktere se commitnou:!C_R!
+git diff --cached --stat
+echo.
+choice /c AN /n /m "  Vytvorit commit 'Release !NEW_TAG!'? [A]no / [N]e zrusit: "
+if errorlevel 2 goto pause_and_return
+git commit -m "Release !NEW_TAG!" || call :info "(nic k commitnuti)"
+
+call :step "6/7" "Push preview + push"
+set "TAG=!NEW_TAG!"
+call :push_preview "Release Wizard: !NEW_TAG! (push master + tag)"
+if errorlevel 1 goto pause_and_return
+
+echo.
+echo   Push master...
+git push origin %GITHUB_DEFAULT_BRANCH% > .zh_push.log 2>&1
+type .zh_push.log
+findstr /C:"Push cannot contain secrets" /C:"GH013" .zh_push.log >nul
+if not errorlevel 1 (
+    del .zh_push.log 2>nul
+    call :err "Push blokovan push-protection. Spust [12] Cleanup."
+    goto pause_and_return
+)
+findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
+if not errorlevel 1 (
+    del .zh_push.log 2>nul
+    call :err "Push selhal."
+    goto pause_and_return
+)
+del .zh_push.log 2>nul
+
+echo.
+echo   Push tagu !NEW_TAG!...
+git tag !NEW_TAG! 2>nul || call :info "(tag uz existuje lokalne)"
+git push origin !NEW_TAG! > .zh_push.log 2>&1
+type .zh_push.log
+del .zh_push.log 2>nul
+
+call :step "7/7" "GitHub Release (volitelne - gh CLI)"
+where gh >nul 2>&1
+if errorlevel 1 (
+    call :warn "gh CLI neni k dispozici - release vytvor rucne na GitHubu:"
+    echo      !C_CYN!https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases/new?tag=!NEW_TAG!!C_R!
+    goto pause_and_return_rescan
+)
+if not exist "dist\ZeddiHubTools.exe" (
+    call :warn "dist\ZeddiHubTools.exe neexistuje - nahrat rucne pozdeji."
+    start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases/new?tag=!NEW_TAG!"
+    goto pause_and_return_rescan
+)
+choice /c AN /n /m "  Vytvorit release pres gh CLI s .exe? [A]no / [N]e preskocit: "
+if errorlevel 2 goto pause_and_return_rescan
+
+if exist "release_notes_!NEW_TAG!.md" (
+    gh release create !NEW_TAG! "dist\ZeddiHubTools.exe" --title "!NEW_TAG!" --notes-file "release_notes_!NEW_TAG!.md"
+) else (
+    gh release create !NEW_TAG! "dist\ZeddiHubTools.exe" --title "!NEW_TAG!" --generate-notes
+)
+echo.
+call :ok "Release !NEW_TAG! hotov!"
+echo      !C_CYN!https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases/tag/!NEW_TAG!!C_R!
+goto pause_and_return_rescan
+
+REM =======================================================================
+REM  END
+REM =======================================================================
+:end
+cls
+call :draw_banner
+echo.
+echo   !C_GRN!Diky za pouziti ZeddiHub Release Manager v%VERSION%.!C_R!
+echo   !C_DIM!Hotovo.!C_R!
+echo.
+endlocal
+exit /b 0
