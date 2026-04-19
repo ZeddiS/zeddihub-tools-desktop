@@ -41,8 +41,12 @@ ZeddiHub App/
 
 # --- Obsoletni/pracovni soubory ---
 backlog_export_*.csv
-RELEASE_NOTES_v1.7.0.md
+RELEASE_NOTES_v*.md
+release_notes_v*.md
 release_1_8_0.*
+security_cleanup.bat
+release_1_8_0_manual.cmd
+CLAUDE.md
 
 # =========================================================================
 # Secrets

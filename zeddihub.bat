@@ -1,1150 +1,432 @@
 @echo off
-REM =======================================================================
-REM  ZEDDIHUB TOOLS DESKTOP - Release Manager v2.0.0
-REM  Windows 11 compatible, ANSI-colored, FAST (cached status).
-REM  Features: ASCII banner, ANSI colors, pre-flight checks, release
-REM  wizard, push preview, auto icon regeneration before build.
-REM =======================================================================
-setlocal EnableDelayedExpansion EnableExtensions
-cd /d "%~dp0"
+setlocal EnableDelayedExpansion
 chcp 65001 >nul 2>&1
-title ZeddiHub Tools Desktop - Release Manager v2.0.0
 
-REM --- ANSI escape bootstrap (works on Win10 1909+ / Win11) ---
-for /f "tokens=*" %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
+:: ═══════════════════════════════════════════════════════════════
+::  ZeddiHub Tools Desktop — Dev & Release Manager
+::  Sprava verzi, buildu a GitHub repozitare
+:: ═══════════════════════════════════════════════════════════════
 
-REM --- Color palette (use with !C_...! inside DelayedExpansion) ---
-set "C_R=%ESC%[0m"
-set "C_B=%ESC%[1m"
-set "C_DIM=%ESC%[2m"
-set "C_RED=%ESC%[91m"
-set "C_GRN=%ESC%[92m"
-set "C_YEL=%ESC%[93m"
-set "C_BLU=%ESC%[94m"
-set "C_MAG=%ESC%[95m"
-set "C_CYN=%ESC%[96m"
-set "C_WHT=%ESC%[97m"
-set "C_GRY=%ESC%[90m"
+:: ── Aktivuj ANSI escape kody (Windows 10+) ────────────────────
+reg add "HKCU\Console" /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
+for /f %%a in ('powershell -NoProfile -Command "[char]27" 2^>nul') do set "_E=%%a"
 
-REM --- Config ---
-set "REPO_ROOT=%~dp0"
-set "ENV_FILE=%REPO_ROOT%.env"
-set "VERSION=2.0.0"
-set "TAG=v%VERSION%"
-
-REM --- CLI args ---
-if /i "%~1"=="--debug"  set "ZH_DEBUG=1"
-if /i "%~1"=="--wizard" set "DIRECT_ACTION=wizard"
-if /i "%~1"=="/w"       set "DIRECT_ACTION=wizard"
-if /i "%~1"=="/?"       goto show_help
-if /i "%~1"=="-h"       goto show_help
-if /i "%~1"=="--help"   goto show_help
-
-REM --- Menu definition (12 items, grouped into sections) ---
-set "MI_COUNT=12"
-set "MI_1=Konfigurace .env"
-set "MI_2=Test GITHUB_TOKEN"
-set "MI_3=Dependencies (Python + PyInstaller)"
-set "MI_4=Build .exe lokalne (+ icon regen)"
-set "MI_5=Auto Release (commit+push+Actions)"
-set "MI_6=Manual Release (gh CLI upload)"
-set "MI_7=Git status"
-set "MI_8=Smazat tag %TAG%"
-set "MI_9=Otevrit GitHub v prohlizeci"
-set "MI_10=Obnovit status (rescan)"
-set "MI_11=Rychla push (quick commit)"
-set "MI_12=Cleanup: PAT secret v historii (filter-repo)"
-
-set "MS_1=Release"
-set "MS_2=Release"
-set "MS_3=Build"
-set "MS_4=Build"
-set "MS_5=Release"
-set "MS_6=Release"
-set "MS_7=Git"
-set "MS_8=Git"
-set "MS_9=Git"
-set "MS_10=Maint"
-set "MS_11=Git"
-set "MS_12=Maint"
-
-set "MH_1=Vytvori/prepise .env (token, owner, repo, identita)."
-set "MH_2=Overi zda tvuj GITHUB_TOKEN ma spravne permissions."
-set "MH_3=Nainstaluje requirements.txt + pyinstaller pres 'python -m pip'."
-set "MH_4=Spusti 'python -m PyInstaller' - NEJDRIV regeneruje icon.ico z web_favicon.ico (F-14)."
-set "MH_5=Pre-flight kontroly -> push preview -> commit+push+tag %TAG%. GitHub Actions zbuilduje .exe."
-set "MH_6=Vytvori release s uz zbuildenym .exe pres gh CLI."
-set "MH_7=Zobrazi lokalni git status, vetve a tagy."
-set "MH_8=Smaze tag %TAG% lokalne i na GitHubu (pokud blokuje push)."
-set "MH_9=Otevre repo/releases/actions/issues v prohlizeci."
-set "MH_10=Znovu zjisti stav Pythonu, Gitu, tagu a .env (pomale - siti)."
-set "MH_11=Rychly commit + push beze zmeny verze (bez tagu) + preview."
-set "MH_12=Prepise git historii a odstrani PAT tokeny - reseni GitHub Push Protection."
-
-set "MENU_POS=1"
-
-REM --- Prvotni detekce statusu ---
-call :load_env
-call :detect_status_fast
-call :detect_status_slow
-
-if defined ZH_DEBUG (
-    echo [DEBUG] Initial scan done. Press any key...
-    pause >nul
+if defined _E (
+    set "R=!_E![0m"          & set "B=!_E![1m"        & set "DIM=!_E![2m"
+    set "RED=!_E![91m"       & set "GRN=!_E![92m"     & set "YEL=!_E![93m"
+    set "BLU=!_E![94m"       & set "CYN=!_E![96m"     & set "WHT=!_E![97m"
+    set "ORG=!_E![38;5;214m" & set "PRP=!_E![95m"
+) else (
+    for %%c in (R B DIM RED GRN YEL BLU CYN WHT ORG PRP) do set "%%c="
 )
 
-REM --- Direct actions via CLI ---
-if "%DIRECT_ACTION%"=="wizard" goto release_wizard
+:: ── Nacti .env (pokud existuje) ───────────────────────────────
+if exist ".env" (
+    for /f "usebackq tokens=1,* delims==" %%k in (".env") do (
+        set "_ln=%%k"
+        if not "!_ln:~0,1!"=="#" if not "!_ln!"=="" set "%%k=%%l"
+    )
+)
+if not defined GITHUB_OWNER          set "GITHUB_OWNER=ZeddiS"
+if not defined GITHUB_REPO           set "GITHUB_REPO=zeddihub-tools-desktop"
+if not defined GITHUB_DEFAULT_BRANCH set "GITHUB_DEFAULT_BRANCH=master"
+set "_REPO=https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%"
 
-:render
+
+:: ══════════════════════════════════════════════════════════════
+:MAIN_MENU
 cls
-call :draw_banner
-call :draw_status
+call :FN_BANNER
+call :FN_QUICK_STATUS
 echo.
-echo   !C_DIM!Ovladani:!C_R!  !C_CYN!W/S!C_R! nahoru/dolu  !C_CYN!D/Enter!C_R! potvrdit  !C_CYN!1-9!C_R! primo  !C_CYN!T!C_R!^>Wizard  !C_CYN!V!C_R!^>Preview  !C_CYN!Q!C_R! konec
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━!R!
 echo.
-call :draw_menu
+echo   !B!!ORG!  1!R!  Stav projektu         !DIM!verze, git, GitHub!R!
+echo   !B!!ORG!  2!R!  Novy release          !DIM!pruvodce krok za krokem!R!
+echo   !B!!ORG!  3!R!  Build .exe            !DIM!PyInstaller!R!
+echo   !B!!ORG!  4!R!  Git operace           !DIM!status, pull, push, log!R!
+echo   !B!!ORG!  5!R!  GitHub                !DIM!releases, issues, actions!R!
+echo   !B!!ORG!  6!R!  Vycistit artefakty    !DIM!build/, dist/, __pycache__!R!
+echo   !B!!ORG!  7!R!  Spustit aplikaci      !DIM!python app.py!R!
 echo.
-echo   !C_GRY!---------------------------------------------------------------------------!C_R!
-call set "_H=%%MH_%MENU_POS%%%"
-echo   !C_DIM!Napoveda:!C_R!  !_H!
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━!R!
+echo   !RED!  Q!R!  Konec
 echo.
+set /p "_c=  Volba: "
+if /i "!_c!"=="1" ( call :FN_DETAILED_STATUS & goto MAIN_MENU )
+if /i "!_c!"=="2" ( call :FN_RELEASE_WIZARD  & goto MAIN_MENU )
+if /i "!_c!"=="3" ( call :FN_BUILD_EXE       & goto MAIN_MENU )
+if /i "!_c!"=="4" goto GIT_MENU
+if /i "!_c!"=="5" goto GITHUB_MENU
+if /i "!_c!"=="6" ( call :FN_CLEAN           & goto MAIN_MENU )
+if /i "!_c!"=="7" ( call :FN_RUN_APP         & goto MAIN_MENU )
+if /i "!_c!"=="q" goto END
+goto MAIN_MENU
 
-REM Accept W/S (nav), A/D (back/confirm), Q (quit), 1-9 (direct),
-REM R (refresh), plus new T (wizard) and V (preview).
-choice /c WSADQ123456789RTV /n >nul
-set "K=!errorlevel!"
 
-if "%K%"=="1" goto key_up
-if "%K%"=="2" goto key_down
-if "%K%"=="3" goto key_back
-if "%K%"=="4" goto key_select
-if "%K%"=="5" goto end
-if "%K%"=="15" goto key_refresh
-if "%K%"=="16" goto release_wizard
-if "%K%"=="17" goto push_preview_menu
-if %K% geq 6 if %K% leq 14 (
-    set /a "N=K-5"
-    if !N! leq %MI_COUNT% (
-        set "MENU_POS=!N!"
-        goto key_select
-    )
-)
-goto render
-
-:key_up
-set /a "MENU_POS-=1"
-if %MENU_POS% lss 1 set "MENU_POS=%MI_COUNT%"
-goto render
-
-:key_down
-set /a "MENU_POS+=1"
-if %MENU_POS% gtr %MI_COUNT% set "MENU_POS=1"
-goto render
-
-:key_back
-goto render
-
-:key_refresh
-call :refresh_banner "Obnovuji status..."
-call :load_env
-call :detect_status_fast
-call :detect_status_slow
-goto render
-
-:key_select
-if %MENU_POS%==1 goto configure_env
-if %MENU_POS%==2 goto test_token
-if %MENU_POS%==3 goto install_deps
-if %MENU_POS%==4 goto build_exe
-if %MENU_POS%==5 goto auto_release
-if %MENU_POS%==6 goto manual_release
-if %MENU_POS%==7 goto git_status
-if %MENU_POS%==8 goto delete_tag
-if %MENU_POS%==9 goto open_github
-if %MENU_POS%==10 goto key_refresh
-if %MENU_POS%==11 goto quick_push
-if %MENU_POS%==12 goto cleanup_secret
-goto render
-
-REM =======================================================================
-REM  UI HELPERS
-REM =======================================================================
-
-:draw_banner
-echo.
-echo   !C_CYN!+=========================================================================+!C_R!
-echo   !C_CYN!^|!C_R!   !C_B!!C_WHT!Z E D D I H U B   T O O L S   D E S K T O P!C_R!    Release Mgr !C_MAG!v%VERSION%!C_R!  !C_CYN!^|!C_R!
-echo   !C_CYN!+=========================================================================+!C_R!
-exit /b 0
-
-:draw_status
-echo   !C_DIM!Status:!C_R!
-echo     !C_DIM!.env            !C_R! !STATUS_ENV!
-echo     !C_DIM!GITHUB_TOKEN    !C_R! !STATUS_TOKEN!
-echo     !C_DIM!Python          !C_R! !STATUS_PYTHON!
-echo     !C_DIM!PyInstaller     !C_R! !STATUS_PYI!
-echo     !C_DIM!Git branch      !C_R! !STATUS_BRANCH!
-echo     !C_DIM!Lokalni .exe    !C_R! !STATUS_EXE!
-echo     !C_DIM!Remote tag      !C_R! !STATUS_TAG!
-exit /b 0
-
-:draw_menu
-set "LAST_SEC="
-for /l %%i in (1,1,%MI_COUNT%) do call :print_item %%i
-exit /b 0
-
-:print_item
-set "IDX=%~1"
-call set "LABEL=%%MI_%IDX%%%"
-call set "SEC=%%MS_%IDX%%%"
-if not "!SEC!"=="!LAST_SEC!" (
-    echo.
-    echo   !C_YEL!-- !SEC! --!C_R!
-    set "LAST_SEC=!SEC!"
-)
-if "%IDX%"=="%MENU_POS%" (
-    echo     !C_GRN!^>^> [%IDX%] !LABEL!!C_R!
-) else (
-    echo        !C_GRY![%IDX%]!C_R! !LABEL!
-)
-exit /b 0
-
-:refresh_banner
+:: ══════════════════════════════════════════════════════════════
+:GIT_MENU
 cls
+call :FN_BANNER
 echo.
-echo   !C_CYN!%~1!C_R!
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━ GIT OPERACE ━━━━━━━━!R!
 echo.
-exit /b 0
-
-:header
+echo   !B!!ORG!  1!R!  Git status
+echo   !B!!ORG!  2!R!  Git pull
+echo   !B!!ORG!  3!R!  Commit + push
+echo   !B!!ORG!  4!R!  Poslednich 15 commitu
+echo   !B!!ORG!  5!R!  Porovnat s remote     !DIM!fetch + ahead/behind!R!
 echo.
-echo   !C_CYN!+------------------------------------------------------------------+!C_R!
-echo   !C_CYN!^|!C_R!  !C_B!!C_WHT!%~1!C_R!
-echo   !C_CYN!+------------------------------------------------------------------+!C_R!
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━!R!
+echo   !YEL!  0!R!  Zpet do hlavniho menu
 echo.
-exit /b 0
+set /p "_c=  Volba: "
+if "!_c!"=="1" (
+    echo. & git status & echo. & call :FN_PAUSE & goto GIT_MENU
+)
+if "!_c!"=="2" (
+    echo. & git pull & echo. & call :FN_PAUSE & goto GIT_MENU
+)
+if "!_c!"=="3" ( call :FN_GIT_PUSH & goto GIT_MENU )
+if "!_c!"=="4" (
+    echo.
+    git log --oneline --graph --color --decorate -15
+    echo. & call :FN_PAUSE & goto GIT_MENU
+)
+if "!_c!"=="5" (
+    echo.
+    echo   !DIM!Nacitam remote ...!R!
+    git fetch >nul 2>&1
+    for /f %%a in ('git rev-list --count "origin/%GITHUB_DEFAULT_BRANCH%..HEAD" 2^>nul') do set "_ah=%%a"
+    for /f %%b in ('git rev-list --count "HEAD..origin/%GITHUB_DEFAULT_BRANCH%" 2^>nul') do set "_bh=%%b"
+    if not defined _ah set "_ah=0"
+    if not defined _bh set "_bh=0"
+    echo.
+    echo   !B!Commits ahead :!R!  !GRN!!_ah!!R!
+    echo   !B!Commits behind:!R!  !YEL!!_bh!!R!
+    echo.
+    git log --oneline --decorate -5
+    echo. & call :FN_PAUSE & goto GIT_MENU
+)
+if "!_c!"=="0" goto MAIN_MENU
+goto GIT_MENU
 
-:pause_and_return
-echo.
-echo   !C_DIM!Stiskni libovolnou klavesu pro navrat do menu...!C_R!
-pause >nul
-call :load_env
-call :detect_status_fast
-goto render
 
-:pause_and_return_rescan
-echo.
-echo   !C_DIM!Stiskni libovolnou klavesu pro navrat do menu...!C_R!
-pause >nul
-call :load_env
-call :detect_status_fast
-call :detect_status_slow
-goto render
-
-:ok
-echo   !C_GRN![OK]!C_R!    %~1
-exit /b 0
-
-:err
-echo   !C_RED![CHYBA]!C_R! %~1
-exit /b 0
-
-:info
-echo   !C_CYN![INFO]!C_R!  %~1
-exit /b 0
-
-:warn
-echo   !C_YEL![POZOR]!C_R! %~1
-exit /b 0
-
-:step
-REM Step header for wizard mode: :step "1/7" "Bump verze"
-echo.
-echo   !C_MAG!== Krok %~1 ==!C_R!  !C_B!!C_WHT!%~2!C_R!
-echo   !C_GRY!---------------------------------------------------------------!C_R!
-exit /b 0
-
-:show_help
+:: ══════════════════════════════════════════════════════════════
+:GITHUB_MENU
 cls
-call :draw_banner
+call :FN_BANNER
 echo.
-echo   !C_B!!C_WHT!Pouziti:!C_R!
-echo     !C_CYN!zeddihub.bat!C_R!            spusti interaktivni menu
-echo     !C_CYN!zeddihub.bat --wizard!C_R!   spusti Release Wizard primo
-echo     !C_CYN!zeddihub.bat /w!C_R!         zkraceny alias pro --wizard
-echo     !C_CYN!zeddihub.bat --debug!C_R!    spusti s debug vystupem
-echo     !C_CYN!zeddihub.bat /?!C_R!         zobrazi tuto napovedu
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━━━ GITHUB ━━━━━━━━━━━━!R!
 echo.
-echo   !C_B!!C_WHT!Klavesove zkratky v menu:!C_R!
-echo     !C_CYN!W / S!C_R!        pohyb nahoru / dolu
-echo     !C_CYN!D / Enter!C_R!    potvrdit volbu
-echo     !C_CYN!A!C_R!            zrusit / zpet
-echo     !C_CYN!1-9!C_R!          primo skoci na polozku
-echo     !C_CYN!R!C_R!            rescan statusu
-echo     !C_CYN!T!C_R!            Release Wizard (step-by-step)
-echo     !C_CYN!V!C_R!            Push Preview (pred pushem)
-echo     !C_CYN!Q!C_R!            konec
+echo   !B!!ORG!  1!R!  Zobrazit releases     !DIM!seznam v terminalu!R!
+echo   !B!!ORG!  2!R!  Zobrazit issues       !DIM!otevrene!R!
+echo   !B!!ORG!  3!R!  Status CI / Actions   !DIM!posledni workflow!R!
+echo   !B!!ORG!  4!R!  Nahrat .exe k release !DIM!gh release upload!R!
 echo.
-echo   !C_B!!C_WHT!Tipy:!C_R!
-echo     * Pred kazdou release/push akci se automaticky spusti pre-flight.
-echo     * Build .exe vzdy regeneruje icon.ico z web_favicon.ico (F-14).
+echo   !B!!CYN!  ── Otevrit v prohlizeci ─────────────────!R!
 echo.
-pause
-exit /b 0
-
-REM =======================================================================
-REM  ENV / STATUS DETECTION
-REM =======================================================================
-
-:load_env
-set "GITHUB_TOKEN="
-set "GITHUB_OWNER=ZeddiS"
-set "GITHUB_REPO=zeddihub-tools-desktop"
-set "GITHUB_DEFAULT_BRANCH=master"
-set "GIT_AUTHOR_NAME=ZeddiS"
-set "GIT_AUTHOR_EMAIL="
-if not exist "%ENV_FILE%" exit /b 0
-for /f "usebackq tokens=* delims=" %%L in ("%ENV_FILE%") do (
-    set "LINE=%%L"
-    if defined LINE (
-        set "CHR1=!LINE:~0,1!"
-        if not "!CHR1!"=="#" (
-            for /f "tokens=1,* delims==" %%A in ("!LINE!") do (
-                if not "%%A"=="" if not "%%B"=="" set "%%A=%%B"
-            )
-        )
-    )
+echo   !B!!BLU!  5!R!  Repozitar
+echo   !B!!BLU!  6!R!  Releases
+echo   !B!!BLU!  7!R!  Issues
+echo   !B!!BLU!  8!R!  Actions / CI
+echo.
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━!R!
+echo   !YEL!  0!R!  Zpet do hlavniho menu
+echo.
+set /p "_c=  Volba: "
+if "!_c!"=="1" (
+    echo. & gh release list --limit 10 & echo. & call :FN_PAUSE & goto GITHUB_MENU
 )
-exit /b 0
+if "!_c!"=="2" (
+    echo. & gh issue list --state open --limit 20 & echo. & call :FN_PAUSE & goto GITHUB_MENU
+)
+if "!_c!"=="3" (
+    echo. & gh run list --limit 8 & echo. & call :FN_PAUSE & goto GITHUB_MENU
+)
+if "!_c!"=="4" ( call :FN_UPLOAD_EXE & goto GITHUB_MENU )
+if "!_c!"=="5" ( start "" "%_REPO%"                & goto GITHUB_MENU )
+if "!_c!"=="6" ( start "" "%_REPO%/releases"       & goto GITHUB_MENU )
+if "!_c!"=="7" ( start "" "%_REPO%/issues"         & goto GITHUB_MENU )
+if "!_c!"=="8" ( start "" "%_REPO%/actions"        & goto GITHUB_MENU )
+if "!_c!"=="0" goto MAIN_MENU
+goto GITHUB_MENU
 
-:detect_status_fast
-if exist "%ENV_FILE%" (
-    set "STATUS_ENV=!C_GRN![OK]!C_R!"
+
+:: ══════════════════════════════════════════════════════════════
+::   F U N K C E
+:: ══════════════════════════════════════════════════════════════
+
+:FN_BANNER
+echo.
+echo   !B!!ORG!  ╔═════════════════════════════════════════════╗!R!
+echo   !B!!ORG!  ║   ZeddiHub Tools Desktop  ·  Dev Manager   ║!R!
+echo   !B!!ORG!  ╚═════════════════════════════════════════════╝!R!
+echo.
+exit /b
+
+:: ─────────────────────────────────────────────────────────────
+:FN_QUICK_STATUS
+set "_ver=?"
+for /f "tokens=3 delims= " %%v in ('findstr /c:"APP_VERSION = " gui\version.py 2^>nul') do (
+    set "_ver=%%v" & set "_ver=!_ver:"=!"
+)
+for /f %%b in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "_br=%%b"
+if not defined _br set "_br=?"
+git diff --quiet 2>nul && git diff --cached --quiet 2>nul && (
+    set "_gs=!GRN!cisty!R!"
+) || (
+    set "_gs=!YEL!neulozene zmeny!R!"
+)
+for /f %%h in ('git log -1 --format^=%%h 2^>nul') do set "_sh=%%h"
+echo   !DIM!Verze:!R! !B!!ORG!v!_ver!!R!   !DIM!Vetev:!R! !B!!_br!!R!   !DIM!Git:!R! !_gs!   !DIM!SHA:!R! !DIM!!_sh!!R!
+exit /b
+
+:: ─────────────────────────────────────────────────────────────
+:FN_DETAILED_STATUS
+echo.
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━ STAV PROJEKTU ━━━━━━━!R!
+echo.
+set "_ver=?"
+for /f "tokens=3 delims= " %%v in ('findstr /c:"APP_VERSION = " gui\version.py 2^>nul') do (
+    set "_ver=%%v" & set "_ver=!_ver:"=!"
+)
+echo   !DIM!Lokalni verze    :!R! !B!!GRN!v!_ver!!R!
+echo   !DIM!Nacitam GitHub ...!R!
+for /f "tokens=1" %%r in ('gh release list --limit 1 2^>nul') do set "_ghr=%%r"
+if defined _ghr (
+    echo   !DIM!Nejnovejsi release:!R! !B!!GRN!!_ghr!!R!
 ) else (
-    set "STATUS_ENV=!C_RED![CHYBI]!C_R!"
+    echo   !DIM!Nejnovejsi release:!R! !YEL!nedostupne!R!
 )
-if defined GITHUB_TOKEN (
-    set "T1=!GITHUB_TOKEN:~0,15!"
-    set "STATUS_TOKEN=!C_GRN![OK]!C_R! !C_DIM!!T1!...!C_R!"
+echo.
+for /f %%b in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "_br=%%b"
+echo   !DIM!Git vetev         :!R! !B!!_br!!R!
+echo.
+echo   !B!Poslednich 5 commitu:!R!
+git log --oneline --graph --color --decorate -5
+echo.
+git fetch >nul 2>&1
+for /f %%a in ('git rev-list --count "origin/%GITHUB_DEFAULT_BRANCH%..HEAD" 2^>nul') do set "_ah=%%a"
+for /f %%b in ('git rev-list --count "HEAD..origin/%GITHUB_DEFAULT_BRANCH%" 2^>nul') do set "_bh=%%b"
+if not defined _ah set "_ah=0"
+if not defined _bh set "_bh=0"
+echo   !DIM!Commits ahead     :!R! !GRN!!_ah!!R!   !DIM!behind:!R! !YEL!!_bh!!R!
+echo.
+echo   !B!Zmenene soubory:!R!
+git status --short
+echo.
+call :FN_PAUSE
+exit /b
+
+:: ─────────────────────────────────────────────────────────────
+:FN_RELEASE_WIZARD
+echo.
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━ NOVY RELEASE ━━━━━━!R!
+echo.
+set "_ver=?"
+for /f "tokens=3 delims= " %%v in ('findstr /c:"APP_VERSION = " gui\version.py 2^>nul') do (
+    set "_ver=%%v" & set "_ver=!_ver:"=!"
+)
+echo   !DIM!Aktualni verze :!R! !B!!ORG!v!_ver!!R!
+echo.
+set /p "_nv=  Nova verze (bez 'v', prazdne = zrusit): "
+if "!_nv!"=="" ( echo   !YEL!Zruseno.!R! & call :FN_PAUSE & exit /b )
+echo.
+
+:: [1/5] gui/version.py
+echo   !DIM![1/5]!R! !B!Aktualizuji gui\version.py ...!R!
+powershell -NoProfile -Command ^
+    "(Get-Content 'gui\version.py' -Encoding UTF8) -replace 'APP_VERSION = ""[^""]*""','APP_VERSION = ""!_nv!""' | Set-Content 'gui\version.py' -Encoding UTF8" >nul 2>&1
+echo   !GRN![OK]!R! gui\version.py  ->  v!_nv!
+
+:: [2/5] version.json
+echo   !DIM![2/5]!R! !B!Aktualizuji version.json ...!R!
+powershell -NoProfile -Command ^
+    "$j=(Get-Content 'version.json'|ConvertFrom-Json); $j.version='!_nv!'; ($j|ConvertTo-Json)|Set-Content 'version.json' -Encoding UTF8" >nul 2>&1
+echo   !GRN![OK]!R! version.json     ->  v!_nv!
+
+:: [3/5] CHANGELOG.md
+echo   !DIM![3/5]!R! !B!Otevri CHANGELOG.md a doplň zaznam pro v!_nv! ...!R!
+start "" CHANGELOG.md
+echo   !YEL![CEKAM]!R! Uloz soubor a stiskni Enter.
+call :FN_PAUSE
+
+:: [4/5] Commit + tag
+echo   !DIM![4/5]!R! !B!Pripravuji commit ...!R!
+echo.
+git status --short
+echo.
+echo   !YEL!Pokracovat s commitem? (A/n)!R!
+set /p "_ok=  "
+if /i "!_ok!"=="n" (
+    echo   !YEL!Zruseno — soubory jsou zmeneny, ale commit nebyl vytvoren.!R!
+    call :FN_PAUSE & exit /b
+)
+git add gui\version.py version.json CHANGELOG.md
+git commit -m "Release v!_nv!"
+echo   !GRN![OK]!R! Commit vytvoren
+git tag "v!_nv!"
+echo   !GRN![OK]!R! Tag v!_nv! vytvoren
+
+:: [5/5] Push
+echo.
+echo   !DIM![5/5]!R! !B!Push na GitHub:!R!
+echo.
+git log --oneline -3
+echo.
+echo   !YEL!Pokracovat s push? (A/n)!R!
+set /p "_pp=  "
+if /i "!_pp!"=="n" (
+    echo   !YEL!Push zrusen. Tag + commit existuji lokalne.!R!
+    call :FN_PAUSE & exit /b
+)
+git push
+git push origin "v!_nv!"
+if !ERRORLEVEL! neq 0 (
+    echo   !RED![CHYBA]!R! Push selhal.
+    call :FN_PAUSE & exit /b
+)
+echo   !GRN![OK]!R! Push dokoncen
+echo.
+
+:: GitHub release
+echo   !YEL!Vytvorit GitHub release v!_nv!? (A/n)!R!
+set /p "_gr=  "
+if /i "!_gr!"=="n" ( call :FN_PAUSE & exit /b )
+set "_nf=release_notes_v!_nv!.md"
+if exist "!_nf!" (
+    gh release create "v!_nv!" --title "ZeddiHub Tools Desktop v!_nv!" --notes-file "!_nf!"
 ) else (
-    set "STATUS_TOKEN=!C_RED![CHYBI]!C_R!"
+    set /p "_rn=  Kratky popis (nebo Enter pro vychozi): "
+    if "!_rn!"=="" set "_rn=Release v!_nv!"
+    gh release create "v!_nv!" --title "ZeddiHub Tools Desktop v!_nv!" --notes "!_rn!"
 )
-set "STATUS_PYTHON=!C_RED![CHYBI]!C_R!"
-for /f "tokens=2" %%V in ('python --version 2^>nul') do set "STATUS_PYTHON=!C_GRN![OK]!C_R! %%V"
-if exist "dist\ZeddiHubTools.exe" (
-    set "STATUS_EXE=!C_GRN![OK]!C_R! dist\ZeddiHubTools.exe"
-) else if exist "dist\ZeddiHub.Tools.exe" (
-    set "STATUS_EXE=!C_YEL![OLD]!C_R! dist\ZeddiHub.Tools.exe"
+if !ERRORLEVEL! equ 0 (
+    echo   !GRN![OK]!R! GitHub release v!_nv! vytvoren
+    start "" "%_REPO%/releases/tag/v!_nv!"
 ) else (
-    set "STATUS_EXE=!C_DIM![NENI]!C_R!"
-)
-set "STATUS_BRANCH=!C_DIM!(neni git repo)!C_R!"
-for /f "usebackq" %%B in (`git branch --show-current 2^>nul`) do set "STATUS_BRANCH=!C_GRN!%%B!C_R!"
-REM Git ahead/behind
-for /f "usebackq tokens=1,2" %%A in (`git rev-list --left-right --count HEAD...@{upstream} 2^>nul`) do (
-    if not "%%A"=="0" set "STATUS_BRANCH=!STATUS_BRANCH! !C_YEL!(+%%A ahead)!C_R!"
-    if not "%%B"=="0" set "STATUS_BRANCH=!STATUS_BRANCH! !C_YEL!(-%%B behind)!C_R!"
-)
-exit /b 0
-
-:detect_status_slow
-set "STATUS_PYI=!C_RED![CHYBI]!C_R!"
-for /f "tokens=2" %%V in ('python -m PyInstaller --version 2^>^&1') do (
-    echo %%V | findstr /R "^[0-9]" >nul 2>&1 && set "STATUS_PYI=!C_GRN![OK]!C_R! %%V"
-)
-set "STATUS_TAG=!C_DIM!(neoveren)!C_R!"
-git ls-remote --tags https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git refs/tags/%TAG% 2>nul | findstr /C:"%TAG%" >nul
-if not errorlevel 1 (
-    set "STATUS_TAG=!C_GRN![PUSHED]!C_R! %TAG% na GitHubu"
-) else (
-    set "STATUS_TAG=!C_YEL![PENDING]!C_R! %TAG% jeste nepushnut"
-)
-exit /b 0
-
-REM =======================================================================
-REM  PRE-FLIGHT CHECKS (spousti se pred release/push akcemi)
-REM =======================================================================
-
-:preflight
-set "PF_LABEL=%~1"
-set "PF_NEEDS_TOKEN=%~2"
-set "PF_NEEDS_CLEAN=%~3"
-set "PF_FAIL=0"
-echo.
-echo   !C_CYN!+-- Pre-flight kontroly (%PF_LABEL%) --------------------+!C_R!
-
-if exist "%ENV_FILE%" (
-    call :ok ".env nalezen"
-) else (
-    call :err ".env chybi - spust [1] Konfigurace .env"
-    set "PF_FAIL=1"
-)
-
-if "%PF_NEEDS_TOKEN%"=="1" (
-    if defined GITHUB_TOKEN (
-        call :ok "GITHUB_TOKEN je nastaven"
-    ) else (
-        call :err "GITHUB_TOKEN neni nastaven v .env"
-        set "PF_FAIL=1"
-    )
-)
-
-where python >nul 2>&1
-if errorlevel 1 (
-    call :err "Python neni v PATH"
-    set "PF_FAIL=1"
-) else (
-    call :ok "Python je dostupny"
-)
-
-git rev-parse --git-dir >nul 2>&1
-if errorlevel 1 (
-    call :err "Toto neni git repo"
-    set "PF_FAIL=1"
-) else (
-    call :ok "Git repo OK"
-)
-
-if "%PF_NEEDS_CLEAN%"=="1" (
-    for /f %%C in ('git status --porcelain 2^>nul ^| find /c /v ""') do set "DIRTY=%%C"
-    if !DIRTY! gtr 0 (
-        call :warn "Strom NENI cisty - !DIRTY! zmen (zahrnou se do commitu)"
-    ) else (
-        call :ok "Git tree je cisty"
-    )
-)
-
-if "%PF_NEEDS_TOKEN%"=="1" (
-    git ls-remote --exit-code origin HEAD >nul 2>&1
-    if errorlevel 1 (
-        call :warn "origin nedostupny nebo chybi pristup - push muze selhat"
-    ) else (
-        call :ok "origin je dostupny"
-    )
-)
-
-echo   !C_CYN!+--------------------------------------------------------+!C_R!
-if "%PF_FAIL%"=="1" (
-    echo.
-    call :err "Pre-flight selhal - oprav chyby vyse."
-    exit /b 1
-)
-exit /b 0
-
-REM =======================================================================
-REM  PUSH PREVIEW (souhrn pred pushem)
-REM =======================================================================
-
-:push_preview
-set "PV_LABEL=%~1"
-echo.
-echo   !C_MAG!+=========================================================+!C_R!
-echo   !C_MAG!^|!C_R!  !C_B!!C_WHT!PUSH PREVIEW:!C_R! %PV_LABEL%
-echo   !C_MAG!+=========================================================+!C_R!
-echo.
-echo   !C_DIM!Branch:!C_R! !STATUS_BRANCH!
-echo   !C_DIM!Remote:!C_R! https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%
-echo.
-echo   !C_YEL!-- Commity, ktere pujdou na GitHub --!C_R!
-git log @{upstream}..HEAD --oneline --decorate 2>nul
-if errorlevel 1 (
-    echo   !C_DIM!(zadne nove commity proti upstreamu, nebo neni upstream)!C_R!
+    echo   !RED![CHYBA]!R! Nepodarilo se vytvorit release.
 )
 echo.
-echo   !C_YEL!-- Zmeny v pracovni kopii (staged+unstaged) --!C_R!
-git status --short 2>nul
-echo.
-echo   !C_YEL!-- Lokalni tagy (poslednich 5) --!C_R!
-git for-each-ref --count=5 --sort=-creatordate --format="  %%(refname:short)  %%(creatordate:short)" refs/tags 2>nul
-echo.
-echo   !C_YEL!-- Build stav --!C_R!
-echo     .exe:           !STATUS_EXE!
-echo     Remote tag:     !STATUS_TAG!
-echo.
-echo   !C_MAG!+=========================================================+!C_R!
-echo.
-set "PV_CONFIRM="
-set /p "PV_CONFIRM=  Potvrd akci napsanim !C_GRN!YES!C_R! (cokoli jineho preskoci): "
-if /i "!PV_CONFIRM!"=="YES" exit /b 0
-call :info "Zruseno uzivatelem."
-exit /b 1
+call :FN_PAUSE
+exit /b
 
-:push_preview_menu
-call :header "Push Preview (samostatne)"
-call :push_preview "Aktualni stav (bez akce)"
-call :info "Toto byl jen preview, zadna akce nebyla provedena."
-goto pause_and_return
-
-REM =======================================================================
-REM  [1] KONFIGURACE .env
-REM =======================================================================
-:configure_env
-call :header "[1] Konfigurace .env"
-if exist "%ENV_FILE%" (
-    call :warn ".env jiz existuje. Bude prepsan."
-    echo.
-)
-echo   Zadej hodnoty (Enter = ponechat default):
+:: ─────────────────────────────────────────────────────────────
+:FN_BUILD_EXE
 echo.
-set /p "IN_TOKEN=  GITHUB_TOKEN (github_pat_...): "
-set /p "IN_OWNER=  GITHUB_OWNER [ZeddiS]: "
-set /p "IN_REPO=  GITHUB_REPO [zeddihub-tools-desktop]: "
-set /p "IN_BRANCH=  GITHUB_DEFAULT_BRANCH [master]: "
-set /p "IN_NAME=  GIT_AUTHOR_NAME [ZeddiS]: "
-set /p "IN_EMAIL=  GIT_AUTHOR_EMAIL: "
-
-if "%IN_OWNER%"=="" set "IN_OWNER=ZeddiS"
-if "%IN_REPO%"=="" set "IN_REPO=zeddihub-tools-desktop"
-if "%IN_BRANCH%"=="" set "IN_BRANCH=master"
-if "%IN_NAME%"=="" set "IN_NAME=ZeddiS"
-
-(
-    echo # ZeddiHub Tools Desktop - runtime secrets ^(NIKDY NECOMMITUJ^)
-    echo # Tento soubor je v .gitignore.
-    echo.
-    echo GITHUB_TOKEN=%IN_TOKEN%
-    echo.
-    echo GITHUB_OWNER=%IN_OWNER%
-    echo GITHUB_REPO=%IN_REPO%
-    echo GITHUB_DEFAULT_BRANCH=%IN_BRANCH%
-    echo.
-    echo GIT_AUTHOR_NAME=%IN_NAME%
-    echo GIT_AUTHOR_EMAIL=%IN_EMAIL%
-) > "%ENV_FILE%"
-
-call :ok ".env zapsan do %ENV_FILE%"
-goto pause_and_return_rescan
-
-REM =======================================================================
-REM  [2] TEST GITHUB_TOKEN
-REM =======================================================================
-:test_token
-call :header "[2] Test GITHUB_TOKEN"
-if not defined GITHUB_TOKEN (
-    call :err "GITHUB_TOKEN neni nastaven. Spust [1] Konfigurace .env."
-    goto pause_and_return
-)
-echo   Testuji token proti GitHub API...
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━━━ BUILD .EXE ━━━━━━━!R!
 echo.
-echo   !C_DIM!/user endpoint:!C_R!
-curl --ssl-no-revoke -s -o nul -w "     HTTP %%{http_code}\n" -H "Authorization: Bearer %GITHUB_TOKEN%" -H "Accept: application/vnd.github+json" "https://api.github.com/user"
-echo.
-echo   !C_DIM!/repos/%GITHUB_OWNER%/%GITHUB_REPO% endpoint:!C_R!
-curl --ssl-no-revoke -s -o nul -w "     HTTP %%{http_code}\n" -H "Authorization: Bearer %GITHUB_TOKEN%" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/%GITHUB_OWNER%/%GITHUB_REPO%"
-echo.
-echo   !C_DIM!Rate limit:!C_R!
-curl --ssl-no-revoke -s -H "Authorization: Bearer %GITHUB_TOKEN%" "https://api.github.com/rate_limit" | findstr /R "limit remaining reset" | findstr /V "core search graphql"
-echo.
-call :info "HTTP 200 = OK, 401 = spatny token, 404 = chybi permissions"
-goto pause_and_return
-
-REM =======================================================================
-REM  [3] DEPENDENCIES
-REM =======================================================================
-:install_deps
-call :header "[3] Dependencies (Python + PyInstaller)"
-where python >nul 2>&1
-if errorlevel 1 (
-    call :err "Python neni v PATH. Nainstaluj z https://www.python.org/"
-    goto pause_and_return
-)
-echo   Instaluji requirements.txt...
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pip install pyinstaller
-echo.
-call :ok "Hotovo."
-goto pause_and_return_rescan
-
-REM =======================================================================
-REM  [4] BUILD .exe (with icon regeneration - F-14)
-REM =======================================================================
-:build_exe
-call :header "[4] Build .exe lokalne"
 if not exist "ZeddiHubTools.spec" (
-    call :err "ZeddiHubTools.spec nenalezen."
-    goto pause_and_return
+    echo   !RED![CHYBA]!R! ZeddiHubTools.spec nenalezen!
+    call :FN_PAUSE & exit /b
 )
-
-REM -------- F-14: regenerate icon BEFORE PyInstaller runs --------
 if exist "assets\web_favicon.ico" (
-    echo   !C_CYN![F-14]!C_R! Regeneruji assets\icon.ico z assets\web_favicon.ico...
-    copy /Y "assets\web_favicon.ico" "assets\icon.ico" >nul
-    if exist "assets\icon.ico" (
-        call :ok "icon.ico obnovena (favicon sync)."
-    ) else (
-        call :warn "Kopie selhala, build pouzije existujici icon.ico."
-    )
-) else (
-    call :warn "assets\web_favicon.ico neexistuje - build pouzije existujici icon.ico."
+    copy /y "assets\web_favicon.ico" "assets\icon.ico" >nul 2>&1
+    echo   !GRN![OK]!R! Favicon zkopirovan  (web_favicon.ico -> icon.ico)
 )
-REM -------------------------------------------------------------
-
+echo   !YEL![INFO]!R! Spoustim PyInstaller ...
 echo.
-echo   Spoustim PyInstaller (muze trvat minutu)...
-python -m PyInstaller ZeddiHubTools.spec --clean --noconfirm
+pyinstaller --noconfirm ZeddiHubTools.spec
 echo.
 if exist "dist\ZeddiHubTools.exe" (
-    call :ok "Build uspesny: dist\ZeddiHubTools.exe"
-    for %%A in ("dist\ZeddiHubTools.exe") do echo   !C_DIM!Velikost: %%~zA B!C_R!
-) else (
-    call :err "Build selhal - .exe nenalezen v dist\"
-)
-goto pause_and_return_rescan
-
-REM =======================================================================
-REM  [5] AUTO RELEASE (with pre-flight + push preview)
-REM =======================================================================
-:auto_release
-call :header "[5] Auto Release (commit+push+Actions)"
-call :preflight "Auto Release %TAG%" 1 0
-if errorlevel 1 goto pause_and_return
-
-call :push_preview "Auto Release %TAG% (commit + push + tag)"
-if errorlevel 1 goto pause_and_return
-
-echo.
-echo   !C_DIM!Probehne:!C_R!
-echo     1. git config user.name/email
-echo     2. git add -A  (auth.json a .env budou vyloucene)
-echo     3. git commit -m "Release %TAG%"
-echo     4. git push origin %GITHUB_DEFAULT_BRANCH%
-echo     5. git tag %TAG%
-echo     6. git push origin %TAG%  (spusti GitHub Actions)
-echo.
-git config user.name "%GIT_AUTHOR_NAME%" 2>nul
-if defined GIT_AUTHOR_EMAIL git config user.email "%GIT_AUTHOR_EMAIL%" 2>nul
-if exist ".git\index.lock" del /f /q ".git\index.lock" 2>nul
-git add -A
-git reset HEAD -- webhosting/data/auth.json 2>nul
-git reset HEAD -- .env 2>nul
-git commit -m "Release %TAG%" || call :info "(nic k commitnuti)"
-echo.
-echo   Push master (vystup se uklada do .zh_push.log pro detekci chyb)...
-git push origin %GITHUB_DEFAULT_BRANCH% > .zh_push.log 2>&1
-type .zh_push.log
-findstr /C:"Push cannot contain secrets" /C:"GH013" /C:"unblock-secret" .zh_push.log >nul
-if not errorlevel 1 goto push_secret_blocked
-findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
-if not errorlevel 1 goto auto_err
-del .zh_push.log 2>nul
-git tag %TAG% 2>nul || call :info "(tag uz existuje lokalne)"
-echo.
-echo   Push tagu %TAG%...
-git push origin %TAG% > .zh_push.log 2>&1
-type .zh_push.log
-findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
-if not errorlevel 1 goto auto_err
-del .zh_push.log 2>nul
-call :ok "Release pushnut. Sleduj build na:"
-echo      !C_CYN!https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions!C_R!
-goto pause_and_return_rescan
-
-:push_secret_blocked
-echo.
-call :err "Push zablokoval GitHub Push Protection - v historii je secret (PAT)."
-echo.
-echo   GitHub detekoval GitHub Personal Access Token v jednom z commitu.
-echo   Dve moznosti:
-echo.
-echo     !C_GRN![A]!C_R! Allow-list pres GitHub UI (secret zustane v historii, push projde)
-echo     !C_YEL![B]!C_R! Prepsat historii pres git filter-repo (cisty - secret zmizi)
-echo.
-choice /c ABX /n /m "  [A]llow / [B]prepsat / [X] zrusit: "
-if errorlevel 3 goto pause_and_return
-if errorlevel 2 goto cleanup_secret
-for /f "tokens=*" %%U in ('findstr /C:"unblock-secret" .zh_push.log') do (
-    set "UNBLOCK_LINE=%%U"
-)
-if defined UNBLOCK_LINE (
+    for %%f in ("dist\ZeddiHubTools.exe") do set /a "_mb=%%~zf / 1048576"
+    echo   !GRN![OK]!R! Build uspesny  (!_mb! MB)
     echo.
-    echo   Otevirani unblock URL v prohlizeci...
-    for /f "tokens=2 delims= " %%H in ("!UNBLOCK_LINE!") do start "" "%%H"
+    echo   !YEL!Nahrat .exe k existujicimu GitHub release? (A/n)!R!
+    set /p "_up=  "
+    if /i not "!_up!"=="n" call :FN_UPLOAD_EXE
 ) else (
-    start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/security/secret-scanning"
+    echo   !RED![CHYBA]!R! Build selhal — ZeddiHubTools.exe nenalezen.
 )
 echo.
-call :warn "Na webu: vyber duvod 'Used in tests' nebo 'Revoked' a klikni Allow."
-call :info "Az schvalis, spust znovu [5] Auto Release."
-del .zh_push.log 2>nul
-goto pause_and_return
+call :FN_PAUSE
+exit /b
 
-:auto_err
+:: ─────────────────────────────────────────────────────────────
+:FN_UPLOAD_EXE
 echo.
-if exist .zh_push.log (
-    echo   Detailni vystup pushe:
-    type .zh_push.log
-    del .zh_push.log 2>nul
-)
-call :err "Git push selhal. Zkontroluj pristup a stav."
-goto pause_and_return
-
-REM =======================================================================
-REM  [6] MANUAL RELEASE
-REM =======================================================================
-:manual_release
-call :header "[6] Manual Release (gh CLI)"
-where gh >nul 2>&1
-if errorlevel 1 (
-    call :err "gh CLI neni v PATH. Nainstaluj z https://cli.github.com/"
-    goto pause_and_return
-)
 if not exist "dist\ZeddiHubTools.exe" (
-    call :err "dist\ZeddiHubTools.exe neexistuje. Spust [4] Build."
-    goto pause_and_return
+    echo   !RED![CHYBA]!R! dist\ZeddiHubTools.exe neexistuje. Sestav nejdrive .exe.
+    call :FN_PAUSE & exit /b
 )
-set "RN_FILE=release_notes_%TAG%.md"
-echo   Vytvarim release %TAG% s .exe...
-if exist "%RN_FILE%" (
-    call :info "Nalezen %RN_FILE% - pouziji jako release body."
-    gh release create %TAG% "dist\ZeddiHubTools.exe" --title "%TAG%" --notes-file "%RN_FILE%"
+echo   !B!Dostupne releases:!R!
+gh release list --limit 5 2>&1
+echo.
+set /p "_rt=  Tag release (napr. v2.0.0, prazdne = zrusit): "
+if "!_rt!"=="" ( echo   !YEL!Zruseno.!R! & exit /b )
+gh release upload "!_rt!" "dist\ZeddiHubTools.exe" --clobber
+if !ERRORLEVEL! equ 0 (
+    echo   !GRN![OK]!R! ZeddiHubTools.exe nahran k release !_rt!
 ) else (
-    call :warn "%RN_FILE% nenalezen - pouziji --generate-notes z commits."
-    gh release create %TAG% "dist\ZeddiHubTools.exe" --title "%TAG%" --generate-notes
+    echo   !RED![CHYBA]!R! Nahravani selhalo.
 )
-goto pause_and_return_rescan
-
-REM =======================================================================
-REM  [7] GIT STATUS
-REM =======================================================================
-:git_status
-call :header "[7] Git status"
-echo   !C_YEL!-- git status --!C_R!
-git status
 echo.
-echo   !C_YEL!-- git branch -vv --!C_R!
-git branch -vv
-echo.
-echo   !C_YEL!-- posledni commity --!C_R!
-git log --oneline -10 2>nul
-echo.
-echo   !C_YEL!-- tagy (poslednich 10) --!C_R!
-git for-each-ref --count=10 --sort=-creatordate --format="  %%(refname:short)  %%(creatordate:short)" refs/tags 2>nul
-goto pause_and_return
+call :FN_PAUSE
+exit /b
 
-REM =======================================================================
-REM  [8] SMAZAT TAG
-REM =======================================================================
-:delete_tag
-call :header "[8] Smazat tag %TAG%"
-call :warn "Pouzivat POUZE pokud push selhal a potrebujes zacit znovu."
+:: ─────────────────────────────────────────────────────────────
+:FN_GIT_PUSH
 echo.
-choice /c AN /n /m "  [A]no pokracovat / [N]e zrusit: "
-if errorlevel 2 goto render
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━ COMMIT + PUSH ━━━━━━!R!
 echo.
-git tag -d %TAG% 2>nul && call :ok "Lokalni tag %TAG% smazan." || call :info "(lokalni tag neexistoval)"
-if defined GITHUB_TOKEN (
-    set "REMOTE_URL=https://%GITHUB_TOKEN%@github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git"
-    git push "!REMOTE_URL!" --delete %TAG% 2>nul && (
-        call :ok "Remote tag smazan."
-    ) || (
-        call :info "(remote tag neexistoval nebo chyba permissions)"
-    )
-) else (
-    call :warn ".env nema token - remote tag smazte rucne na GitHubu."
-)
-goto pause_and_return_rescan
-
-REM =======================================================================
-REM  [9] OTEVRIT GITHUB
-REM =======================================================================
-:open_github
-call :header "[9] Otevrit GitHub v prohlizeci"
-echo   Otevirani stranek...
-start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%"
-start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases"
-start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions"
-call :ok "Otevreno v prohlizeci."
-goto pause_and_return
-
-REM =======================================================================
-REM  [11] QUICK PUSH (bez tagu, bez verze bumpu) + preview
-REM =======================================================================
-:quick_push
-call :header "[11] Rychla push (quick commit)"
-call :preflight "Quick Push" 1 0
-if errorlevel 1 goto pause_and_return
-
-if exist ".git\index.lock" del /f /q ".git\index.lock" 2>nul
+git status --short
+echo.
+set /p "_msg=  Zprava commitu (prazdne = zrusit): "
+if "!_msg!"=="" ( echo   !YEL!Zruseno.!R! & call :FN_PAUSE & exit /b )
 git add -A
-git reset HEAD -- webhosting/data/auth.json 2>nul
-git reset HEAD -- .env 2>nul
-echo.
-echo   !C_YEL!Zmeny, ktere se commitnou:!C_R!
-git diff --cached --stat
-echo.
-set /p "QMSG=  Commit message: "
-if "!QMSG!"=="" (
-    call :err "Prazdna zprava - preruseno."
-    goto pause_and_return
-)
-
-call :push_preview "Quick Push: !QMSG!"
-if errorlevel 1 goto pause_and_return
-
-git commit -m "!QMSG!" || (
-    call :info "(nic k commitnuti)"
-    goto pause_and_return
-)
-echo.
-echo   Push master...
-git push origin %GITHUB_DEFAULT_BRANCH% > .zh_push.log 2>&1
-type .zh_push.log
-findstr /C:"Push cannot contain secrets" /C:"GH013" .zh_push.log >nul
-if not errorlevel 1 (
-    del .zh_push.log 2>nul
-    call :err "Push blokovan push-protection - spust [12] Cleanup: PAT secret v historii."
-    goto pause_and_return
-)
-findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
-if not errorlevel 1 (
-    del .zh_push.log 2>nul
-    call :err "Push selhal."
-    goto pause_and_return
-)
-del .zh_push.log 2>nul
-call :ok "Pushnuto."
-goto pause_and_return_rescan
-
-REM =======================================================================
-REM  [12] CLEANUP: PAT SECRET V HISTORII
-REM =======================================================================
-:cleanup_secret
-call :header "[12] Cleanup: PAT secret v historii (filter-repo)"
-echo.
-echo   Tato akce TRVALE prepise git historii a odstrani vsechny GitHub
-echo   Personal Access Tokeny (vzory: github_pat_..., ghp_..., ghs_...).
-echo.
-echo   Dva mody:
-echo     !C_GRN![A]!C_R! Allow-list pres GitHub UI (nejrychlejsi, secret vsak zustava)
-echo     !C_YEL![B]!C_R! Automaticke prepsani historie pres git filter-repo (cisty)
-echo     !C_DIM![X]!C_R! Zrusit
-echo.
-choice /c ABX /n /m "  Volba: "
-if errorlevel 3 goto pause_and_return
-if errorlevel 2 goto cleanup_filter_repo
-
-echo.
-echo   Otevirani GitHub Secret Scanning stranky...
-start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/security/secret-scanning"
-echo.
-call :info "Na webu: najdi blokovany secret, klikni Allow a vyber duvod."
-call :info "Typicke duvody: 'Used in tests' / 'Revoked'."
-echo.
-call :warn "DOPORUCENI: pred Allow zneplatni token na https://github.com/settings/tokens"
-goto pause_and_return
-
-:cleanup_filter_repo
-echo.
-call :warn "Toto PREPISE historii. Budes muset force-pushnout."
-call :warn "Pokud je repo sdileny s jinymi lidmi, koordinuj s nimi!"
-echo.
-choice /c AN /n /m "  [A]no pokracovat / [N]e zrusit: "
-if errorlevel 2 goto pause_and_return
-echo.
-echo   Kontrola git-filter-repo...
-where git-filter-repo >nul 2>&1
-if errorlevel 1 (
-    echo   Neni nainstalovan. Instaluji pres pip...
-    python -m pip install git-filter-repo
-    if errorlevel 1 (
-        call :err "Instalace selhala. Zkus rucne: python -m pip install git-filter-repo"
-        goto pause_and_return
-    )
-)
-echo.
-echo   Vytvarim .zh_replacements.txt s token patterny...
-(
-    echo regex:github_pat_[A-Za-z0-9_]+==^>***REMOVED_PAT***
-    echo regex:ghp_[A-Za-z0-9]+==^>***REMOVED_PAT***
-    echo regex:ghs_[A-Za-z0-9]+==^>***REMOVED_PAT***
-    echo regex:gho_[A-Za-z0-9]+==^>***REMOVED_PAT***
-    echo regex:ghu_[A-Za-z0-9]+==^>***REMOVED_PAT***
-    echo regex:ghr_[A-Za-z0-9]+==^>***REMOVED_PAT***
-) > .zh_replacements.txt
-echo.
-echo   Spoustim git filter-repo...
-git-filter-repo --replace-text .zh_replacements.txt --force
-if errorlevel 1 (
-    del .zh_replacements.txt 2>nul
-    call :err "filter-repo selhalo. Overit: python -m git_filter_repo --help"
-    goto pause_and_return
-)
-del .zh_replacements.txt 2>nul
-echo.
-call :ok "Historie prepsana. Tokeny nahrazeny ***REMOVED_PAT***."
-echo.
-echo   Obnovuji remote origin (filter-repo ho odstranuje)...
-git remote add origin "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git" 2>nul
-git remote set-url origin "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git"
-echo.
-call :warn "Nyni musis FORCE PUSH: git push origin %GITHUB_DEFAULT_BRANCH% --force"
-echo.
-choice /c AN /n /m "  Provest force push HNED? [A]no / [N]e zrusit: "
-if errorlevel 2 (
-    call :info "Force push preskocen. Spust rucne, az budes pripraven."
-    goto pause_and_return
-)
-echo.
-git push origin %GITHUB_DEFAULT_BRANCH% --force > .zh_push.log 2>&1
-type .zh_push.log
-findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
-if not errorlevel 1 (
-    del .zh_push.log 2>nul
-    call :err "Force push selhal. Zkontroluj branch protection rules."
-    goto pause_and_return
-)
-del .zh_push.log 2>nul
-call :ok "Force push hotov. Historie na GitHubu je cista."
-call :info "Nyni muzes znovu spustit [5] Auto Release pro tagovani %TAG%."
-goto pause_and_return_rescan
-
-REM =======================================================================
-REM  [W] RELEASE WIZARD - step-by-step novy release
-REM =======================================================================
-:release_wizard
-cls
-call :draw_banner
-echo.
-echo   !C_B!!C_WHT!RELEASE WIZARD!C_R!  !C_DIM!(krokovy pruvodce pro novy release)!C_R!
-echo.
-echo   Aktualni verze v !C_CYN!gui/version.py!C_R!: !C_YEL!%VERSION%!C_R!
-echo.
-set "NEW_VERSION="
-set /p "NEW_VERSION=  Zadej novou verzi (napr. 2.0.1, Enter = zrusit): "
-if "!NEW_VERSION!"=="" (
-    call :info "Wizard zrusen."
-    goto pause_and_return
-)
-
-echo !NEW_VERSION! | findstr /R "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
-if errorlevel 1 (
-    call :err "Neplatny format verze. Ocekavano X.Y.Z (napr. 2.0.1)."
-    goto pause_and_return
-)
-
-set "NEW_TAG=v!NEW_VERSION!"
-
-echo.
-echo   !C_DIM!--- Shrnuti ---!C_R!
-echo   Stara verze: !C_GRY!%VERSION%!C_R!  =^>  Nova verze: !C_GRN!!NEW_VERSION!!C_R!
-echo   Stary tag:   !C_GRY!%TAG%!C_R!     =^>  Novy tag:   !C_GRN!!NEW_TAG!!C_R!
-echo.
-choice /c AN /n /m "  Pokracovat wizardem? [A]no / [N]e: "
-if errorlevel 2 goto pause_and_return
-
-call :step "1/7" "Pre-flight kontroly"
-call :preflight "Release Wizard !NEW_TAG!" 1 0
-if errorlevel 1 goto pause_and_return
-
-call :step "2/7" "Bump verze v souborech"
-echo   Aktualizuji:
-echo     - gui\version.py
-echo     - version.json
-echo     - webhosting\data\version.json
-echo     - webhosting\admin\_lib.php
-echo.
-
-if exist "gui\version.py" (
-    powershell -NoProfile -Command "$p='gui\version.py'; (Get-Content $p -Raw) -replace 'APP_VERSION = \"%VERSION%\"','APP_VERSION = \"!NEW_VERSION!\"' | Set-Content -NoNewline $p" 2>nul
-    if errorlevel 1 (
-        call :warn "Powershell update gui\version.py selhal - uprav rucne."
-    ) else (
-        call :ok "gui\version.py bumpnut na !NEW_VERSION!"
-    )
+git commit -m "!_msg!"
+if !ERRORLEVEL! equ 0 (
+    echo   !GRN![OK]!R! Commit vytvoren
+    git push
+    if !ERRORLEVEL! equ 0 ( echo   !GRN![OK]!R! Push dokoncen ) else ( echo   !RED![CHYBA]!R! Push selhal. )
 ) else (
-    call :warn "gui\version.py nenalezen."
-)
-
-if exist "version.json" (
-    powershell -NoProfile -Command "$p='version.json'; $j=Get-Content $p -Raw | ConvertFrom-Json; $j.version='!NEW_VERSION!'; $j.release_date=(Get-Date -Format 'yyyy-MM-dd'); $j | ConvertTo-Json -Depth 5 | Set-Content -NoNewline $p" 2>nul
-    if errorlevel 1 (
-        call :warn "Powershell update version.json selhal - uprav rucne."
-    ) else (
-        call :ok "version.json bumpnut."
-    )
-) else (
-    call :warn "version.json nenalezen."
-)
-
-if exist "webhosting\data\version.json" (
-    powershell -NoProfile -Command "$p='webhosting\data\version.json'; $j=Get-Content $p -Raw | ConvertFrom-Json; $j.version='!NEW_VERSION!'; $j.release_date=(Get-Date -Format 'yyyy-MM-dd'); $j | ConvertTo-Json -Depth 5 | Set-Content -NoNewline $p" 2>nul
-    if errorlevel 1 (
-        call :warn "Powershell update webhosting\data\version.json selhal - uprav rucne."
-    ) else (
-        call :ok "webhosting\data\version.json bumpnut."
-    )
-) else (
-    call :warn "webhosting\data\version.json nenalezen."
-)
-
-if exist "webhosting\admin\_lib.php" (
-    powershell -NoProfile -Command "$p='webhosting\admin\_lib.php'; (Get-Content $p -Raw) -replace \"APP_VERSION', '%VERSION%'\",\"APP_VERSION', '!NEW_VERSION!'\" | Set-Content -NoNewline $p" 2>nul
-    if errorlevel 1 (
-        call :warn "Powershell update _lib.php selhal - uprav rucne."
-    ) else (
-        call :ok "webhosting\admin\_lib.php bumpnut."
-    )
-) else (
-    call :warn "webhosting\admin\_lib.php nenalezen."
-)
-
-echo.
-call :warn "DULEZITE: rucne aktualizuj CHANGELOG.md a release_notes_!NEW_TAG!.md"
-echo.
-set "SKIP_RN="
-set /p "SKIP_RN=  Mas release_notes_!NEW_TAG!.md? (Enter = otevrit v notepad a upravit, X = preskocit): "
-if /i not "!SKIP_RN!"=="X" (
-    if not exist "release_notes_!NEW_TAG!.md" (
-        echo.
-        call :info "Vytvarim sablonu release_notes_!NEW_TAG!.md..."
-        (
-            echo # ZeddiHub Tools Desktop !NEW_TAG! - [short title]
-            echo.
-            echo **Vydano / Released:** %DATE:~-10%
-            echo.
-            echo ## Highlights
-            echo.
-            echo -
-            echo.
-            echo ## Added
-            echo.
-            echo -
-            echo.
-            echo ## Changed
-            echo.
-            echo -
-            echo.
-            echo ## Fixed
-            echo.
-            echo -
-            echo.
-            echo ---
-            echo.
-            echo **Plny changelog:** [CHANGELOG.md]^(https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/blob/master/CHANGELOG.md^)
-        ) > "release_notes_!NEW_TAG!.md"
-        call :ok "Sablona vytvorena: release_notes_!NEW_TAG!.md"
-    )
-    start "" notepad "release_notes_!NEW_TAG!.md"
-    echo.
-    echo   Uprav release notes, ulozi a stiskni libovolnou klavesu pro pokracovani...
-    pause >nul
-)
-
-call :step "3/7" "Dependencies check"
-python -c "import customtkinter, PIL, cryptography, pystray" 2>nul
-if errorlevel 1 (
-    call :warn "Nektere Python baliky chybi."
-    choice /c AN /n /m "  Nainstalovat ted? [A]no / [N]e pokracovat: "
-    if errorlevel 2 goto wiz_dep_skip
-    python -m pip install -r requirements.txt
-    python -m pip install pyinstaller
-) else (
-    call :ok "Python baliky jsou v poradku."
-)
-:wiz_dep_skip
-
-call :step "4/7" "Build .exe (s icon regenerace)"
-choice /c AN /n /m "  Spustit local build? [A]no (doporuceno) / [N]e preskocit: "
-if errorlevel 2 goto wiz_build_skip
-if exist "assets\web_favicon.ico" (
-    copy /Y "assets\web_favicon.ico" "assets\icon.ico" >nul
-    call :ok "icon.ico regeneruje z web_favicon.ico (F-14)."
-)
-if exist "ZeddiHubTools.spec" (
-    python -m PyInstaller ZeddiHubTools.spec --clean --noconfirm
-    if exist "dist\ZeddiHubTools.exe" (
-        call :ok "Build OK: dist\ZeddiHubTools.exe"
-    ) else (
-        call :err "Build selhal."
-        choice /c AN /n /m "  Pokracovat i tak? [A]no / [N]e zrusit: "
-        if errorlevel 2 goto pause_and_return
-    )
-) else (
-    call :warn "ZeddiHubTools.spec nenalezen - preskakuji build."
-)
-:wiz_build_skip
-
-call :step "5/7" "Git commit"
-git config user.name "%GIT_AUTHOR_NAME%" 2>nul
-if defined GIT_AUTHOR_EMAIL git config user.email "%GIT_AUTHOR_EMAIL%" 2>nul
-if exist ".git\index.lock" del /f /q ".git\index.lock" 2>nul
-git add -A
-git reset HEAD -- webhosting/data/auth.json 2>nul
-git reset HEAD -- .env 2>nul
-echo.
-echo   !C_YEL!Zmeny, ktere se commitnou:!C_R!
-git diff --cached --stat
-echo.
-choice /c AN /n /m "  Vytvorit commit 'Release !NEW_TAG!'? [A]no / [N]e zrusit: "
-if errorlevel 2 goto pause_and_return
-git commit -m "Release !NEW_TAG!" || call :info "(nic k commitnuti)"
-
-call :step "6/7" "Push preview + push"
-set "TAG=!NEW_TAG!"
-call :push_preview "Release Wizard: !NEW_TAG! (push master + tag)"
-if errorlevel 1 goto pause_and_return
-
-echo.
-echo   Push master...
-git push origin %GITHUB_DEFAULT_BRANCH% > .zh_push.log 2>&1
-type .zh_push.log
-findstr /C:"Push cannot contain secrets" /C:"GH013" .zh_push.log >nul
-if not errorlevel 1 (
-    del .zh_push.log 2>nul
-    call :err "Push blokovan push-protection. Spust [12] Cleanup."
-    goto pause_and_return
-)
-findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
-if not errorlevel 1 (
-    del .zh_push.log 2>nul
-    call :err "Push selhal."
-    goto pause_and_return
-)
-del .zh_push.log 2>nul
-
-echo.
-echo   Push tagu !NEW_TAG!...
-git tag !NEW_TAG! 2>nul || call :info "(tag uz existuje lokalne)"
-git push origin !NEW_TAG! > .zh_push.log 2>&1
-type .zh_push.log
-del .zh_push.log 2>nul
-
-call :step "7/7" "GitHub Release (volitelne - gh CLI)"
-where gh >nul 2>&1
-if errorlevel 1 (
-    call :warn "gh CLI neni k dispozici - release vytvor rucne na GitHubu:"
-    echo      !C_CYN!https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases/new?tag=!NEW_TAG!!C_R!
-    goto pause_and_return_rescan
-)
-if not exist "dist\ZeddiHubTools.exe" (
-    call :warn "dist\ZeddiHubTools.exe neexistuje - nahrat rucne pozdeji."
-    start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases/new?tag=!NEW_TAG!"
-    goto pause_and_return_rescan
-)
-choice /c AN /n /m "  Vytvorit release pres gh CLI s .exe? [A]no / [N]e preskocit: "
-if errorlevel 2 goto pause_and_return_rescan
-
-if exist "release_notes_!NEW_TAG!.md" (
-    gh release create !NEW_TAG! "dist\ZeddiHubTools.exe" --title "!NEW_TAG!" --notes-file "release_notes_!NEW_TAG!.md"
-) else (
-    gh release create !NEW_TAG! "dist\ZeddiHubTools.exe" --title "!NEW_TAG!" --generate-notes
+    echo   !RED![CHYBA]!R! Commit selhal (nic ke commitovani?).
 )
 echo.
-call :ok "Release !NEW_TAG! hotov!"
-echo      !C_CYN!https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases/tag/!NEW_TAG!!C_R!
-goto pause_and_return_rescan
+call :FN_PAUSE
+exit /b
 
-REM =======================================================================
-REM  END
-REM =======================================================================
-:end
-cls
-call :draw_banner
+:: ─────────────────────────────────────────────────────────────
+:FN_CLEAN
 echo.
-echo   !C_GRN!Diky za pouziti ZeddiHub Release Manager v%VERSION%.!C_R!
-echo   !C_DIM!Hotovo.!C_R!
+echo   !B!!CYN!  ━━━━━━━━━━━━━━━━━━━━ CISTENI ━━━━━━━━━━━━!R!
+echo.
+echo   !B!Budou smazany:!R!
+if exist "build\"  echo   !DIM!  · build\!R!
+if exist "dist\"   echo   !DIM!  · dist\!R!
+echo   !DIM!  · __pycache__ (rekurzivne)!R!
+echo.
+echo   !YEL!Pokracovat? (A/n)!R!
+set /p "_cc=  "
+if /i "!_cc!"=="n" exit /b
+if exist "build\"  ( rmdir /s /q "build\"  & echo   !GRN![OK]!R! build\ smazan )
+if exist "dist\"   ( rmdir /s /q "dist\"   & echo   !GRN![OK]!R! dist\ smazan )
+for /d /r %%d in (__pycache__) do if exist "%%d" rmdir /s /q "%%d" >nul 2>&1
+echo   !GRN![OK]!R! __pycache__ smazan
+echo.
+call :FN_PAUSE
+exit /b
+
+:: ─────────────────────────────────────────────────────────────
+:FN_RUN_APP
+echo.
+echo   !B!Spoustim ZeddiHub Tools Desktop ...!R!
+start "" python app.py
+echo   !GRN![OK]!R! Aplikace spustena
+timeout /t 2 /nobreak >nul
+exit /b
+
+:: ─────────────────────────────────────────────────────────────
+:FN_PAUSE
+echo   !DIM!Stiskni Enter pro pokracovani ...!R!
+pause >nul
+exit /b
+
+:: ══════════════════════════════════════════════════════════════
+:END
+echo.
+echo   !DIM!Nashledanou.!R!
 echo.
 endlocal
-exit /b 0
+exit /b
