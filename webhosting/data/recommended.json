@@ -1,8 +1,0 @@
-[
-  {"name": "CS2 Crosshair", "desc": "Vygeneruj svůj crosshair", "nav_id": "cs2_player", "color": "#5b9cf6"},
-  {"name": "CS2 Server CFG", "desc": "Nastavení herního serveru", "nav_id": "cs2_server", "color": "#5b9cf6"},
-  {"name": "CS:GO Crosshair", "desc": "CS:GO crosshair generátor", "nav_id": "csgo_player", "color": "#fbbf24"},
-  {"name": "Rust Server CFG", "desc": "Konfiguruj Rust server", "nav_id": "rust_server", "color": "#f97316"},
-  {"name": "Keybind Generator", "desc": "Vizuální keybind editor", "nav_id": "cs2_keybind", "color": "#a78bfa"},
-  {"name": "Translator", "desc": "Hromadný překlad .json/.lang", "nav_id": "translator", "color": "#4ade80"}
-]
