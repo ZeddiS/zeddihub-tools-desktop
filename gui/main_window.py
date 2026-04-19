@@ -18,7 +18,8 @@ except ImportError:
     PIL_OK = False
 
 from .themes import get_theme, GAME_THEMES
-from .auth import is_authenticated, load_credentials, verify_access, save_credentials, clear_credentials, logout, get_current_user
+from .auth import is_authenticated, load_credentials, verify_access, save_credentials, clear_credentials, logout, get_current_user, is_admin
+from . import external_tools
 from .updater import check_for_update, download_update, apply_update, open_release_page, CURRENT_VERSION
 from .locale import t, get_lang, set_lang, init as locale_init, load_settings, save_settings
 from . import icons
@@ -68,8 +69,9 @@ NAV_SECTIONS = [
     ], None),
     # v2.1.0: "Ostatní" section
     ("sec_other", "sec_other", "bars", None, [
-        ("watchdog",  "nav_watchdog",  "bell",   False),
-        ("uploader",  "nav_uploader",  "upload", False),
+        ("watchdog",       "nav_watchdog",       "bell",      False),
+        ("uploader",       "nav_uploader",       "upload",    False),
+        ("server_updater", "nav_server_updater", "cloud-arrow-down", True),
     ], None),
 ]
 
@@ -83,12 +85,15 @@ NAV_GAME_MAP = {
     "sensitivity": "default", "edpi": "default", "ping_tester": "default",
     "links": "default", "settings": "default", "watchdog": "default",
     "uploader": "default", "about": "default",
+    "tools_download": "default",
+    "server_updater": "default",
 }
 
 # nav_ids that show NO game badge in header
 NO_BADGE_IDS = {"home", "pc_tools", "translator", "game_tools", "links",
                 "settings", "watchdog", "uploader", "about",
-                "sensitivity", "edpi", "ping_tester"}
+                "sensitivity", "edpi", "ping_tester", "tools_download",
+                "server_updater"}
 
 
 class AuthDialog(ctk.CTkToplevel):
@@ -780,6 +785,88 @@ class MainWindow(ctk.CTk):
                     btn.pack(fill="x", padx=10, pady=1)
                     self._nav_buttons[nav_id] = btn
 
+        # Admin-only "Ostatní nástroje" section (external tools)
+        self._build_external_tools_section()
+
+    def _build_external_tools_section(self):
+        """Admin-only sidebar section for external downloaded tools."""
+        if not is_admin():
+            return
+        th = self._get_current_theme()
+        nav_text = th["text"]
+        nav_dim = th.get("text_muted", th["text_dim"])
+        nav_hover = th.get("nav_hover", th["card_bg"])
+
+        sec_id = "sec_external_tools"
+        settings = load_settings()
+        saved_states = settings.get("sidebar_sections", {})
+        is_expanded = saved_states.get(sec_id, False)
+        self._section_states[sec_id] = is_expanded
+
+        outer = ctk.CTkFrame(self._nav_scroll, fg_color="transparent")
+        outer.pack(fill="x", padx=0, pady=0)
+        self._external_section_outer = outer
+
+        arrow = "▼" if is_expanded else "▶"
+        label = t("sec_external_tools")
+        spaced_label = "\u2009".join(label.upper())
+        section_btn = ctk.CTkButton(
+            outer,
+            image=icons.icon("puzzle-piece", 12, nav_dim),
+            text=f"  {spaced_label}   {arrow}",
+            compound="left", fg_color="transparent", hover_color=nav_hover,
+            text_color=nav_dim, border_width=0, anchor="w",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            height=30, corner_radius=8,
+            command=lambda sid=sec_id: self._toggle_section(sid)
+        )
+        section_btn.pack(fill="x", padx=14, pady=(14, 2))
+        self._section_btns[sec_id] = section_btn
+
+        children_frame = ctk.CTkFrame(outer, fg_color="transparent")
+        self._section_frames[sec_id] = children_frame
+        if is_expanded:
+            children_frame.pack(fill="x", padx=0, pady=0)
+
+        # "Download Tools" entry
+        btn = ctk.CTkButton(
+            children_frame,
+            image=icons.icon("download", 14, nav_text),
+            text=f"   {t('nav_tools_download')}",
+            compound="left", fg_color="transparent",
+            hover_color=nav_hover, text_color=nav_text,
+            border_width=0, anchor="w",
+            font=ctk.CTkFont("Segoe UI", 11), height=34, corner_radius=8,
+            command=lambda: self._navigate("tools_download")
+        )
+        btn.pack(fill="x", padx=10, pady=1)
+        self._nav_buttons["tools_download"] = btn
+
+        # Installed tools
+        for entry in external_tools.list_installed():
+            slug = entry.get("slug")
+            icon_name = entry.get("icon", "wrench")
+            ebtn = ctk.CTkButton(
+                children_frame,
+                image=icons.icon(icon_name, 14, nav_text),
+                text=f"   {entry.get('name', slug)}",
+                compound="left", fg_color="transparent",
+                hover_color=nav_hover, text_color=nav_text,
+                border_width=0, anchor="w",
+                font=ctk.CTkFont("Segoe UI", 11), height=34, corner_radius=8,
+                command=lambda s=slug: external_tools.launch_tool(s)
+            )
+            ebtn.pack(fill="x", padx=10, pady=1)
+
+    def refresh_external_tools_sidebar(self):
+        """Rebuild only the external tools section (called after install/uninstall)."""
+        if hasattr(self, "_external_section_outer"):
+            try:
+                self._external_section_outer.destroy()
+            except Exception:
+                pass
+        self._build_external_tools_section()
+
     def _toggle_section(self, sec_id: str):
         is_expanded = self._section_states.get(sec_id, False)
         new_state = not is_expanded
@@ -1038,6 +1125,15 @@ class MainWindow(ctk.CTk):
             # N-12: O aplikaci panel
             from .panels.about import AboutPanel
             panel = AboutPanel(container, theme=_th(), nav_callback=self._navigate)
+        elif nav_id == "tools_download":
+            from .panels.tools_download import ToolsDownloadPanel
+            panel = ToolsDownloadPanel(
+                container, theme=_th(),
+                on_refresh_sidebar=self.refresh_external_tools_sidebar,
+            )
+        elif nav_id == "server_updater":
+            from .panels.server_updater import ServerUpdaterPanel
+            panel = ServerUpdaterPanel(container, theme=_th())
 
         if panel:
             panel.pack(fill="both", expand=True)
@@ -1076,6 +1172,11 @@ class MainWindow(ctk.CTk):
         self._open_auth_dialog()
 
     def _update_auth_ui(self):
+        # Refresh admin-only external tools sidebar section on auth change
+        try:
+            self.refresh_external_tools_sidebar()
+        except Exception:
+            pass
         if is_authenticated():
             user = get_current_user() or "?"
             self._auth_label.configure(

@@ -78,17 +78,17 @@ def _show_first_launch_wizard() -> tuple:
     Returns (lang: str, data_dir: Path)
     """
     from pathlib import Path
-    from gui.config import get_default_data_dir
+    from gui.config import get_default_data_dir, get_appdata_data_dir
 
     chosen_lang = ["cs"]
-    chosen_dir = [get_default_data_dir()]
+    chosen_dir = [get_appdata_data_dir()]
     step = [1]
 
     # ── Build window ──────────────────────────────────────────────────────────
     win = tk.Tk()
     win.withdraw()
     win.title("ZeddiHub Tools – Nastavení / Setup")
-    w, h = 480, 320
+    w, h = 480, 400
     sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
     win.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
     win.configure(bg=_BG)
@@ -180,13 +180,42 @@ def _show_first_launch_wizard() -> tuple:
             chosen_dir[0] = new_dir
             path_var.set(str(new_dir))
 
-    btn_row2 = tk.Frame(frame2, bg=_BG)
-    btn_row2.pack(pady=(0, 20))
+    preset_row = tk.Frame(frame2, bg=_BG)
+    preset_row.pack(pady=(0, 10))
 
-    tk.Button(btn_row2, text="📂 Změnit / Change",
+    appdata_btn = tk.Button(preset_row, text="AppData (doporučeno)",
+                            bg=_ORANGE, fg="#0c0c0c",
+                            activebackground="#d4900a", activeforeground="#0c0c0c",
+                            font=("Segoe UI", 10, "bold"), width=22, height=2,
+                            bd=0, relief="flat", cursor="hand2")
+    docs_btn = tk.Button(preset_row, text="Documents",
+                         bg=_BTN_BG, fg="#cccccc",
+                         activebackground="#333333", activeforeground="#ffffff",
+                         font=("Segoe UI", 10), width=14, height=2,
+                         bd=0, relief="flat", cursor="hand2")
+
+    def _set_preset(which):
+        from gui.config import get_appdata_data_dir as _ad, get_default_data_dir as _dd
+        new_dir = _ad() if which == "appdata" else _dd()
+        chosen_dir[0] = new_dir
+        path_var.set(str(new_dir))
+        appdata_btn.configure(bg=_ORANGE if which == "appdata" else _BTN_BG,
+                              fg="#0c0c0c" if which == "appdata" else "#cccccc")
+        docs_btn.configure(bg=_ORANGE if which == "docs" else _BTN_BG,
+                           fg="#0c0c0c" if which == "docs" else "#cccccc")
+
+    appdata_btn.configure(command=lambda: _set_preset("appdata"))
+    docs_btn.configure(command=lambda: _set_preset("docs"))
+    appdata_btn.pack(side="left", padx=6)
+    docs_btn.pack(side="left", padx=6)
+
+    btn_row2 = tk.Frame(frame2, bg=_BG)
+    btn_row2.pack(pady=(0, 14))
+
+    tk.Button(btn_row2, text="📂 Vlastní / Custom",
               bg=_BTN_BG, fg="#cccccc",
               activebackground="#333333", activeforeground="#ffffff",
-              font=("Segoe UI", 11), width=18, height=2,
+              font=("Segoe UI", 10), width=18, height=1,
               bd=0, relief="flat", cursor="hand2",
               command=_browse).pack()
 
@@ -219,9 +248,16 @@ def main():
 
     is_first = is_first_launch()
 
+    start_minimized = "--minimized" in sys.argv
+
     def _launch():
         from gui.main_window import MainWindow
         app = MainWindow()
+        if start_minimized:
+            try:
+                app.withdraw()
+            except Exception:
+                pass
         app.mainloop()
 
     def _after_splash():

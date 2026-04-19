@@ -2,7 +2,35 @@
 
 All notable changes to ZeddiHub Tools Desktop are documented in this file.
 
-## [2.1.0] — 2026-04-19
+## [2.0.2] — 2026-04-19
+
+### Added
+- **Server Updater panel** (`gui/panels/server_updater.py`) — remote monitoring of server-side updates across four layers (see `gui/update_sources/`):
+  1. **Game builds** via Steam Web API (`ISteamApps/UpToDateCheck`) for Rust Dedicated, CS2 / CS:GO.
+  2. **Oxide / uMod** for Rust via `umod.org/games/rust.json`.
+  3. **MetaMod + SourceMod + CounterStrikeSharp** via AlliedModders drop endpoints + CSSharp GitHub Releases.
+  4. **Per-plugin GitHub Releases** (`owner/repo` targets).
+  Modular architecture: each source implements the same `UpdateSource` interface, so adding a new detector is one file. Status indicators (green OK / orange update-available / red error), configurable per-target current version, async background checks that never block the UI, auto-apply toggle, config persisted to `<data_dir>/server_updater.json`.
+- **"Ostatní nástroje" — admin-only external-tools section** — new sidebar category visible only to users with `role=admin` in `auth.json`. Contains a **Stáhnout nástroje** (`gui/panels/tools_download.py`) hub that fetches a catalog from `zeddihub.eu/tools/data/admin_apps.json`, downloads each tool as an app module into `<data_dir>/apps/<slug>/` (auto-detects `.exe` vs `.zip`) and registers it. Installed tools appear as their own sidebar entries under "Ostatní nástroje" with one-click launch / uninstall and live sidebar refresh after install or uninstall.
+- **Role-based access** (`gui/auth.py`) — login flow now reads `role` from the webhosting auth JSON and exposes `get_current_role()` / `is_admin()`. Unknown roles fall back to `"user"`. Clears on logout.
+- **Windows autostart — second toggle "Spustit minimalizované do tray"** in Settings → Autostart. When enabled the `HKCU\...\Run` entry is rewritten with a `--minimized` flag, and `app.py` parses it on startup to call `withdraw()` right after creating the main window so the app lives in the tray until the user asks for it. The main autostart toggle and this one can be changed independently.
+- **First-launch wizard — `%APPDATA%\ZeddiHub` as the recommended default** — the second wizard step now offers a two-button preset (AppData recommended / Documents) plus a "Custom" picker, instead of only the old `Documents` default. New helper `gui/config.get_appdata_data_dir()` resolves the path consistently.
+
+### Changed
+- **Google Apps Script integration** (`ZeddiHub App/zeddihub_sheets_github.gs`) — rewritten end-to-end: dropped the stale April-19 seed/update functions, consolidated API calls into a single `apiCall_()` helper, trimmed boilerplate, shipped a fresh `seedTasks_v2_2_0()` that populates Backlog and Bugs with the v2.0.2 roadmap (N-20 Server Updater, N-21 External Tools, N-22 Roles, N-23 Premium; F-14 Wizard default, F-15 Autostart minimized). Paste the new file into Apps Script and run the three setup steps at the top.
+
+### Upgrade notes
+- Drop-in upgrade from v2.0.1. Existing settings, credentials and data folder are preserved.
+- The admin-only "Ostatní nástroje" section is invisible unless your webhosting `auth.json` user record has `"role": "admin"`. Existing users without the field default to `"user"` and see no change.
+- Server Updater ships with a default target list; edit `<data_dir>/server_updater.json` to add your own plugin GitHub repos or adjust current versions.
+
+### Verification
+- `python -c "import gui.version; print(gui.version.APP_VERSION)"` → must print `2.0.2`.
+- Open Settings → Autostart: toggling "Spustit minimalizované" must flip `HKCU\...\Run\ZeddiHubTools` between `"<exe>"` and `"<exe>" --minimized` (`reg query HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
+- Delete `%LOCALAPPDATA%\ZeddiHub\bootstrap.json` and relaunch: wizard step 2 must preselect AppData and show three buttons (AppData / Documents / Custom).
+- Log in as an admin user, open the sidebar: the "Ostatní nástroje" section must appear with "Stáhnout nástroje" inside. Non-admin users must not see the section.
+
+## [2.0.1] — 2026-04-19
 
 ### Added
 - **Single-instance lock** — application can now run only once per PC. A second launch detects the running instance (localhost socket on port 52719) and shows a warning instead of starting a duplicate.

@@ -224,6 +224,18 @@ class SettingsPanel(ctk.CTkFrame):
         )
         self._autostart_switch.pack(padx=14, pady=(0, 6), anchor="w")
 
+        self._start_minimized_var = ctk.BooleanVar(
+            value=bool(load_settings().get("start_minimized", False))
+        )
+        self._start_minimized_switch = ctk.CTkSwitch(
+            autostart_card, text=t("autostart_minimized"),
+            variable=self._start_minimized_var,
+            command=self._toggle_start_minimized,
+            fg_color=th["secondary"], progress_color=th["primary"],
+            font=ctk.CTkFont("Segoe UI", 11),
+        )
+        self._start_minimized_switch.pack(padx=14, pady=(0, 6), anchor="w")
+
         self._autostart_status = _label(autostart_card, "", 10, color=th["text_dim"])
         self._autostart_status.pack(padx=14, pady=(0, 14), anchor="w")
 
@@ -562,12 +574,32 @@ class SettingsPanel(ctk.CTkFrame):
     def _get_autostart_target(self) -> str:
         """Vrátí cestu, která se má spouštět při startu Windows."""
         import sys as _sys
+        minimized = bool(load_settings().get("start_minimized", False))
+        suffix = " --minimized" if minimized else ""
         if getattr(_sys, "frozen", False):
-            # PyInstaller build → samotný exe
-            return f'"{_sys.executable}"'
-        # Dev režim → python app.py
+            return f'"{_sys.executable}"{suffix}'
         app_py = Path(__file__).parent.parent.parent / "app.py"
-        return f'"{_sys.executable}" "{app_py}"'
+        return f'"{_sys.executable}" "{app_py}"{suffix}'
+
+    def _toggle_start_minimized(self):
+        try:
+            settings = load_settings()
+            settings["start_minimized"] = bool(self._start_minimized_var.get())
+            save_settings(settings)
+            if self._is_autostart_enabled():
+                self._toggle_autostart_rewrite()
+        except Exception:
+            pass
+
+    def _toggle_autostart_rewrite(self):
+        try:
+            import winreg
+            target = self._get_autostart_target()
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.AUTOSTART_KEY,
+                                0, winreg.KEY_SET_VALUE) as k:
+                winreg.SetValueEx(k, self.AUTOSTART_VALUE_NAME, 0, winreg.REG_SZ, target)
+        except Exception:
+            pass
 
     def _is_autostart_enabled(self) -> bool:
         try:

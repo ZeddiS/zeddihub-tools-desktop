@@ -1,7 +1,7 @@
 {
-  "version": "2.0.0",
+  "version": "2.0.2",
   "release_date": "2026-04-19",
-  "changelog": "Major release: completely redesigned release manager (zeddihub.bat) with ANSI colors and wizard flow, fixed build icon regeneration, unified release notes format. Includes all v1.9.0 work (Win11 Dark Gaming theme, admin dashboard redesign, updater fixes, single-source version, favicon sync).",
+  "changelog": "v2.0.2: Server Updater (4-layer remote monitoring — Steam builds, Oxide/uMod, MetaMod+SourceMod+CSSharp, per-plugin GitHub), admin-only 'Other Tools' section with downloadable modules, role-based access (admin/premium/user), Windows autostart + start-minimized toggles, first-launch wizard %APPDATA% default, refreshed Google Apps Script integration.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

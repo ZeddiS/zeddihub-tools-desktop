@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v2.1.0-orange?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-v2.0.2-orange?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-blue?style=flat-square&logo=windows&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/language-EN%20%2F%20CZ-green?style=flat-square" alt="Language">
   <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="License">
@@ -102,7 +102,8 @@ If an update is available, it downloads and installs automatically — no browse
 
 | Version | Highlights |
 |---------|------------|
-| **v2.1.0** | yt-dlp frozen-build fix, single-instance lock, Auto Clicker overhaul (fixed XY / jitter / presets / live counter), Claude-app-style UI refresh, Web Uploader module, bcrypt migration |
+| **v2.0.2** | Server Updater (4-layer remote monitoring), admin-only *Other Tools* with downloadable modules, role-based access (admin/premium/user), Windows autostart + start-minimized toggles, first-launch wizard `%APPDATA%` preset |
+| v2.0.1 | yt-dlp frozen-build fix, single-instance lock, Auto Clicker overhaul (fixed XY / jitter / presets / live counter), Claude-app-style UI refresh, Web Uploader module, bcrypt migration |
 | v2.0.0 | Release Manager redesign, unified bilingual release notes, build-icon regeneration, Win11 Dark Gaming theme |
 | v1.9.0 | `gui/widgets.py` shared helpers, admin dashboard redesign with charts, audit log, atomic JSON writes, maintenance mode, one-click export |
 | v1.5.0 | FontAwesome icon system — all emoji replaced with FA 6 Free vector icons throughout the UI |

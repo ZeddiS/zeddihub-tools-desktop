@@ -58,3 +58,8 @@ def is_first_launch() -> bool:
 
 def get_default_data_dir() -> Path:
     return Path.home() / "Documents" / DEFAULT_DATA_DIR_NAME
+
+
+def get_appdata_data_dir() -> Path:
+    base = Path(os.environ.get("APPDATA", Path.home()))
+    return base / "ZeddiHub" / DEFAULT_DATA_DIR_NAME

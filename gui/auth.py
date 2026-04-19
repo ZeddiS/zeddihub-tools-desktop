@@ -25,6 +25,7 @@ AUTH_API_URL = "https://zeddihub.eu/tools/data/auth.json"
 
 _cached_token: str | None = None
 _auth_verified: bool = False
+_current_role: str = "user"  # "admin" | "premium" | "user"
 
 
 def _get_data_dir() -> Path:
@@ -115,7 +116,7 @@ def verify_access(username: str, password: str, callback=None) -> bool:
     Runs in background thread if callback given, otherwise blocks.
     """
     def _check():
-        global _cached_token, _auth_verified
+        global _cached_token, _auth_verified, _current_role
         try:
             req = urllib.request.Request(
                 AUTH_API_URL,
@@ -130,6 +131,7 @@ def verify_access(username: str, password: str, callback=None) -> bool:
                         and u.get("password") == password):
                     _cached_token = username
                     _auth_verified = True
+                    _current_role = str(u.get("role", "user")).lower()
                     if callback:
                         callback(True, "Přihlášení úspěšné!")
                     return True
@@ -139,6 +141,7 @@ def verify_access(username: str, password: str, callback=None) -> bool:
             if username in codes or password in codes:
                 _cached_token = username or password
                 _auth_verified = True
+                _current_role = "user"
                 if callback:
                     callback(True, "Přístupový kód přijat!")
                 return True
@@ -178,8 +181,20 @@ def get_current_user() -> str | None:
     return _cached_token
 
 
+def get_current_role() -> str:
+    """Returns 'admin' | 'premium' | 'user'. Defaults to 'user' when not authenticated."""
+    if not _auth_verified:
+        return "user"
+    return _current_role or "user"
+
+
+def is_admin() -> bool:
+    return get_current_role() == "admin"
+
+
 def logout():
     """Log out current user (does not remove saved credentials)."""
-    global _cached_token, _auth_verified
+    global _cached_token, _auth_verified, _current_role
     _cached_token = None
     _auth_verified = False
+    _current_role = "user"

@@ -10,7 +10,7 @@ fallbacks for offline clients and the legacy updater path. They are rewritten by
 release helper bat (zeddihub.bat) at tag time.
 """
 
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.0.2"
 APP_NAME = "ZeddiHub Tools Desktop"
 GITHUB_OWNER = "ZeddiS"
 GITHUB_REPO = "zeddihub-tools-desktop"
