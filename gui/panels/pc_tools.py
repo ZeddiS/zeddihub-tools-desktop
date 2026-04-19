@@ -121,7 +121,9 @@ def _fmt_time(seconds: int) -> str:
 
 
 def _card(parent, theme):
-    return ctk.CTkFrame(parent, fg_color=theme["card_bg"], corner_radius=8)
+    return ctk.CTkFrame(parent, fg_color=theme["card_bg"],
+                        corner_radius=int(theme.get("radius_card", 14)),
+                        border_width=0)
 
 
 class PCToolsPanel(ctk.CTkFrame):
@@ -224,7 +226,9 @@ class PCToolsPanel(ctk.CTkFrame):
 
         cols = 2
         for i, (name, info_lines, color) in enumerate(sections):
-            card = ctk.CTkFrame(grid, fg_color=th["card_bg"], corner_radius=8)
+            card = ctk.CTkFrame(grid, fg_color=th["card_bg"],
+                                corner_radius=int(th.get("radius_card", 14)),
+                                border_width=0)
             card.grid(row=i // cols, column=i % cols, padx=6, pady=6, sticky="nsew")
 
             header = ctk.CTkFrame(card, fg_color=color, corner_radius=0, height=3)
@@ -2341,7 +2345,9 @@ class PCToolsPanel(ctk.CTkFrame):
                    11, color=th["text_dim"]).pack(padx=8, pady=16, anchor="w")
             return
         for note in self._notes:
-            card = ctk.CTkFrame(self._notes_list_frame, fg_color=th["card_bg"], corner_radius=8)
+            card = ctk.CTkFrame(self._notes_list_frame, fg_color=th["card_bg"],
+                                corner_radius=int(th.get("radius_card", 14)),
+                                border_width=0)
             card.pack(fill="x", pady=4)
             accent = ctk.CTkFrame(card, fg_color=note.get("color", th["primary"]),
                                    corner_radius=0, height=3)

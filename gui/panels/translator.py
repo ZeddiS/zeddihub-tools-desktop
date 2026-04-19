@@ -22,6 +22,8 @@ def _label(parent, text, font_size=12, bold=False, color=None, **kw):
 
 
 def _btn(parent, text, cmd, theme, width=180, height=36, **kw):
+    kw.setdefault("corner_radius", int(theme.get("radius_button", 10)))
+    kw.setdefault("border_width", 0)
     return ctk.CTkButton(parent, text=text, command=cmd,
                          fg_color=theme["primary"], hover_color=theme["primary_hover"],
                          text_color=theme["button_fg"],
@@ -111,7 +113,7 @@ class TranslatorPanel(ctk.CTkFrame):
                11, color=t["text_dim"]).pack(anchor="w", pady=(0, 12))
 
         # Status row
-        status_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        status_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         status_frame.pack(fill="x", pady=4)
 
         info_grid = ctk.CTkFrame(status_frame, fg_color="transparent")
@@ -129,7 +131,7 @@ class TranslatorPanel(ctk.CTkFrame):
         self._update_status_labels()
 
         # Language selection
-        langs_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        langs_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         langs_frame.pack(fill="x", pady=8)
         _label(langs_frame, "Cílové jazyky:", 12, bold=True, color=t["text_dim"]).pack(
             padx=12, pady=(10, 6), anchor="w")
@@ -406,7 +408,7 @@ class TranslatorPanel(ctk.CTkFrame):
         _label(scroll, "Nastavení překladače", 16, bold=True, color=t["primary"]).pack(anchor="w", pady=(0, 12))
 
         # Source folder
-        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec.pack(fill="x", pady=6)
         _label(sec, "📁 Zdrojová složka (vstupní soubory)", 12, bold=True, color=t["text_dim"]).pack(
             padx=12, pady=(10, 4), anchor="w")
@@ -441,7 +443,7 @@ class TranslatorPanel(ctk.CTkFrame):
                                ).pack(side="left", padx=6)
 
         # Target folder
-        sec2 = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec2 = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec2.pack(fill="x", pady=6)
         _label(sec2, "📁 Cílová složka (výstupní soubory)", 12, bold=True, color=t["text_dim"]).pack(
             padx=12, pady=(10, 4), anchor="w")
@@ -460,7 +462,7 @@ class TranslatorPanel(ctk.CTkFrame):
                       command=self._pick_target).pack(side="left")
 
         # File extension
-        sec3 = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec3 = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec3.pack(fill="x", pady=6)
         _label(sec3, "Formát souborů:", 12, bold=True, color=t["text_dim"]).pack(
             padx=12, pady=(10, 4), anchor="w")
@@ -474,7 +476,7 @@ class TranslatorPanel(ctk.CTkFrame):
                                command=self._save_settings).pack(side="left", padx=8)
 
         # Engine
-        sec4 = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec4 = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec4.pack(fill="x", pady=6)
         _label(sec4, "Překladový motor:", 12, bold=True, color=t["text_dim"]).pack(
             padx=12, pady=(10, 4), anchor="w")
@@ -537,7 +539,7 @@ class TranslatorPanel(ctk.CTkFrame):
         _label(main, "Přidejte prefix k přeloženým zprávám (např. název pluginu nebo serveru).",
                11, color=t["text_dim"]).pack(anchor="w", pady=(0, 12))
 
-        sec = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        sec = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec.pack(fill="x", pady=6)
 
         self._prefix_enabled_var = ctk.BooleanVar(value=self._config.get("prefix_enabled", False))
@@ -587,7 +589,7 @@ class TranslatorPanel(ctk.CTkFrame):
             ("Zdrojová složka:", "source_dir", "📂 Otevřít"),
             ("Cílová složka:", "target_dir", "📂 Otevřít"),
         ]:
-            card = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+            card = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             card.pack(fill="x", pady=6)
             _label(card, label, 12, bold=True, color=t["text_dim"]).pack(padx=12, pady=(10, 2), anchor="w")
             path = self._config.get(key, "Nezvoleno")

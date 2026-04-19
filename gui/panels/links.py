@@ -105,7 +105,7 @@ class LinksPanel(ctk.CTkFrame):
         }
 
         for (section_name, section_icon), links in sections.items():
-            sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             sec.pack(fill="x", pady=6)
             sec_icon_img = icons.icon(section_icon, 15, t["primary"])
             _label(sec, section_name, 13, bold=True, color=t["primary"],
@@ -127,7 +127,7 @@ class LinksPanel(ctk.CTkFrame):
                11, color=t["text_dim"]).pack(anchor="w", pady=(0, 12))
 
         # DNS Lookup tool
-        lookup_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        lookup_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         lookup_frame.pack(fill="x", pady=6)
         _label(lookup_frame, " DNS Lookup", 13, bold=True, color=t["text_dim"],
                image=icons.icon("search", 15, t["text_dim"]), compound="left").pack(
@@ -154,7 +154,7 @@ class LinksPanel(ctk.CTkFrame):
         self.dns_result.pack(fill="x", padx=12, pady=(0, 12))
 
         # Ping tool
-        ping_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        ping_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         ping_frame.pack(fill="x", pady=6)
         _label(ping_frame, " Port Checker / Ping", 13, bold=True, color=t["text_dim"],
                image=icons.icon("satellite-dish", 15, t["text_dim"]), compound="left").pack(
@@ -181,7 +181,7 @@ class LinksPanel(ctk.CTkFrame):
         self.ping_result.pack(padx=12, pady=(4, 12), anchor="w")
 
         # Common ZeddiHub DNS
-        dns_quick = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        dns_quick = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         dns_quick.pack(fill="x", pady=6)
         _label(dns_quick, " Rychlé vyhledávání ZeddiHub domén", 12, bold=True, color=t["text_dim"],
                image=icons.icon("bolt", 14, t["text_dim"]), compound="left"
@@ -273,7 +273,7 @@ class LinksPanel(ctk.CTkFrame):
                11, color=t["text_dim"]).pack(anchor="w", pady=(0, 12))
 
         # ── N-07: Přímý file share feature (picker + upload → URL) ──────────
-        share = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        share = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         share.pack(fill="x", pady=6)
 
         _label(share, " " + _t("file_share_section"), 14, bold=True, color=t["text"],
@@ -344,7 +344,7 @@ class LinksPanel(ctk.CTkFrame):
                       ).pack(side="left")
 
         # Quick open button (web uploader fallback)
-        card = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        card = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         card.pack(fill="x", pady=6)
 
         _label(card, " Webový uploader", 14, bold=True, color=t["text"],
@@ -474,7 +474,7 @@ class LinksPanel(ctk.CTkFrame):
             self.after(0, _fail)
 
         # Info
-        info = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        info = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         info.pack(fill="x", pady=6)
         _label(info, " Informace o CDN", 13, bold=True, color=t["text_dim"],
                image=icons.icon("info-circle", 15, t["text_dim"]), compound="left").pack(
@@ -522,7 +522,7 @@ class LinksPanel(ctk.CTkFrame):
             ("Licence",      "MIT License"),
         ]
 
-        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec.pack(fill="x", pady=8)
 
         for key, val in credits_data:

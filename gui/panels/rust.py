@@ -4,10 +4,19 @@ ZeddiHub Tools - Rust Player & Server Tools GUI panels.
 
 import os
 import re
+import json
 import threading
 import tkinter as tk
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+
+# WebSocket RCON (Facepunch) - volitelná závislost
+try:
+    import websocket  # websocket-client balíček
+    WS_OK = True
+except Exception:
+    websocket = None
+    WS_OK = False
 
 
 def _label(parent, text, font_size=12, bold=False, color=None, **kw):
@@ -17,6 +26,8 @@ def _label(parent, text, font_size=12, bold=False, color=None, **kw):
 
 
 def _btn(parent, text, cmd, theme, width=180, height=36, **kw):
+    kw.setdefault("corner_radius", int(theme.get("radius_button", 10)))
+    kw.setdefault("border_width", 0)
     return ctk.CTkButton(parent, text=text, command=cmd,
                          fg_color=theme["primary"], hover_color=theme["primary_hover"],
                          text_color=theme["button_fg"],
@@ -25,9 +36,11 @@ def _btn(parent, text, cmd, theme, width=180, height=36, **kw):
 
 
 def _section(parent, title, theme):
-    f = ctk.CTkFrame(parent, fg_color=theme["card_bg"], corner_radius=8)
+    f = ctk.CTkFrame(parent, fg_color=theme["card_bg"],
+                     corner_radius=int(theme.get("radius_card", 14)),
+                     border_width=0)
     f.pack(fill="x", padx=0, pady=6)
-    _label(f, title, 13, bold=True, color=theme["primary"]).pack(padx=14, pady=(10, 6), anchor="w")
+    _label(f, title, 13, bold=True, color=theme["primary"]).pack(padx=18, pady=(14, 8), anchor="w")
     return f
 
 
@@ -67,11 +80,15 @@ class RustPlayerPanel(ctk.CTkFrame):
         tab.add("Client CFG")
         tab.add("Bindy")
         tab.add("Tipy & Info")
+        tab.add("Plugin Info")
+        tab.add("Plugin Analyzer")
 
         self._build_sensitivity(tab.tab("Sensitivity"))
         self._build_settings(tab.tab("Client CFG"))
         self._build_binds(tab.tab("Bindy"))
         self._build_tips(tab.tab("Tipy & Info"))
+        self._build_plugin_info(tab.tab("Plugin Info"))
+        self._build_plugin_analyzer(tab.tab("Plugin Analyzer"))
 
     # ─── SENSITIVITY CALCULATOR ──────────────────────────────────────────────
 
@@ -86,7 +103,7 @@ class RustPlayerPanel(ctk.CTkFrame):
                11, color=t["text_dim"]).pack(padx=4, pady=(0, 12), anchor="w")
 
         # Source game
-        src_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        src_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         src_card.pack(fill="x", pady=6)
         _label(src_card, "Zdrojová hra", 13, bold=True, color=t["primary"]
                ).pack(padx=14, pady=(10, 6), anchor="w")
@@ -124,7 +141,7 @@ class RustPlayerPanel(ctk.CTkFrame):
         self._src_dpi.trace_add("write", lambda *_: self._recalc_sens())
 
         # Target game
-        dst_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        dst_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         dst_card.pack(fill="x", pady=6)
         _label(dst_card, "Cílová hra", 13, bold=True, color=t["primary"]
                ).pack(padx=14, pady=(10, 6), anchor="w")
@@ -153,7 +170,7 @@ class RustPlayerPanel(ctk.CTkFrame):
         self._dst_dpi.trace_add("write", lambda *_: self._recalc_sens())
 
         # Result
-        res_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        res_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         res_card.pack(fill="x", pady=6)
         _label(res_card, "Výsledek", 13, bold=True, color=t["primary"]
                ).pack(padx=14, pady=(10, 4), anchor="w")
@@ -167,7 +184,7 @@ class RustPlayerPanel(ctk.CTkFrame):
                      text_color=t["text_dim"]).pack(padx=14, pady=(0, 10), anchor="w")
 
         # Reference table
-        ref_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        ref_card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         ref_card.pack(fill="x", pady=6)
         _label(ref_card, "Referenční cm/360°", 13, bold=True, color=t["primary"]
                ).pack(padx=14, pady=(10, 6), anchor="w")
@@ -243,7 +260,7 @@ class RustPlayerPanel(ctk.CTkFrame):
 
         self._bind_vars = {}
         for cat_name, binds in binds_defs.items():
-            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             outer.pack(fill="x", padx=0, pady=6)
             _label(outer, cat_name, 13, bold=True, color=t["primary"]).pack(
                 padx=14, pady=(10, 6), anchor="w")
@@ -333,7 +350,7 @@ class RustPlayerPanel(ctk.CTkFrame):
         ]
 
         for sec_title, tips in sections:
-            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             outer.pack(fill="x", pady=6)
             _label(outer, sec_title, 13, bold=True, color=t["primary"]).pack(
                 padx=14, pady=(10, 6), anchor="w")
@@ -382,7 +399,7 @@ class RustPlayerPanel(ctk.CTkFrame):
 
         self._cfg_vars = {}
         for cat_name, fields in categories.items():
-            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             outer.pack(fill="x", padx=0, pady=6)
             _label(outer, cat_name, 13, bold=True, color=t["primary"]).pack(
                 padx=14, pady=(10, 6), anchor="w")
@@ -651,7 +668,7 @@ class RustServerPanel(ctk.CTkFrame):
 
         self._srv_vars = {}
         for sec_name, fields in server_defs.items():
-            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             outer.pack(fill="x", padx=0, pady=6)
             _label(outer, sec_name, 13, bold=True, color=t["primary"]).pack(
                 padx=14, pady=(10, 6), anchor="w")
@@ -737,7 +754,7 @@ class RustServerPanel(ctk.CTkFrame):
                       command=self._pick_plugin_source).pack(side="left", padx=(8, 0))
 
         # Operations grid
-        ops_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        ops_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         ops_frame.pack(fill="x", pady=8)
         _label(ops_frame, "Dostupné operace", 12, bold=True, color=t["text_dim"]).pack(
             padx=14, pady=(10, 6), anchor="w")
@@ -893,23 +910,61 @@ class RustServerPanel(ctk.CTkFrame):
         main.pack(fill="both", expand=True, padx=12, pady=12)
 
         _label(main, "Rust – RCON Klient", 16, bold=True, color=t["primary"]).pack(anchor="w")
-        _label(main, "Připojení k Rust serveru přes Source RCON (port obvykle game_port + 1).",
+        _label(main, "WebSocket RCON (doporučeno, nativní pro Rust) nebo Source RCON (starší).",
                11, color=t["text_dim"]).pack(anchor="w", pady=(0, 10))
 
-        cfg_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        # Upozornění pokud chybí websocket-client
+        if not WS_OK:
+            warn_card = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)),
+                                     border_width=1, border_color=t.get("warning", "#ffaa00"))
+            warn_card.pack(fill="x", pady=(0, 8))
+            _label(warn_card, "⚠ Chybí knihovna websocket-client", 13, bold=True,
+                   color=t.get("warning", "#ffaa00")
+                   ).pack(padx=12, pady=(10, 2), anchor="w")
+            _label(warn_card, "Pro WebSocket RCON (nativní Rust protokol) je třeba nainstalovat knihovnu websocket-client.",
+                   11, color=t["text_dim"]).pack(padx=12, pady=(0, 2), anchor="w")
+            _label(warn_card, "Bez ní je dostupný pouze Source RCON režim.",
+                   10, color=t["text_dim"]).pack(padx=12, pady=(0, 6), anchor="w")
+            ctk.CTkButton(warn_card, text="Nainstalovat websocket-client",
+                          fg_color=t["primary"], hover_color=t["primary_hover"],
+                          text_color=t["button_fg"], height=32,
+                          command=self._install_websocket_client
+                          ).pack(padx=12, pady=(0, 10), anchor="w")
+
+        # Protokol selector
+        proto_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
+        proto_frame.pack(fill="x", pady=4)
+        _label(proto_frame, "Protokol:", 11, bold=True, color=t["text_dim"]).pack(
+            side="left", padx=(12, 8), pady=10)
+        self._rcon_proto = ctk.StringVar(value="websocket" if WS_OK else "source")
+        proto_seg = ctk.CTkSegmentedButton(
+            proto_frame,
+            values=["WebSocket (doporučeno)", "Source RCON (starší)"],
+            fg_color=t["secondary"],
+            selected_color=t["primary"],
+            selected_hover_color=t["primary_hover"],
+            command=self._rcon_proto_change,
+        )
+        proto_seg.pack(side="left", padx=4, pady=8)
+        proto_seg.set("WebSocket (doporučeno)" if WS_OK else "Source RCON (starší)")
+        self._rcon_proto_seg = proto_seg
+
+        cfg_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         cfg_frame.pack(fill="x", pady=4)
 
         self._rcon_host = ctk.StringVar(value="127.0.0.1")
-        self._rcon_port = ctk.StringVar(value="28016")
+        self._rcon_port = ctk.StringVar(value="28015")     # game port (Source RCON fallback)
+        self._rcon_ws_port = ctk.StringVar(value="28016")  # WebSocket RCON port (Facepunch)
         self._rcon_pw = ctk.StringVar()
 
         for i, (lbl, var, mask) in enumerate([
             ("IP adresa", self._rcon_host, False),
-            ("Port",      self._rcon_port, False),
+            ("WebSocket port (rcon.port)", self._rcon_ws_port, False),
+            ("Source RCON port (game+1)", self._rcon_port, False),
             ("RCON heslo", self._rcon_pw, True),
         ]):
             ctk.CTkLabel(cfg_frame, text=lbl, font=ctk.CTkFont("Segoe UI", 11),
-                         text_color=t["text_dim"], width=110, anchor="w"
+                         text_color=t["text_dim"], width=220, anchor="w"
                          ).grid(row=i, column=0, padx=(12, 4), pady=4, sticky="w")
             ctk.CTkEntry(cfg_frame, textvariable=var, width=200,
                          fg_color=t["secondary"], text_color=t["text"],
@@ -918,9 +973,11 @@ class RustServerPanel(ctk.CTkFrame):
                          ).grid(row=i, column=1, padx=4, pady=4, sticky="w")
 
         _btn(cfg_frame, "🔌 Připojit", self._rcon_connect, t, width=120
-             ).grid(row=0, column=2, rowspan=3, padx=12)
+             ).grid(row=0, column=2, rowspan=2, padx=12)
+        _btn(cfg_frame, "✖ Odpojit", self._rcon_disconnect, t, width=120
+             ).grid(row=2, column=2, rowspan=2, padx=12)
 
-        quick_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        quick_frame = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         quick_frame.pack(fill="x", pady=8)
         _label(quick_frame, "Rychlé příkazy:", 11, bold=True, color=t["text_dim"]).pack(
             padx=12, pady=(8, 4), anchor="w")
@@ -950,7 +1007,12 @@ class RustServerPanel(ctk.CTkFrame):
         self.rcon_cmd.bind("<Return>", lambda _: self._rcon_send())
         _btn(cmd_row, "Odeslat", self._rcon_send, t, width=100).pack(side="left")
 
-        self._rcon_socket = None
+        # Stav připojení
+        self._rcon_socket = None       # Source RCON TCP socket
+        self._rcon_ws = None           # Facepunch WebSocket RCON
+        self._rcon_ws_thread = None    # čtecí thread pro WS
+        self._rcon_ws_counter = 0      # inkrementální Identifier pro WS zprávy
+        self._rcon_ws_stop = False     # flag pro zastavení čtecí smyčky
 
     def _rcon_log(self, msg: str):
         self.rcon_output.configure(state="normal")
@@ -958,16 +1020,83 @@ class RustServerPanel(ctk.CTkFrame):
         self.rcon_output.see("end")
         self.rcon_output.configure(state="disabled")
 
+    def _rcon_is_ws(self) -> bool:
+        try:
+            return self._rcon_proto.get() == "websocket"
+        except Exception:
+            return False
+
+    def _rcon_proto_change(self, value: str):
+        """Callback pro segmented button přepínání protokolu."""
+        if "WebSocket" in value:
+            if not WS_OK:
+                self._rcon_log("! websocket-client není nainstalován – nelze použít WebSocket režim")
+                try:
+                    self._rcon_proto_seg.set("Source RCON (starší)")
+                except Exception:
+                    pass
+                self._rcon_proto.set("source")
+                return
+            self._rcon_proto.set("websocket")
+        else:
+            self._rcon_proto.set("source")
+
+    def _rcon_connected(self) -> bool:
+        return self._rcon_socket is not None or self._rcon_ws is not None
+
     def _rcon_quick(self, cmd: str):
-        if not self._rcon_socket:
+        if not self._rcon_connected():
             self._rcon_log("! Nejste připojeni")
             return
-        old = self.rcon_cmd.get()
         self.rcon_cmd.delete(0, "end")
         self.rcon_cmd.insert(0, cmd)
         self._rcon_send()
 
+    # ───── dispatcher: Source vs WebSocket ─────
     def _rcon_connect(self):
+        if self._rcon_connected():
+            self._rcon_log("! Již připojeno – nejprve se odpojte.")
+            return
+        if self._rcon_is_ws():
+            self._rcon_connect_ws()
+        else:
+            self._rcon_connect_source()
+
+    def _rcon_send(self):
+        cmd = self.rcon_cmd.get().strip()
+        if not cmd:
+            return
+        if not self._rcon_connected():
+            self._rcon_log("! Nejste připojeni")
+            return
+        self.rcon_cmd.delete(0, "end")
+        if self._rcon_is_ws() and self._rcon_ws is not None:
+            self._rcon_send_ws(cmd)
+        elif self._rcon_socket is not None:
+            self._rcon_send_source(cmd)
+        else:
+            self._rcon_log("! Nejste připojeni pro zvolený protokol")
+
+    def _rcon_disconnect(self):
+        """Uzavře aktivní WebSocket i Source RCON spojení."""
+        if self._rcon_ws is not None:
+            self._rcon_ws_stop = True
+            try:
+                self._rcon_ws.close()
+            except Exception:
+                pass
+            self._rcon_ws = None
+            self._rcon_log("✓ WebSocket RCON odpojen")
+        if self._rcon_socket is not None:
+            try:
+                self._rcon_socket.close()
+            except Exception:
+                pass
+            self._rcon_socket = None
+            self._rcon_log("✓ Source RCON odpojen")
+
+    # ───── Source RCON (původní implementace) ─────
+    def _rcon_connect_source(self):
         import socket, struct
         host = self._rcon_host.get().strip()
         try:
@@ -992,21 +1121,15 @@ class RustServerPanel(ctk.CTkFrame):
                 if r2 == -1:
                     self.after(0, self._rcon_log, "✗ Špatné heslo"); s.close(); return
                 self._rcon_socket = s
-                self.after(0, self._rcon_log, f"✓ Připojeno k Rust serveru {host}:{port}")
+                self.after(0, self._rcon_log, f"✓ Připojeno (Source RCON) k {host}:{port}")
                 self.after(0, self._rcon_log, "  Užitečné: status, playerlist, oxide.reload *, kick <jméno>")
             except Exception as e:
                 self.after(0, self._rcon_log, f"✗ Chyba připojení: {e}")
 
         threading.Thread(target=connect, daemon=True).start()
 
-    def _rcon_send(self):
+    def _rcon_send_source(self, cmd: str):
         import struct
-        cmd = self.rcon_cmd.get().strip()
-        if not cmd or not self._rcon_socket:
-            if not self._rcon_socket:
-                self._rcon_log("! Nejste připojeni")
-            return
-        self.rcon_cmd.delete(0, "end")
 
         def send():
             try:
@@ -1023,3 +1146,102 @@ class RustServerPanel(ctk.CTkFrame):
                 self.after(0, self._rcon_log, f"! Chyba: {e}")
 
         threading.Thread(target=send, daemon=True).start()
+
+    # ───── Facepunch WebSocket RCON ─────
+    def _rcon_connect_ws(self):
+        if not WS_OK:
+            self._rcon_log("! websocket-client není nainstalován – klikněte na 'Nainstalovat websocket-client' výše.")
+            return
+        host = self._rcon_host.get().strip()
+        try:
+            port = int(self._rcon_ws_port.get())
+        except ValueError:
+            self._rcon_log("! Neplatný WebSocket port"); return
+        pw = self._rcon_pw.get().strip()
+        if not pw:
+            self._rcon_log("! Prázdné heslo"); return
+
+        url = f"ws://{host}:{port}/{pw}"
+
+        def connect():
+            try:
+                ws = websocket.create_connection(url, timeout=6)
+                ws.settimeout(None)  # blokující recv v readeru
+                self._rcon_ws = ws
+                self._rcon_ws_counter = 0
+                self._rcon_ws_stop = False
+                self.after(0, self._rcon_log, f"✓ Připojeno (WebSocket RCON) k {host}:{port}")
+                self.after(0, self._rcon_log, "  Protokol: Facepunch RCON (JSON). Zkuste: status, serverinfo, playerlist")
+                self._rcon_ws_thread = threading.Thread(
+                    target=self._rcon_ws_reader, daemon=True)
+                self._rcon_ws_thread.start()
+            except Exception as e:
+                self._rcon_ws = None
+                self.after(0, self._rcon_log, f"✗ Chyba WebSocket připojení: {e}")
+                self.after(0, self._rcon_log, "  Tip: zkontrolujte rcon.port (obvykle 28016) a rcon.password v server.cfg")
+
+        threading.Thread(target=connect, daemon=True).start()
+
+    def _rcon_ws_reader(self):
+        """Background čtecí smyčka – loguje příchozí JSON zprávy do konzole."""
+        ws = self._rcon_ws
+        if ws is None:
+            return
+        while not self._rcon_ws_stop and self._rcon_ws is not None:
+            try:
+                raw = ws.recv()
+                if raw is None or raw == "":
+                    break
+                try:
+                    data = json.loads(raw)
+                    msg = data.get("Message", "") if isinstance(data, dict) else str(raw)
+                    mtype = data.get("Type", "Generic") if isinstance(data, dict) else ""
+                except Exception:
+                    msg = str(raw)
+                    mtype = ""
+                prefix = "  " if mtype in ("Generic", "", None) else f"  [{mtype}] "
+                lines = str(msg).splitlines() or [""]
+                for line in lines:
+                    self.after(0, self._rcon_log, f"{prefix}{line}")
+            except Exception as e:
+                if not self._rcon_ws_stop:
+                    self.after(0, self._rcon_log, f"! WS čtení ukončeno: {e}")
+                break
+        if self._rcon_ws is not None and not self._rcon_ws_stop:
+            self.after(0, self._rcon_log, "✗ WebSocket spojení ukončeno.")
+            try:
+                self._rcon_ws.close()
+            except Exception:
+                pass
+            self._rcon_ws = None
+
+    def _rcon_send_ws(self, cmd: str):
+        def send():
+            try:
+                self._rcon_ws_counter += 1
+                payload = {
+                    "Identifier": self._rcon_ws_counter,
+                    "Message": cmd,
+                    "Name": "ZeddiHubTools",
+                }
+                self._rcon_ws.send(json.dumps(payload))
+                self.after(0, self._rcon_log, f"> {cmd}")
+                # Odpověď přijde asynchronně v _rcon_ws_reader
+            except Exception as e:
+                self.after(0, self._rcon_log, f"! Chyba odeslání: {e}")
+
+        threading.Thread(target=send, daemon=True).start()
+
+    def _install_websocket_client(self):
+        """Nainstaluje websocket-client balíček pro WebSocket RCON."""
+        import subprocess as sp
+        import sys as _sys
+        try:
+            sp.check_call([_sys.executable, "-m", "pip", "install", "websocket-client"],
+                          creationflags=0x08000000)
+            messagebox.showinfo("Nainstalováno",
+                                "websocket-client byl nainstalován.\n"
+                                "Restartuj aplikaci pro aktivaci WebSocket RCON režimu.")
+        except Exception as e:
+            messagebox.showerror("Chyba instalace",
+                                 f"Nepodařilo se nainstalovat websocket-client:\n{e}")

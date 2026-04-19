@@ -31,7 +31,9 @@ def _label(parent, text, font_size=12, bold=False, color=None, **kw):
 
 
 def _card(parent, theme):
-    return ctk.CTkFrame(parent, fg_color=theme["card_bg"], corner_radius=8)
+    return ctk.CTkFrame(parent, fg_color=theme["card_bg"],
+                        corner_radius=int(theme.get("radius_card", 14)),
+                        border_width=0)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

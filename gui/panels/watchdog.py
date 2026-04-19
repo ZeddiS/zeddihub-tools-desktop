@@ -86,7 +86,7 @@ class WatchdogPanel(ctk.CTkFrame):
         self._status_dot.pack(side="right", padx=8)
 
         # Controls
-        ctrl_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        ctrl_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=int(th.get("radius_card", 14)))
         ctrl_card.pack(fill="x", padx=20, pady=6)
 
         _label(ctrl_card, "Nastavení", 13, bold=True, color=th["primary"]
@@ -125,7 +125,7 @@ class WatchdogPanel(ctk.CTkFrame):
         self._stop_btn.pack(side="left")
 
         # Add custom server
-        add_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        add_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=int(th.get("radius_card", 14)))
         add_card.pack(fill="x", padx=20, pady=6)
 
         _label(add_card, " Přidat server", 13, bold=True, color=th["primary"],
@@ -247,7 +247,7 @@ class WatchdogPanel(ctk.CTkFrame):
         game_colors = {"rust": "#f97316", "cs2": "#5b9cf6", "csgo": "#fbbf24"}
         game_color = game_colors.get(mon.get("game", ""), th["primary"])
 
-        card = ctk.CTkFrame(parent, fg_color=th["card_bg"], corner_radius=8)
+        card = ctk.CTkFrame(parent, fg_color=th["card_bg"], corner_radius=int(th.get("radius_card", 14)))
 
         top_bar = ctk.CTkFrame(card, fg_color=game_color, height=3, corner_radius=0)
         top_bar.pack(fill="x")

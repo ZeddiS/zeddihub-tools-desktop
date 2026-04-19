@@ -23,6 +23,14 @@ from .updater import check_for_update, download_update, apply_update, open_relea
 from .locale import t, get_lang, set_lang, init as locale_init, load_settings, save_settings
 from . import icons
 from . import telemetry
+from .widgets import (
+    make_button,
+    make_entry,
+    make_divider,
+    make_page_title,
+    make_section_title,
+    make_card,
+)
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 LOGO_PATH = ASSETS_DIR / "logo2.png"          # header / sidebar logo
@@ -92,24 +100,45 @@ class AuthDialog(ctk.CTkToplevel):
         self.result = False
         self._on_success = on_success
         self.title(t("login_title") + " – Server Tools")
-        self.geometry("460x420")
+        self.geometry("480x560")
         self.resizable(False, False)
-        self.configure(fg_color=theme["content_bg"])
+        self.configure(fg_color=theme.get("bg", theme["content_bg"]))
         self.grab_set()
+        self._user_var = ctk.StringVar(value="")
+        self._pass_var = ctk.StringVar(value="")
         self._build()
 
         # Try to load saved credentials
         saved = load_credentials()
         if saved:
-            self._user_entry.insert(0, saved[0])
-            self._pass_entry.insert(0, saved[1])
+            self._user_var.set(saved[0])
+            self._pass_var.set(saved[1])
             self._remember_var.set(True)
 
     def _build(self):
         th = self.theme
 
-        # Tab view: Login / Register
-        self._tab = ctk.CTkTabview(self, fg_color=th["content_bg"])
+        # Root container with 32px generous padding (Claude-style)
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill="both", expand=True, padx=32, pady=32)
+
+        # Page title
+        make_page_title(
+            root, t("login_title"), th,
+            subtitle=t("login_subtitle"),
+        ).pack(fill="x", anchor="w", pady=(0, 20))
+
+        # Tab view: Login / Register (styled via tabview defaults)
+        self._tab = ctk.CTkTabview(
+            root,
+            fg_color="transparent",
+            segmented_button_fg_color=th.get("card_bg", th["secondary"]),
+            segmented_button_selected_color=th["primary"],
+            segmented_button_selected_hover_color=th["primary_hover"],
+            segmented_button_unselected_color=th.get("card_bg", th["secondary"]),
+            segmented_button_unselected_hover_color=th.get("card_hover", th["secondary"]),
+            text_color=th.get("text_strong", th["text"]),
+        )
         self._tab.pack(fill="both", expand=True, padx=0, pady=0)
         self._tab.add(t("login_btn"))
         self._tab.add(t("register"))
@@ -118,97 +147,120 @@ class AuthDialog(ctk.CTkToplevel):
         self._build_register_tab(self._tab.tab(t("register")), th)
 
     def _build_login_tab(self, tab, th):
-        ctk.CTkLabel(tab,
-                     image=icons.icon("lock", 18, th["primary"]),
-                     text="  " + t("login_title"),
-                     compound="left",
-                     font=ctk.CTkFont("Segoe UI", 16, "bold"),
-                     text_color=th["primary"]).pack(pady=(16, 4), padx=20, anchor="w")
-        ctk.CTkLabel(tab, text=t("login_subtitle"),
-                     font=ctk.CTkFont("Segoe UI", 11), text_color=th["text_dim"]
-                     ).pack(padx=20, anchor="w")
+        # Username
+        ctk.CTkLabel(
+            tab, text=t("username") + " / kód",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=th.get("text_muted", th["text_dim"]),
+            anchor="w",
+        ).pack(fill="x", pady=(12, 4), anchor="w")
+        self._user_entry = make_entry(
+            tab, self._user_var, th,
+            placeholder="username nebo access_code",
+            height=40,
+        )
+        self._user_entry.pack(fill="x", pady=(0, 12))
 
-        form = ctk.CTkFrame(tab, fg_color=th["card_bg"], corner_radius=8)
-        form.pack(fill="x", padx=20, pady=10)
-
-        ctk.CTkLabel(form, text=t("username") + " / kód:",
-                     font=ctk.CTkFont("Segoe UI", 11), text_color=th["text_dim"], anchor="w"
-                     ).pack(padx=16, pady=(12, 2), anchor="w")
-        self._user_entry = ctk.CTkEntry(form, placeholder_text="username nebo access_code",
-                                        fg_color=th["secondary"], text_color=th["text"],
-                                        font=ctk.CTkFont("Segoe UI", 12), height=36)
-        self._user_entry.pack(padx=16, fill="x")
-
-        ctk.CTkLabel(form, text=t("password") + " (prázdné pro kód):",
-                     font=ctk.CTkFont("Segoe UI", 11), text_color=th["text_dim"], anchor="w"
-                     ).pack(padx=16, pady=(8, 2), anchor="w")
-        self._pass_entry = ctk.CTkEntry(form, placeholder_text="heslo...",
-                                        fg_color=th["secondary"], text_color=th["text"],
-                                        font=ctk.CTkFont("Segoe UI", 12), height=36, show="*")
-        self._pass_entry.pack(padx=16, pady=(0, 4), fill="x")
+        # Password
+        ctk.CTkLabel(
+            tab, text=t("password") + " (prázdné pro kód)",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=th.get("text_muted", th["text_dim"]),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4), anchor="w")
+        self._pass_entry = make_entry(
+            tab, self._pass_var, th,
+            placeholder="heslo...",
+            height=40, show="*",
+        )
+        self._pass_entry.pack(fill="x", pady=(0, 8))
         self._pass_entry.bind("<Return>", lambda _: self._login())
 
+        # Remember me
         self._remember_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(form, text=t("remember_me"),
-                        variable=self._remember_var,
-                        text_color=th["text_dim"], fg_color=th["primary"],
-                        font=ctk.CTkFont("Segoe UI", 10)
-                        ).pack(padx=16, pady=(4, 12), anchor="w")
+        ctk.CTkCheckBox(
+            tab, text=t("remember_me"),
+            variable=self._remember_var,
+            text_color=th.get("text_muted", th["text_dim"]),
+            fg_color=th["primary"], hover_color=th["primary_hover"],
+            border_width=2, border_color=th.get("divider", th["secondary"]),
+            font=ctk.CTkFont("Segoe UI", 11),
+            checkbox_height=18, checkbox_width=18,
+        ).pack(anchor="w", pady=(4, 12))
 
+        # Divider
+        make_divider(tab, th).pack(fill="x", pady=(0, 14))
+
+        # Status
         self.status_var = ctk.StringVar(value="")
-        ctk.CTkLabel(tab, textvariable=self.status_var,
-                     font=ctk.CTkFont("Segoe UI", 10),
-                     text_color=th["warning"]).pack(padx=20, anchor="w")
+        ctk.CTkLabel(
+            tab, textvariable=self.status_var,
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=th["warning"], anchor="w",
+        ).pack(fill="x", pady=(0, 10))
 
+        # Button row
         btn_row = ctk.CTkFrame(tab, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=10)
+        btn_row.pack(fill="x", pady=(4, 0))
 
-        ctk.CTkButton(btn_row,
-                      image=icons.icon("right-to-bracket", 16, "#ffffff"),
-                      text=" " + t("login_btn"),
-                      compound="left",
-                      fg_color=th["primary"], hover_color=th["primary_hover"],
-                      font=ctk.CTkFont("Segoe UI", 13, "bold"), height=38,
-                      command=self._login).pack(side="left", fill="x", expand=True, padx=(0, 8))
+        make_button(
+            btn_row, " " + t("login_btn"), self._login, th,
+            variant="primary", accent="primary",
+            height=42, width=200,
+            icon=icons.icon("right-to-bracket", 16, "#ffffff"),
+            compound="left",
+            font=ctk.CTkFont("Segoe UI", 13, "bold"),
+        ).pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-        ctk.CTkButton(btn_row, text=t("cancel"),
-                      fg_color=th["secondary"], hover_color="#3a3a4a",
-                      font=ctk.CTkFont("Segoe UI", 12), height=38, width=100,
-                      command=self.destroy).pack(side="left")
+        make_button(
+            btn_row, t("cancel"), self.destroy, th,
+            variant="ghost",
+            height=42, width=100,
+            font=ctk.CTkFont("Segoe UI", 12),
+        ).pack(side="left")
 
     def _build_register_tab(self, tab, th):
-        ctk.CTkLabel(tab,
-                     image=icons.icon("address-card", 18, th["primary"]),
-                     text="  " + t("register"),
-                     compound="left",
-                     font=ctk.CTkFont("Segoe UI", 16, "bold"),
-                     text_color=th["primary"]).pack(pady=(20, 8), padx=20, anchor="w")
+        # Info card (subtle card_bg block)
+        info_frame = make_card(tab, th, padding=20)
+        info_frame.pack(fill="x", pady=(12, 12))
 
-        info_frame = ctk.CTkFrame(tab, fg_color=th["card_bg"], corner_radius=8)
-        info_frame.pack(fill="x", padx=20, pady=8)
+        make_section_title(info_frame, t("register"), th).pack(
+            anchor="w", padx=20, pady=(20, 8)
+        )
 
-        ctk.CTkLabel(info_frame,
-                     text="Registrace není momentálně dostupná.\n\nPro přístup kontaktujte administrátora\nna Discordu nebo webu ZeddiS.xyz.",
-                     font=ctk.CTkFont("Segoe UI", 12), text_color=th["text_dim"],
-                     justify="left").pack(padx=16, pady=16, anchor="w")
+        ctk.CTkLabel(
+            info_frame,
+            text="Registrace není momentálně dostupná.\n\n"
+                 "Pro přístup kontaktujte administrátora\n"
+                 "na Discordu nebo webu ZeddiS.xyz.",
+            font=ctk.CTkFont("Segoe UI", 12),
+            text_color=th.get("text_muted", th["text_dim"]),
+            justify="left",
+        ).pack(anchor="w", padx=20, pady=(0, 16))
 
-        ctk.CTkButton(info_frame,
-                      image=icons.icon("discord", 16, "#7289da"),
-                      text=" Otevřít Discord → dsc.gg/zeddihub",
-                      compound="left",
-                      fg_color=th["secondary"], hover_color=th["primary"],
-                      font=ctk.CTkFont("Segoe UI", 12), height=36,
-                      command=lambda: webbrowser.open("https://dsc.gg/zeddihub")
-                      ).pack(padx=16, pady=(0, 8), fill="x")
+        make_divider(info_frame, th).pack(fill="x", padx=20, pady=(0, 14))
 
-        ctk.CTkButton(info_frame,
-                      image=icons.icon("globe", 16, "#cccccc"),
-                      text=" ZeddiS.xyz",
-                      compound="left",
-                      fg_color=th["secondary"], hover_color=th["primary"],
-                      font=ctk.CTkFont("Segoe UI", 12), height=36,
-                      command=lambda: webbrowser.open("https://zeddis.xyz")
-                      ).pack(padx=16, pady=(0, 12), fill="x")
+        make_button(
+            info_frame, " Otevřít Discord → dsc.gg/zeddihub",
+            lambda: webbrowser.open("https://dsc.gg/zeddihub"), th,
+            variant="secondary",
+            height=38,
+            icon=icons.icon("discord", 16, "#7289da"),
+            compound="left",
+            font=ctk.CTkFont("Segoe UI", 12),
+            anchor="w",
+        ).pack(fill="x", padx=20, pady=(0, 8))
+
+        make_button(
+            info_frame, " ZeddiS.xyz",
+            lambda: webbrowser.open("https://zeddis.xyz"), th,
+            variant="secondary",
+            height=38,
+            icon=icons.icon("globe", 16, "#cccccc"),
+            compound="left",
+            font=ctk.CTkFont("Segoe UI", 12),
+            anchor="w",
+        ).pack(fill="x", padx=20, pady=(0, 20))
 
     def _login(self):
         user = self._user_entry.get().strip()
@@ -1270,8 +1322,9 @@ class MainWindow(ctk.CTk):
         th = get_theme(self._current_game)
         d = ctk.CTkToplevel(self)
         d.title(t("update_available"))
-        d.geometry("540x460")
-        d.configure(fg_color=th["content_bg"])
+        d.geometry("560x540")
+        # Darker near-black modal bg (Claude-style)
+        d.configure(fg_color=th.get("bg", th["content_bg"]))
         d.resizable(False, False)
         d.transient(self)
         # Force the Toplevel to render its decorations & background before
@@ -1286,12 +1339,10 @@ class MainWindow(ctk.CTk):
         changelog = (update_info.get("changelog") or "").strip()
         download_url = update_info.get("download_url", "")
 
-        # ── Step 1: info ──────────────────────────────────────────────────────
-        # Use card_bg (visible) instead of transparent — fixes blank-dialog bug
-        # when the CTk root fg_color hasn't repainted yet.
-        frame1 = ctk.CTkFrame(d, fg_color=th["card_bg"], corner_radius=10)
-        frame2 = ctk.CTkFrame(d, fg_color=th["card_bg"], corner_radius=10)
-        frame3 = ctk.CTkFrame(d, fg_color=th["card_bg"], corner_radius=10)
+        # ── Step 1/2/3 stacked frames, generous 32px padding ──────────────────
+        frame1 = ctk.CTkFrame(d, fg_color="transparent")
+        frame2 = ctk.CTkFrame(d, fg_color="transparent")
+        frame3 = ctk.CTkFrame(d, fg_color="transparent")
 
         def _show(f):
             for ff in (frame1, frame2, frame3):
@@ -1299,89 +1350,112 @@ class MainWindow(ctk.CTk):
                     ff.pack_forget()
                 except Exception:
                     pass
-            f.pack(fill="both", expand=True, padx=18, pady=18)
+            f.pack(fill="both", expand=True, padx=32, pady=32)
 
         # Pack frame1 FIRST so children render into an already-laid-out parent.
         _show(frame1)
 
         # Frame 1 — Info
-        ctk.CTkLabel(frame1,
-                     image=icons.icon("arrow-up", 20, "#fb923c"),
-                     text=f"  Nová verze: v{latest}",
-                     compound="left",
-                     font=ctk.CTkFont("Segoe UI", 17, "bold"),
-                     text_color="#fb923c").pack(anchor="w", padx=16, pady=(16, 2))
-        ctk.CTkLabel(frame1, text=f"Aktuální verze: v{CURRENT_VERSION}",
-                     font=ctk.CTkFont("Segoe UI", 11),
-                     text_color=th["text_dim"]).pack(anchor="w", padx=16, pady=(0, 12))
+        make_page_title(
+            frame1, f"Nová verze: v{latest}", th,
+            subtitle=f"Aktuální verze: v{CURRENT_VERSION}",
+        ).pack(fill="x", anchor="w", pady=(0, 18))
 
+        make_divider(frame1, th).pack(fill="x", pady=(0, 14))
+
+        # Changelog notes inside a subtle card
+        notes_card = make_card(frame1, th, padding=14)
+        notes_card.pack(fill="both", expand=False, pady=(0, 18))
+        make_section_title(notes_card, "Changelog", th).pack(
+            anchor="w", padx=14, pady=(14, 6)
+        )
         if not changelog:
             changelog = (
                 "Podrobný changelog najdete na GitHub Releases.\n"
                 "Detailed changelog is available on GitHub Releases."
             )
-        notes_box = ctk.CTkTextbox(frame1, height=150,
-                                   fg_color=th.get("glass", th["bg"]),
-                                   text_color=th["text"],
-                                   font=ctk.CTkFont("Segoe UI", 10),
-                                   corner_radius=8)
-        notes_box.pack(fill="x", padx=16, pady=(0, 14))
+        notes_box = ctk.CTkTextbox(
+            notes_card, height=140,
+            fg_color="transparent",
+            text_color=th["text"],
+            font=ctk.CTkFont("Segoe UI", 10),
+            corner_radius=0, border_width=0,
+        )
+        notes_box.pack(fill="x", padx=14, pady=(0, 14))
         notes_box.insert("end", changelog[:1200])
         notes_box.configure(state="disabled")
 
         btn_row1 = ctk.CTkFrame(frame1, fg_color="transparent")
-        btn_row1.pack(fill="x", padx=16, pady=(0, 16))
+        btn_row1.pack(fill="x")
 
-        ctk.CTkButton(btn_row1,
-                      image=icons.icon("download", 16, "#ffffff"),
-                      text=" Stáhnout a nainstalovat",
-                      compound="left",
-                      fg_color="#fb923c", hover_color="#e07b20",
-                      font=ctk.CTkFont("Segoe UI", 12, "bold"), height=40,
-                      corner_radius=10,
-                      command=lambda: _start_download()
-                      ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+        make_button(
+            btn_row1, " Stáhnout a nainstalovat",
+            lambda: _start_download(), th,
+            variant="primary", accent="primary",
+            height=42, width=200,
+            icon=icons.icon("download", 16, "#ffffff"),
+            compound="left",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+        ).pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-        ctk.CTkButton(btn_row1, text=t("later"),
-                      fg_color=th["secondary"], hover_color=th.get("card_hover", th["secondary"]),
-                      font=ctk.CTkFont("Segoe UI", 12), height=40, width=100,
-                      corner_radius=10,
-                      command=d.destroy).pack(side="left")
+        make_button(
+            btn_row1, t("later"), d.destroy, th,
+            variant="ghost",
+            height=42, width=100,
+            font=ctk.CTkFont("Segoe UI", 12),
+        ).pack(side="left")
 
         # Frame 2 — Downloading
-        ctk.CTkLabel(frame2,
-                     image=icons.icon("download", 18, "#fb923c"),
-                     text="  Stahuji aktualizaci...",
-                     compound="left",
-                     font=ctk.CTkFont("Segoe UI", 15, "bold"),
-                     text_color="#fb923c").pack(anchor="w", padx=16, pady=(20, 8))
-        _dl_status = ctk.CTkLabel(frame2, text="Připravuji stahování...",
-                                   font=ctk.CTkFont("Segoe UI", 10),
-                                   text_color=th["text_dim"])
-        _dl_status.pack(anchor="w", padx=16, pady=(0, 12))
-        _progress_bar = ctk.CTkProgressBar(frame2, height=14,
-                                            progress_color="#fb923c",
-                                            corner_radius=7)
-        _progress_bar.pack(fill="x", padx=16, pady=(0, 4))
+        make_page_title(
+            frame2, "Stahuji aktualizaci...", th,
+            subtitle="Stahování se spouští na pozadí.",
+        ).pack(fill="x", anchor="w", pady=(0, 18))
+
+        make_divider(frame2, th).pack(fill="x", pady=(0, 18))
+
+        dl_card = make_card(frame2, th, padding=18)
+        dl_card.pack(fill="x")
+
+        _dl_status = ctk.CTkLabel(
+            dl_card, text="Připravuji stahování...",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=th.get("text_muted", th["text_dim"]),
+            anchor="w",
+        )
+        _dl_status.pack(fill="x", padx=18, pady=(18, 10))
+        _progress_bar = ctk.CTkProgressBar(
+            dl_card, height=10,
+            progress_color=th["primary"],
+            fg_color=th.get("input_bg", th["secondary"]),
+            corner_radius=5,
+        )
+        _progress_bar.pack(fill="x", padx=18, pady=(0, 4))
         _progress_bar.set(0)
-        _pct_label = ctk.CTkLabel(frame2, text="0 %",
-                                   font=ctk.CTkFont("Segoe UI", 10),
-                                   text_color=th["text_dim"])
-        _pct_label.pack(anchor="e", padx=16, pady=(0, 16))
+        _pct_label = ctk.CTkLabel(
+            dl_card, text="0 %",
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=th.get("text_muted", th["text_dim"]),
+        )
+        _pct_label.pack(anchor="e", padx=18, pady=(0, 18))
 
         # Frame 3 — Done
-        ctk.CTkLabel(frame3,
-                     image=icons.icon("circle-check", 20, "#22c55e"),
-                     text="  Aktualizace stažena!",
-                     compound="left",
-                     font=ctk.CTkFont("Segoe UI", 17, "bold"),
-                     text_color="#22c55e").pack(anchor="w", padx=16, pady=(20, 8))
-        ctk.CTkLabel(frame3,
-                     text=f"Verze v{latest} je připravena.\n"
-                          "Po kliknutí na 'Restartovat' se aplikace zavře\n"
-                          "a automaticky nahradí sebe novou verzí.",
-                     font=ctk.CTkFont("Segoe UI", 11),
-                     text_color=th["text_dim"], justify="left").pack(anchor="w", padx=16, pady=(0, 20))
+        make_page_title(
+            frame3, "Aktualizace stažena!", th,
+            subtitle=f"Verze v{latest} je připravena k instalaci.",
+        ).pack(fill="x", anchor="w", pady=(0, 18))
+
+        make_divider(frame3, th).pack(fill="x", pady=(0, 18))
+
+        done_card = make_card(frame3, th, padding=18)
+        done_card.pack(fill="x", pady=(0, 20))
+        ctk.CTkLabel(
+            done_card,
+            text="Po kliknutí na 'Restartovat' se aplikace zavře\n"
+                 "a automaticky nahradí sebe novou verzí.",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=th.get("text_muted", th["text_dim"]),
+            justify="left", anchor="w",
+        ).pack(fill="x", padx=18, pady=18)
 
         _new_exe_path = [None]
 
@@ -1391,14 +1465,14 @@ class MainWindow(ctk.CTk):
             d.destroy()
             self.destroy()
 
-        ctk.CTkButton(frame3,
-                      image=icons.icon("arrows-rotate", 16, "#ffffff"),
-                      text=" Restartovat a nainstalovat",
-                      compound="left",
-                      fg_color="#22c55e", hover_color="#16a34a",
-                      font=ctk.CTkFont("Segoe UI", 13, "bold"), height=44,
-                      corner_radius=10,
-                      command=_restart).pack(fill="x", padx=16, pady=(0, 16))
+        make_button(
+            frame3, " Restartovat a nainstalovat", _restart, th,
+            variant="primary", accent="success",
+            height=44,
+            icon=icons.icon("arrows-rotate", 16, "#ffffff"),
+            compound="left",
+            font=ctk.CTkFont("Segoe UI", 13, "bold"),
+        ).pack(fill="x")
 
         # ── Download logic ────────────────────────────────────────────────────
         def _start_download():
@@ -1423,8 +1497,9 @@ class MainWindow(ctk.CTk):
                     _show(frame3)
                 else:
                     _dl_status.configure(
-                        text=f"Chyba stahování: {path_or_error[:120]}")
-                    _progress_bar.configure(progress_color="#ef4444")
+                        text=f"Chyba stahování: {path_or_error[:120]}",
+                        text_color=th.get("error", "#ef4444"))
+                    _progress_bar.configure(progress_color=th.get("error", "#ef4444"))
 
             download_update(
                 url,
@@ -1445,33 +1520,39 @@ class _LogoutDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.result = None
         self.title(t("logout") + "?")
-        self.geometry("360x180")
-        self.configure(fg_color=theme["content_bg"])
+        self.geometry("400x240")
+        self.resizable(False, False)
+        self.configure(fg_color=theme.get("bg", theme["content_bg"]))
         self.grab_set()
 
-        ctk.CTkLabel(self, text=f"{t('logged_in_as', user=user or '?')}",
-                     font=ctk.CTkFont("Segoe UI", 13, "bold"),
-                     text_color=theme["text"]).pack(pady=(24, 8), padx=20, anchor="w")
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill="both", expand=True, padx=32, pady=32)
 
-        row = ctk.CTkFrame(self, fg_color="transparent")
-        row.pack(fill="x", padx=20, pady=16)
+        make_page_title(
+            root, t("logout") + "?", theme,
+            subtitle=t("logged_in_as", user=user or "?"),
+        ).pack(fill="x", anchor="w", pady=(0, 18))
 
-        ctk.CTkButton(row,
-                      image=icons.icon("right-from-bracket", 16, "#ffffff"),
-                      text=" " + t("logout"),
-                      compound="left",
-                      fg_color="#8b2020", hover_color="#6b1818",
-                      font=ctk.CTkFont("Segoe UI", 12, "bold"),
-                      height=40, command=self._do_logout
-                      ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+        make_divider(root, theme).pack(fill="x", pady=(0, 18))
 
-        ctk.CTkButton(row,
-                      text=t("cancel"),
-                      fg_color=theme["secondary"], hover_color=theme["primary"],
-                      font=ctk.CTkFont("Segoe UI", 12),
-                      height=40, width=110,
-                      command=self._cancel
-                      ).pack(side="left")
+        row = ctk.CTkFrame(root, fg_color="transparent")
+        row.pack(fill="x")
+
+        make_button(
+            row, " " + t("logout"), self._do_logout, theme,
+            variant="primary", accent="danger",
+            height=42, width=160,
+            icon=icons.icon("right-from-bracket", 16, "#ffffff"),
+            compound="left",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+        ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        make_button(
+            row, t("cancel"), self._cancel, theme,
+            variant="ghost",
+            height=42, width=110,
+            font=ctk.CTkFont("Segoe UI", 12),
+        ).pack(side="left")
 
     def _do_logout(self):
         self.result = "logout"

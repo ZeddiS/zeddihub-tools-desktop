@@ -16,6 +16,8 @@ def _label(parent, text, font_size=12, bold=False, color=None, **kw):
 
 
 def _btn(parent, text, cmd, theme, width=180, height=36, **kw):
+    kw.setdefault("corner_radius", int(theme.get("radius_button", 10)))
+    kw.setdefault("border_width", 0)
     return ctk.CTkButton(
         parent, text=text, command=cmd,
         fg_color=theme["primary"], hover_color=theme["primary_hover"],
@@ -26,10 +28,12 @@ def _btn(parent, text, cmd, theme, width=180, height=36, **kw):
 
 
 def _section(parent, title, theme):
-    f = ctk.CTkFrame(parent, fg_color=theme["card_bg"], corner_radius=8)
+    f = ctk.CTkFrame(parent, fg_color=theme["card_bg"],
+                     corner_radius=int(theme.get("radius_card", 14)),
+                     border_width=0)
     f.pack(fill="x", padx=0, pady=6)
     _label(f, title, 13, bold=True, color=theme["primary"]).pack(
-        padx=14, pady=(10, 6), anchor="w")
+        padx=18, pady=(14, 8), anchor="w")
     return f
 
 
@@ -184,7 +188,7 @@ class CS2PlayerPanel(ctk.CTkFrame):
         main.pack(fill="both", expand=True)
 
         # Pack right first so left can fill remaining space
-        right = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=10, width=260)
+        right = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)), width=260)
         right.pack(side="right", fill="y", padx=(8, 0))
         right.pack_propagate(False)
 
@@ -199,7 +203,7 @@ class CS2PlayerPanel(ctk.CTkFrame):
         _label(scroll, "Nastavte parametry a vygenerujte .cfg soubor.",
                11, color=t["text_dim"]).pack(padx=12, pady=(0, 10), anchor="w")
 
-        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec.pack(fill="x", padx=8, pady=4)
         sec.grid_columnconfigure(1, weight=1)
 
@@ -329,7 +333,7 @@ class CS2PlayerPanel(ctk.CTkFrame):
         main = ctk.CTkFrame(tab, fg_color="transparent")
         main.pack(fill="both", expand=True)
 
-        right = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=10, width=260)
+        right = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)), width=260)
         right.pack(side="right", fill="y", padx=(8, 0))
         right.pack_propagate(False)
 
@@ -342,7 +346,7 @@ class CS2PlayerPanel(ctk.CTkFrame):
         _label(scroll, "CS2 – Viewmodel Generátor", 16, bold=True,
                color=t["primary"]).pack(padx=12, pady=(12, 4), anchor="w")
 
-        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec.pack(fill="x", padx=8, pady=4)
         sec.grid_columnconfigure(1, weight=1)
 
@@ -561,7 +565,7 @@ class CS2PlayerPanel(ctk.CTkFrame):
         self._ae_vars = {}
         for cat_name, fields in categories.items():
             # outer uses pack (title label), inner uses grid (entry rows) — never mix in one frame
-            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             outer.pack(fill="x", padx=0, pady=6)
             _label(outer, cat_name, 13, bold=True, color=t["primary"]).pack(
                 padx=14, pady=(10, 6), anchor="w")
@@ -613,7 +617,7 @@ class CS2PlayerPanel(ctk.CTkFrame):
         _label(scroll, "Pro trénink granátů, nákupy kdekoliv, nekonečná munice...",
                11, color=t["text_dim"]).pack(padx=4, anchor="w")
 
-        outer_prac = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_prac = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         outer_prac.pack(fill="x", padx=0, pady=6)
         _label(outer_prac, "Nastavení", 13, bold=True, color=t["primary"]).pack(
             padx=14, pady=(10, 6), anchor="w")
@@ -682,7 +686,7 @@ class CS2PlayerPanel(ctk.CTkFrame):
             "kp_pgup":      ("Full Buy",                    "buy ak47; buy m4a1; buy vesthelm; buy defuser; buy smokegrenade; buy flashbang; buy molotov; buy hegrenade;"),
         }
 
-        outer_bb = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_bb = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         outer_bb.pack(fill="x", padx=0, pady=6)
         _label(outer_bb, "Klávesy a příkazy", 13, bold=True, color=t["primary"]).pack(
             padx=14, pady=(10, 6), anchor="w")
@@ -760,7 +764,7 @@ class CS2ServerPanel(ctk.CTkFrame):
         self._srv_vars = {}
 
         def _srv_section(title):
-            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             outer.pack(fill="x", padx=0, pady=6)
             _label(outer, title, 13, bold=True, color=t["primary"]).pack(
                 padx=14, pady=(10, 6), anchor="w")
@@ -855,7 +859,7 @@ class CS2ServerPanel(ctk.CTkFrame):
         }
 
         for mode_name, cmds in modes.items():
-            card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            card = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             card.pack(fill="x", pady=4)
             card.grid_columnconfigure(0, weight=1)
 
@@ -901,7 +905,7 @@ class CS2ServerPanel(ctk.CTkFrame):
         row.pack(fill="both", expand=True)
 
         # Left: pools
-        left = ctk.CTkFrame(row, fg_color=t["card_bg"], corner_radius=8, width=240)
+        left = ctk.CTkFrame(row, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)), width=240)
         left.pack(side="left", fill="both", padx=(0, 8))
         left.pack_propagate(False)
         _label(left, "Map Pools", 12, bold=True, color=t["text_dim"]).pack(padx=10, pady=8)
@@ -923,7 +927,7 @@ class CS2ServerPanel(ctk.CTkFrame):
             ).pack(padx=12, pady=4, anchor="w")
 
         # Right: map list
-        right = ctk.CTkFrame(row, fg_color=t["card_bg"], corner_radius=8)
+        right = ctk.CTkFrame(row, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         right.pack(side="left", fill="both", expand=True)
         _label(right, "Mapy v poolu", 12, bold=True, color=t["text_dim"]).pack(padx=10, pady=8)
 
@@ -1007,7 +1011,7 @@ class CS2ServerPanel(ctk.CTkFrame):
         _label(main, "Připojení k CS2 serveru přes Source RCON protokol.",
                11, color=t["text_dim"]).pack(anchor="w", pady=(0, 12))
 
-        cfg_row = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        cfg_row = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         cfg_row.pack(fill="x", pady=4)
 
         self._rcon_host = ctk.StringVar(value="127.0.0.1")

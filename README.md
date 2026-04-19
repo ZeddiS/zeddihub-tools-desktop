@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.5.0-orange?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-v2.1.0-orange?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-blue?style=flat-square&logo=windows&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/language-EN%20%2F%20CZ-green?style=flat-square" alt="Language">
   <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="License">
@@ -102,7 +102,10 @@ If an update is available, it downloads and installs automatically — no browse
 
 | Version | Highlights |
 |---------|------------|
-| **v1.5.0** | FontAwesome icon system — all emoji replaced with FA 6 Free vector icons throughout the UI |
+| **v2.1.0** | yt-dlp frozen-build fix, single-instance lock, Auto Clicker overhaul (fixed XY / jitter / presets / live counter), Claude-app-style UI refresh, Web Uploader module, bcrypt migration |
+| v2.0.0 | Release Manager redesign, unified bilingual release notes, build-icon regeneration, Win11 Dark Gaming theme |
+| v1.9.0 | `gui/widgets.py` shared helpers, admin dashboard redesign with charts, audit log, atomic JSON writes, maintenance mode, one-click export |
+| v1.5.0 | FontAwesome icon system — all emoji replaced with FA 6 Free vector icons throughout the UI |
 | v1.4.0 | Navbar collapse fix, Steam connect button, dark/light mode, Server Watchdog, factory reset, DNS history, dual temp cleanup, landing page |
 | v1.3.1 | Hotfix: web admin panel .htaccess compatibility with FastCGI |
 | v1.3.0 | System tray icon, PHP web admin panel, configurable tray shortcuts |

@@ -15,6 +15,8 @@ def _label(parent, text, font_size=12, bold=False, color=None, **kw):
 
 
 def _btn(parent, text, cmd, theme, width=180, height=36, **kw):
+    kw.setdefault("corner_radius", int(theme.get("radius_button", 10)))
+    kw.setdefault("border_width", 0)
     return ctk.CTkButton(parent, text=text, command=cmd,
                          fg_color=theme["primary"], hover_color=theme["primary_hover"],
                          text_color=theme["button_fg"],
@@ -23,9 +25,11 @@ def _btn(parent, text, cmd, theme, width=180, height=36, **kw):
 
 
 def _section(parent, title, theme):
-    f = ctk.CTkFrame(parent, fg_color=theme["card_bg"], corner_radius=8)
+    f = ctk.CTkFrame(parent, fg_color=theme["card_bg"],
+                     corner_radius=int(theme.get("radius_card", 14)),
+                     border_width=0)
     f.pack(fill="x", padx=0, pady=6)
-    _label(f, title, 13, bold=True, color=theme["primary"]).pack(padx=14, pady=(10, 6), anchor="w")
+    _label(f, title, 13, bold=True, color=theme["primary"]).pack(padx=18, pady=(14, 8), anchor="w")
     return f
 
 
@@ -157,7 +161,7 @@ class CSGOPlayerPanel(ctk.CTkFrame):
         main = ctk.CTkFrame(tab, fg_color="transparent")
         main.pack(fill="both", expand=True)
 
-        right = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=10, width=260)
+        right = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)), width=260)
         right.pack(side="right", fill="y", padx=(8, 0))
         right.pack_propagate(False)
 
@@ -170,7 +174,7 @@ class CSGOPlayerPanel(ctk.CTkFrame):
         _label(scroll, "CS:GO – Crosshair Generátor", 16, bold=True, color=t["primary"]
                ).pack(padx=12, pady=(12, 8), anchor="w")
 
-        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec.pack(fill="x", padx=8, pady=4)
         sec.grid_columnconfigure(1, weight=1)
 
@@ -277,7 +281,7 @@ class CSGOPlayerPanel(ctk.CTkFrame):
         _label(scroll, "CS:GO – Viewmodel Generátor", 16, bold=True, color=t["primary"]
                ).pack(padx=4, pady=(4, 8), anchor="w")
 
-        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        sec = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         sec.pack(fill="x", padx=8, pady=4)
         sec.grid_columnconfigure(1, weight=1)
 
@@ -341,7 +345,7 @@ class CSGOPlayerPanel(ctk.CTkFrame):
             "mm_dedicated_search_maxping": ("Max ping", "50"),
         }
 
-        outer_ae = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_ae = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         outer_ae.pack(fill="x", padx=0, pady=6)
         _label(outer_ae, "Herní nastavení", 13, bold=True, color=t["primary"]).pack(
             padx=14, pady=(10, 6), anchor="w")
@@ -398,7 +402,7 @@ class CSGOPlayerPanel(ctk.CTkFrame):
             "sv_grenade_trajectory_prac_trailtime": ("Nade trail",   "4"),
             "cl_grenadepreview":   ("Grenade preview",   "1"),
         }
-        outer_pr = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_pr = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         outer_pr.pack(fill="x", padx=0, pady=6)
         _label(outer_pr, "Nastavení", 13, bold=True, color=t["primary"]).pack(
             padx=14, pady=(10, 6), anchor="w")
@@ -449,7 +453,7 @@ class CSGOPlayerPanel(ctk.CTkFrame):
         }
 
         self._bind_vars = {}
-        outer_bb = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+        outer_bb = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         outer_bb.pack(fill="x", padx=0, pady=6)
         _label(outer_bb, "Klávesy a příkazy", 13, bold=True, color=t["primary"]).pack(
             padx=14, pady=(10, 6), anchor="w")
@@ -519,7 +523,7 @@ class CSGOServerPanel(ctk.CTkFrame):
         self._srv_vars = {}
 
         def _s(title):
-            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=8)
+            outer = ctk.CTkFrame(scroll, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
             outer.pack(fill="x", padx=0, pady=6)
             _label(outer, title, 13, bold=True, color=t["primary"]).pack(
                 padx=14, pady=(10, 6), anchor="w")
@@ -588,7 +592,7 @@ class CSGOServerPanel(ctk.CTkFrame):
         _label(main, "Správa adminů, skupin a sourcebans databáze.",
                11, color=t["text_dim"]).pack(anchor="w", pady=(0, 12))
 
-        info = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        info = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         info.pack(fill="x", pady=4)
 
         ctk.CTkLabel(info, text="📁  Zvolte složku s CS:GO databázovými soubory (.ini, .cfg)",
@@ -605,7 +609,7 @@ class CSGOServerPanel(ctk.CTkFrame):
                       fg_color=t["primary"], hover_color=t["primary_hover"],
                       command=self._pick_db_folder).pack(side="left", padx=(8, 0))
 
-        self.db_file_list = ctk.CTkScrollableFrame(main, fg_color=t["card_bg"], corner_radius=8, height=180)
+        self.db_file_list = ctk.CTkScrollableFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)), height=180)
         self.db_file_list.pack(fill="x", pady=8)
         _label(self.db_file_list, "Soubory se zobrazí po výběru složky.",
                11, color=t["text_dim"]).pack(padx=12, pady=8, anchor="w")
@@ -637,7 +641,7 @@ class CSGOServerPanel(ctk.CTkFrame):
 
         _label(main, "CS:GO – RCON Klient", 16, bold=True, color=t["primary"]).pack(anchor="w")
 
-        cfg_row = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=8)
+        cfg_row = ctk.CTkFrame(main, fg_color=t["card_bg"], corner_radius=int(t.get("radius_card", 14)))
         cfg_row.pack(fill="x", pady=8)
 
         self._rcon_host = ctk.StringVar(value="127.0.0.1")

@@ -147,7 +147,9 @@ class KeybindPanel(ctk.CTkFrame):
         ).pack(padx=20, anchor="w")
 
         # Keyboard frame
-        kb_frame = ctk.CTkFrame(self, fg_color=self.theme["card_bg"], corner_radius=10)
+        kb_frame = ctk.CTkFrame(self, fg_color=self.theme["card_bg"],
+                                corner_radius=int(self.theme.get("radius_card", 14)),
+                                border_width=0)
         kb_frame.pack(padx=20, pady=12, fill="x")
 
         # Use tkinter Canvas for keyboard layout
