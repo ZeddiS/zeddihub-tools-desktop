@@ -23,6 +23,13 @@ try:
 except ImportError:
     def _t(key, **kw): return key
 
+try:
+    from ..version import APP_VERSION as _APP_VERSION, user_agent as _user_agent
+except Exception:
+    _APP_VERSION = "1.9.0"
+    def _user_agent():
+        return f"ZeddiHubTools/{_APP_VERSION}"
+
 LOGO_PATH = Path(__file__).parent.parent.parent / "assets" / "logo.png"
 
 
@@ -415,7 +422,7 @@ class LinksPanel(ctk.CTkFrame):
                 method="POST",
                 headers={
                     "Content-Type": f"multipart/form-data; boundary={boundary}",
-                    "User-Agent":   "ZeddiHubTools/1.8.0",
+                    "User-Agent":   _user_agent(),
                     "Accept":       "application/json, text/plain;q=0.9, */*;q=0.5",
                 },
             )
@@ -502,7 +509,7 @@ class LinksPanel(ctk.CTkFrame):
                 pass
         _label(scroll, "ZeddiHub Tools Desktop", 22, bold=True,
                color=t["primary"]).pack(anchor="center")
-        _label(scroll, "v1.8.0  |  Developed by ZeddiS", 12,
+        _label(scroll, f"v{_APP_VERSION}  |  Developed by ZeddiS", 12,
                color=t["text_dim"]).pack(pady=(2, 16), anchor="center")
 
         credits_data = [

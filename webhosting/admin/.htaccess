@@ -1,2 +1,8 @@
 # Prevent directory listing
 Options -Indexes
+
+# Block direct access to shared includes (filenames starting with underscore)
+<FilesMatch "^_.*\.php$">
+    Require all denied
+</FilesMatch>
+

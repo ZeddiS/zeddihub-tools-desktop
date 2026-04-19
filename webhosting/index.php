@@ -7,32 +7,85 @@
 define('GITHUB_REPO',    'ZeddiS/zeddihub-tools-desktop');
 define('GITHUB_RELEASE', 'https://github.com/' . GITHUB_REPO . '/releases/latest');
 define('DL_FILENAME',    'ZeddiHubTools.exe');
-define('GITHUB_DL',      'https://github.com/' . GITHUB_REPO . '/releases/latest/download/' . DL_FILENAME);
+// Fallback download URL (používá se, pokud API nevrátí asset URL).
+define('GITHUB_DL_FALLBACK', 'https://github.com/' . GITHUB_REPO . '/releases/latest/download/' . DL_FILENAME);
 
-function get_latest_version(): string {
-    $cache = sys_get_temp_dir() . '/zeddihub_version_cache.txt';
-    if (file_exists($cache) && (time() - filemtime($cache)) < 600) {
-        $v = trim(file_get_contents($cache));
-        if ($v) return $v;
+/**
+ * Načte latest release z GitHub API + nacachuje 30 minut do .version_cache.json
+ * vedle tohoto souboru. Cache obsahuje tag_name, download_url a published_at.
+ * Single source of truth pro verzi i download link na celé landing page.
+ */
+function get_latest_release_cached(): array {
+    $cache = __DIR__ . '/.version_cache.json';
+    if (file_exists($cache) && (time() - filemtime($cache)) < 1800) {
+        $d = json_decode(@file_get_contents($cache), true);
+        if (is_array($d) && !empty($d['tag'])) return $d;
     }
     $api_url = 'https://api.github.com/repos/' . GITHUB_REPO . '/releases/latest';
-    $tag = null;
+    $json = null;
     if (function_exists('curl_init')) {
         $ch = curl_init($api_url);
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>4,CURLOPT_USERAGENT=>'ZeddiHubTools-landing',CURLOPT_SSL_VERIFYPEER=>true]);
-        $json = curl_exec($ch); curl_close($ch);
-        if ($json) $tag = ltrim(json_decode($json,true)['tag_name']??'','v')?:null;
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 4,
+            CURLOPT_USERAGENT      => 'ZeddiHubTools-landing',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER     => ['Accept: application/vnd.github.v3+json'],
+        ]);
+        $json = curl_exec($ch);
+        curl_close($ch);
     }
-    if (!$tag && ini_get('allow_url_fopen')) {
-        $ctx = stream_context_create(['http'=>['timeout'=>4,'ignore_errors'=>true,'header'=>"User-Agent: ZeddiHubTools-landing\r\n"]]);
-        $json = @file_get_contents($api_url,false,$ctx);
-        if ($json) $tag = ltrim(json_decode($json,true)['tag_name']??'','v')?:null;
+    if (!$json && ini_get('allow_url_fopen')) {
+        $ctx = stream_context_create(['http' => [
+            'timeout' => 4, 'ignore_errors' => true,
+            'header'  => "User-Agent: ZeddiHubTools-landing\r\nAccept: application/vnd.github.v3+json\r\n",
+        ]]);
+        $json = @file_get_contents($api_url, false, $ctx);
     }
-    if ($tag) { @file_put_contents($cache,$tag); return $tag; }
-    foreach ([__DIR__.'/../data/version.json',dirname(__DIR__).'/data/version.json'] as $f) {
-        if (file_exists($f)) { $d=json_decode(@file_get_contents($f),true); if(!empty($d['version'])) return $d['version']; }
+    $data = ['tag' => null, 'download_url' => null, 'published' => null];
+    if ($json) {
+        $rel = json_decode($json, true);
+        if (is_array($rel)) {
+            $data['tag']       = ltrim($rel['tag_name'] ?? '', 'v') ?: null;
+            $data['published'] = substr($rel['published_at'] ?? '', 0, 10) ?: null;
+            if (!empty($rel['assets']) && is_array($rel['assets'])) {
+                foreach ($rel['assets'] as $a) {
+                    $name = $a['name'] ?? '';
+                    if (stripos($name, '.exe') !== false && !empty($a['browser_download_url'])) {
+                        $data['download_url'] = $a['browser_download_url'];
+                        break;
+                    }
+                }
+            }
+        }
     }
-    return '—';
+    // Fallback na lokální version.json (pro tag) + fallback DL URL.
+    if (!$data['tag']) {
+        foreach ([__DIR__.'/../data/version.json', dirname(__DIR__).'/data/version.json', __DIR__.'/data/version.json'] as $f) {
+            if (file_exists($f)) {
+                $d = json_decode(@file_get_contents($f), true);
+                if (!empty($d['version'])) { $data['tag'] = $d['version']; break; }
+            }
+        }
+    }
+    if (!$data['download_url']) {
+        $data['download_url'] = GITHUB_DL_FALLBACK;
+    }
+    // Cachovat pouze pokud máme alespoň tag (jinak nechceme zafixovat '—').
+    if ($data['tag']) {
+        @file_put_contents($cache, json_encode($data));
+    }
+    return $data;
+}
+
+function get_latest_version(): string {
+    $d = get_latest_release_cached();
+    return $d['tag'] ?: '—';
+}
+
+function get_latest_download_url(): string {
+    $d = get_latest_release_cached();
+    return $d['download_url'] ?: GITHUB_DL_FALLBACK;
 }
 
 function get_recent_releases(int $limit = 5): array {
@@ -80,7 +133,8 @@ function get_recent_releases(int $limit = 5): array {
     return $trim;
 }
 
-$version = get_latest_version();
+$version  = get_latest_version();
+$dl_url   = get_latest_download_url();
 $releases = get_recent_releases(5);
 ?>
 <!DOCTYPE html>
@@ -256,6 +310,19 @@ section{padding:80px 24px;max-width:1140px;margin:0 auto}
   display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;
   border-radius:4px;margin-top:8px;border:1px solid;
 }
+/* ── Feature category tags (F-11) ── */
+.feature-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.feature-tag{
+  display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;
+  border-radius:4px;border:1px solid;letter-spacing:.03em;
+  text-transform:uppercase;
+}
+.tag-cs2    {background:#1a0c00;border-color:#4a2800;color:#f0a500}
+.tag-csgo   {background:#0c1535;border-color:#253a7a;color:#5b9cf6}
+.tag-rust   {background:#1a0600;border-color:#551a00;color:#f97316}
+.tag-gaming {background:#00220a;border-color:#00551a;color:#22c55e}
+.tag-pctool {background:#1a0a2a;border-color:#3a1a5a;color:#a78bfa}
+.tag-server {background:#2a2000;border-color:#5a4400;color:#fbbf24}
 
 /* ── Steps ─── */
 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:28px;counter-reset:steps}
@@ -372,7 +439,7 @@ footer a:hover{color:var(--primary);text-decoration:none}
     Vše, co potřebuješ jako hráč nebo správce CS2, CS:GO či Rust serveru, na jednom místě. Bez instalace, bez Pythonu.
   </p>
   <div class="hero-actions anim">
-    <a href="<?= GITHUB_DL ?>" class="btn-download" download="<?= DL_FILENAME ?>">
+    <a href="<?= htmlspecialchars($dl_url) ?>" class="btn-download" download="<?= DL_FILENAME ?>">
       ⬇ <span data-cs="Stáhnout <?= DL_FILENAME ?>" data-en="Download <?= DL_FILENAME ?>">Stáhnout <?= DL_FILENAME ?></span>
     </a>
     <a href="<?= GITHUB_RELEASE ?>" target="_blank" rel="noopener" class="btn-outline">
@@ -401,115 +468,136 @@ footer a:hover{color:var(--primary);text-decoration:none}
   <p class="section-sub reveal" data-cs="Všechny sekce v jednom okně, přepínání jedním klikem." data-en="All sections in one window, switch with a single click.">Všechny sekce v jednom okně, přepínání jedním klikem.</p>
 
   <div class="features-grid">
+
+    <!-- 1. Crosshair Generator -->
     <div class="feature-card reveal" style="--fc:var(--cs2)">
       <span class="feature-icon">🎯</span>
       <div class="feature-name" data-cs="Crosshair Generator" data-en="Crosshair Generator">Crosshair Generator</div>
-      <div class="feature-desc" data-cs="Live náhled, úprava všech parametrů, export kódu pro CS2 / CS:GO." data-en="Live preview, edit all parameters, export code for CS2 / CS:GO.">Live náhled, úprava všech parametrů, export kódu pro CS2 / CS:GO.</div>
-      <span class="tag-game" style="background:#0c1535;border-color:#253a7a;color:var(--cs2)">CS2</span>
+      <div class="feature-desc" data-cs="Live náhled, úprava všech parametrů, export kódu pro CS2 i CS:GO." data-en="Live preview, edit all parameters, export code for CS2 and CS:GO.">Live náhled, úprava všech parametrů, export kódu pro CS2 i CS:GO.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-cs2">CS2</span>
+        <span class="feature-tag tag-csgo">CS:GO</span>
+      </div>
     </div>
-    <div class="feature-card reveal" style="--fc:var(--cs2)">
-      <span class="feature-icon">🔫</span>
-      <div class="feature-name" data-cs="Viewmodel Editor" data-en="Viewmodel Editor">Viewmodel Editor</div>
-      <div class="feature-desc" data-cs="Nastavení zbraně ve hře s náhledem hodnot v reálném čase." data-en="In-game weapon settings with real-time value preview.">Nastavení zbraně ve hře s náhledem hodnot v reálném čase.</div>
-      <span class="tag-game" style="background:#0c1535;border-color:#253a7a;color:var(--cs2)">CS2</span>
-    </div>
-    <div class="feature-card reveal" style="--fc:var(--primary)">
-      <span class="feature-icon">📄</span>
-      <div class="feature-name" data-cs="Autoexec Editor" data-en="Autoexec Editor">Autoexec Editor</div>
-      <div class="feature-desc" data-cs="Úprava konfiguračního souboru přímo v aplikaci." data-en="Edit your config file directly in the app.">Úprava konfiguračního souboru přímo v aplikaci.</div>
-      <span class="tag-game" style="background:#0c1535;border-color:#253a7a;color:var(--cs2)">CS2</span>
-      <span class="tag-game" style="background:#1a1400;border-color:#4a3800;color:var(--csgo)">CS:GO</span>
-    </div>
+
+    <!-- 2. Server.cfg + RCON -->
     <div class="feature-card reveal" style="--fc:var(--primary)">
       <span class="feature-icon">⚙️</span>
-      <div class="feature-name" data-cs="Server CFG Generator" data-en="Server CFG Generator">Server CFG Generator</div>
-      <div class="feature-desc" data-cs="Vytvoření serverové konfigurace klikáním — pro CS2 i Rust." data-en="Create server config by clicking — for CS2 and Rust.">Vytvoření serverové konfigurace klikáním — pro CS2 i Rust.</div>
-      <span class="tag-game" style="background:#0c1535;border-color:#253a7a;color:var(--cs2)">CS2</span>
-      <span class="tag-game" style="background:#1a0a00;border-color:#4a2200;color:var(--rust)">Rust</span>
+      <div class="feature-name" data-cs="Server.cfg + RCON" data-en="Server.cfg + RCON">Server.cfg + RCON</div>
+      <div class="feature-desc" data-cs="Generátor server konfigurace, gamemode presety a integrovaný RCON klient — bez externích programů." data-en="Server config generator, gamemode presets and built-in RCON client — no external tools needed.">Generátor server konfigurace, gamemode presety a integrovaný RCON klient.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-cs2">CS2</span>
+        <span class="feature-tag tag-csgo">CS:GO</span>
+        <span class="feature-tag tag-server">Server</span>
+      </div>
     </div>
-    <div class="feature-card reveal" style="--fc:#888888">
-      <span class="feature-icon">📡</span>
-      <div class="feature-name" data-cs="RCON Klient" data-en="RCON Client">RCON Klient</div>
-      <div class="feature-desc" data-cs="Vzdálená správa serveru přes RCON. Bez externích programů." data-en="Remote server management via RCON. No external tools.">Vzdálená správa serveru přes RCON. Bez externích programů.</div>
-    </div>
-    <div class="feature-card reveal" style="--fc:var(--primary)">
-      <span class="feature-icon">⌨️</span>
-      <div class="feature-name" data-cs="Keybind Generator" data-en="Keybind Generator">Keybind Generator</div>
-      <div class="feature-desc" data-cs="Vizuální klávesnice — přiřaďte příkazy kliknutím na klávesy." data-en="Visual keyboard — assign commands by clicking keys.">Vizuální klávesnice — přiřaďte příkazy kliknutím na klávesy.</div>
-    </div>
+
+    <!-- 3. Rust Plugin Manager -->
     <div class="feature-card reveal" style="--fc:var(--rust)">
       <span class="feature-icon">🦀</span>
       <div class="feature-name" data-cs="Rust Plugin Manager" data-en="Rust Plugin Manager">Rust Plugin Manager</div>
-      <div class="feature-desc" data-cs="Dávková oprava pluginů, analýza závislostí, správa Oxide / uMod." data-en="Batch plugin repair, dependency analysis, Oxide / uMod management.">Dávková oprava pluginů, analýza závislostí, správa Oxide / uMod.</div>
-      <span class="tag-game" style="background:#1a0a00;border-color:#4a2200;color:var(--rust)">Rust</span>
+      <div class="feature-desc" data-cs="Dávková oprava Oxide / uMod pluginů, detekce závislostí, správa příkazů a prefixů." data-en="Batch repair of Oxide / uMod plugins, dependency detection, commands and prefix management.">Dávková oprava Oxide / uMod pluginů, detekce závislostí, správa příkazů.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-rust">Rust</span>
+        <span class="feature-tag tag-server">Server</span>
+      </div>
     </div>
-    <div class="feature-card reveal" style="--fc:#22d3ee">
-      <span class="feature-icon">🌐</span>
-      <div class="feature-name" data-cs="Translator" data-en="Translator">Translator</div>
-      <div class="feature-desc" data-cs="Překlad JSON / TXT / LANG souborů do 20+ jazyků." data-en="Translate JSON / TXT / LANG files to 20+ languages.">Překlad JSON / TXT / LANG souborů do 20+ jazyků.</div>
-    </div>
-    <div class="feature-card reveal" style="--fc:#a78bfa">
-      <span class="feature-icon">💻</span>
-      <div class="feature-name" data-cs="PC Tools" data-en="PC Tools">PC Tools</div>
-      <div class="feature-desc" data-cs="Systémové info (CPU, GPU, RAM), DNS flush, ping tester, čištění tempu." data-en="System info (CPU, GPU, RAM), DNS flush, ping tester, temp cleaner.">Systémové info (CPU, GPU, RAM), DNS flush, ping tester, čištění tempu.</div>
-    </div>
-    <div class="feature-card reveal" style="--fc:var(--success)">
-      <span class="feature-icon">🏠</span>
-      <div class="feature-name" data-cs="Live Server Status" data-en="Live Server Status">Live Server Status</div>
-      <div class="feature-desc" data-cs="Stav serverů (hráči, mapa, ping) přes Steam A2S query v reálném čase." data-en="Server status (players, map, ping) via Steam A2S query in real time.">Stav serverů (hráči, mapa, ping) přes Steam A2S query v reálném čase.</div>
-    </div>
-    <div class="feature-card reveal" style="--fc:var(--primary)">
-      <span class="feature-icon">🔄</span>
-      <div class="feature-name" data-cs="Auto aktualizace" data-en="Auto-update">Auto aktualizace</div>
-      <div class="feature-desc" data-cs="Aplikace kontroluje GitHub při spuštění a nabídne aktualizaci." data-en="App checks GitHub on launch and offers an update download.">Aplikace kontroluje GitHub při spuštění a nabídne aktualizaci.</div>
-    </div>
-    <div class="feature-card reveal" style="--fc:#f472b6">
-      <span class="feature-icon">🌙</span>
-      <div class="feature-name" data-cs="Dark / Light mode" data-en="Dark / Light mode">Dark / Light mode</div>
-      <div class="feature-desc" data-cs="Plný dark a light mode s barevnými tématy pro každou hru." data-en="Full dark and light mode with per-game color themes.">Plný dark a light mode s barevnými tématy pro každou hru.</div>
-    </div>
-    <div class="feature-card reveal" style="--fc:#ef4444">
-      <span class="feature-icon">🖱️</span>
-      <div class="feature-name" data-cs="Autoclicker" data-en="Autoclicker">Autoclicker</div>
-      <div class="feature-desc" data-cs="Globální autoclicker s nastavitelným CPS, hotkey start/stop a volbou tlačítka myši." data-en="Global autoclicker with adjustable CPS, hotkey start/stop, and mouse button selection.">Globální autoclicker s nastavitelným CPS, hotkey start/stop a volbou tlačítka myši.</div>
-      <span class="tag-game" style="background:#2a0a0a;border-color:#6a1a1a;color:#ef4444">NEW v1.7</span>
-    </div>
-    <div class="feature-card reveal" style="--fc:#fbbf24">
-      <span class="feature-icon">📝</span>
-      <div class="feature-name" data-cs="Sticky Notes" data-en="Sticky Notes">Sticky Notes</div>
-      <div class="feature-desc" data-cs="Perzistentní poznámky na ploše. Podpora self-destruct timerů pro citlivé údaje." data-en="Persistent desktop notes. Supports self-destruct timers for sensitive data.">Perzistentní poznámky na ploše. Podpora self-destruct timerů pro citlivé údaje.</div>
-      <span class="tag-game" style="background:#2a1a00;border-color:#6a4400;color:#fbbf24">NEW v1.7</span>
-    </div>
-    <div class="feature-card reveal" style="--fc:#ff0000">
-      <span class="feature-icon">📺</span>
-      <div class="feature-name" data-cs="YouTube Downloader" data-en="YouTube Downloader">YouTube Downloader</div>
-      <div class="feature-desc" data-cs="Stahování YouTube videí i zvuku (MP3). Výběr kvality od 360p po 4K, lazy yt-dlp." data-en="Download YouTube videos and audio (MP3). Quality from 360p to 4K, lazy yt-dlp.">Stahování YouTube videí i zvuku (MP3). Výběr kvality od 360p po 4K.</div>
-      <span class="tag-game" style="background:#2a0000;border-color:#6a0000;color:#ff6666">NEW v1.7</span>
-    </div>
-    <div class="feature-card reveal" style="--fc:#10b981">
-      <span class="feature-icon">🚀</span>
-      <div class="feature-name" data-cs="Spouštět při startu" data-en="Launch at startup">Spouštět při startu</div>
-      <div class="feature-desc" data-cs="Jedním klikem zapne autostart aplikace při přihlášení do Windows (zápis do registru)." data-en="Toggle Windows startup launch with one click (registry-based).">Jedním klikem zapne autostart aplikace při přihlášení do Windows.</div>
-      <span class="tag-game" style="background:#00220a;border-color:#00551a;color:#10b981">NEW v1.7</span>
-    </div>
-    <div class="feature-card reveal" style="--fc:#60a5fa">
-      <span class="feature-icon">🔔</span>
-      <div class="feature-name" data-cs="GitHub Checker" data-en="GitHub Checker">GitHub Checker</div>
-      <div class="feature-desc" data-cs="Monitoring GitHub repozitářů — nové releases, issues, PR. Přímé notifikace v trayi." data-en="Monitor GitHub repos — new releases, issues, PRs. Direct tray notifications.">Monitoring GitHub repozitářů — nové releases, issues, PR. Notifikace v trayi.</div>
-      <span class="tag-game" style="background:#0a1a2a;border-color:#1a3355;color:#60a5fa">NEW v1.7</span>
-    </div>
+
+    <!-- 4. Sensitivity Converter -->
     <div class="feature-card reveal" style="--fc:#a78bfa">
       <span class="feature-icon">🎮</span>
-      <div class="feature-name" data-cs="Sensitivity detekce" data-en="Sensitivity detection">Sensitivity detekce</div>
-      <div class="feature-desc" data-cs="Automatická detekce Windows sensitivity z registru pro přesný přepočet eDPI mezi hrami." data-en="Auto-detect Windows mouse sensitivity from registry for precise eDPI conversion between games.">Auto-detekce Windows sensitivity pro přesný přepočet eDPI mezi hrami.</div>
-      <span class="tag-game" style="background:#1a0a2a;border-color:#3a1a5a;color:#a78bfa">NEW v1.7</span>
+      <div class="feature-name" data-cs="Sensitivity Converter" data-en="Sensitivity Converter">Sensitivity Converter</div>
+      <div class="feature-desc" data-cs="Přepočet citlivosti mezi 20+ hrami, eDPI kalkulačka a auto-detekce Windows sensitivity z registru." data-en="Convert sensitivity between 20+ games, eDPI calculator and Windows sensitivity auto-detection from registry.">Přepočet citlivosti mezi 20+ hrami, eDPI kalkulačka a auto-detekce.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-cs2">CS2</span>
+        <span class="feature-tag tag-csgo">CS:GO</span>
+        <span class="feature-tag tag-rust">Rust</span>
+        <span class="feature-tag tag-gaming">Gaming</span>
+      </div>
     </div>
+
+    <!-- 5. PC Optimization -->
+    <div class="feature-card reveal" style="--fc:#10b981">
+      <span class="feature-icon">⚡</span>
+      <div class="feature-name" data-cs="PC Optimalizace" data-en="PC Optimization">PC Optimalizace</div>
+      <div class="feature-desc" data-cs="Sys info (CPU, GPU, RAM), čištění TEMP, správce procesů a další utility pro ladění výkonu." data-en="Sys info (CPU, GPU, RAM), TEMP cleaner, process manager and more performance tweaking utilities.">Sys info, čištění TEMP, správce procesů a další utility pro ladění výkonu.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-pctool">PC Tool</span>
+        <span class="feature-tag tag-gaming">Gaming</span>
+      </div>
+    </div>
+
+    <!-- 6. Game Mode + HAGS -->
+    <div class="feature-card reveal" style="--fc:#fbbf24">
+      <span class="feature-icon">🚀</span>
+      <div class="feature-name" data-cs="Game Mode + HAGS" data-en="Game Mode + HAGS">Game Mode + HAGS</div>
+      <div class="feature-desc" data-cs="Jedním klikem zapne Windows Game Mode, Hardware Accelerated GPU Scheduling a další herní optimalizace." data-en="Toggle Windows Game Mode, Hardware Accelerated GPU Scheduling and other gaming optimizations with one click.">Windows Game Mode, HAGS a další herní optimalizace jedním klikem.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-gaming">Gaming</span>
+        <span class="feature-tag tag-pctool">PC Tool</span>
+      </div>
+    </div>
+
+    <!-- 7. DNS Tools -->
+    <div class="feature-card reveal" style="--fc:#22d3ee">
+      <span class="feature-icon">🌐</span>
+      <div class="feature-name" data-cs="DNS Tools" data-en="DNS Tools">DNS Tools</div>
+      <div class="feature-desc" data-cs="DNS flush, scanner pro A/AAAA/MX/NS/TXT/CNAME záznamy, DNS lookup s historií." data-en="DNS flush, scanner for A/AAAA/MX/NS/TXT/CNAME records, DNS lookup with history.">DNS flush, scanner záznamů (A/AAAA/MX/NS/TXT) a lookup s historií.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-pctool">PC Tool</span>
+      </div>
+    </div>
+
+    <!-- 8. Speedtest + Ping -->
+    <div class="feature-card reveal" style="--fc:#60a5fa">
+      <span class="feature-icon">📡</span>
+      <div class="feature-name" data-cs="Speedtest + Ping" data-en="Speedtest + Ping">Speedtest + Ping</div>
+      <div class="feature-desc" data-cs="HTTP speedtest přes Cloudflare CDN, ping tester pro 10 herních serverů, port checker a IP geolokace." data-en="HTTP speedtest via Cloudflare CDN, ping tester for 10 game servers, port checker and IP geolocation.">Speedtest, ping tester pro herní servery, port checker a IP geolokace.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-pctool">PC Tool</span>
+      </div>
+    </div>
+
+    <!-- 9. Sticky Notes & Autoclicker -->
+    <div class="feature-card reveal" style="--fc:#f472b6">
+      <span class="feature-icon">📝</span>
+      <div class="feature-name" data-cs="Sticky Notes & Autoclicker" data-en="Sticky Notes & Autoclicker">Sticky Notes & Autoclicker</div>
+      <div class="feature-desc" data-cs="Perzistentní poznámky na ploše s self-destruct timerem a globální autoclicker s nastavitelným CPS." data-en="Persistent desktop notes with self-destruct timer and a global autoclicker with adjustable CPS.">Perzistentní poznámky se self-destruct timerem a globální autoclicker.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-pctool">PC Tool</span>
+      </div>
+    </div>
+
+    <!-- 10. YouTube Downloader -->
+    <div class="feature-card reveal" style="--fc:#ef4444">
+      <span class="feature-icon">📺</span>
+      <div class="feature-name" data-cs="YouTube Downloader" data-en="YouTube Downloader">YouTube Downloader</div>
+      <div class="feature-desc" data-cs="Stahování YouTube videí i zvuku (MP3). Výběr kvality od 360p po 4K, lazy yt-dlp." data-en="Download YouTube videos and audio (MP3). Quality from 360p to 4K, lazy yt-dlp.">Stahování YouTube videí i MP3, výběr kvality od 360p po 4K.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-pctool">PC Tool</span>
+      </div>
+    </div>
+
+    <!-- 11. File Share Uploader -->
     <div class="feature-card reveal" style="--fc:#06b6d4">
-      <span class="feature-icon">📰</span>
-      <div class="feature-name" data-cs="Changelog v aplikaci" data-en="In-app changelog">Changelog v aplikaci</div>
-      <div class="feature-desc" data-cs="Novinky z posledních GitHub releases přímo v aplikaci — víš co je nového bez opuštění nástroje." data-en="Latest GitHub release notes directly in the app — stay updated without leaving the tool.">Novinky z posledních GitHub releases přímo v aplikaci.</div>
-      <span class="tag-game" style="background:#002a30;border-color:#005a6a;color:#06b6d4">NEW v1.7</span>
+      <span class="feature-icon">📤</span>
+      <div class="feature-name" data-cs="File Share Uploader" data-en="File Share Uploader">File Share Uploader</div>
+      <div class="feature-desc" data-cs="Rychlé sdílení souborů přes integrovaný uploader — odkaz připravený ke sdílení během vteřin." data-en="Quick file sharing via the built-in uploader — share-ready link in seconds.">Rychlé sdílení souborů přes integrovaný uploader — odkaz během vteřin.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-pctool">PC Tool</span>
+      </div>
     </div>
+
+    <!-- 12. Server Watchdog -->
+    <div class="feature-card reveal" style="--fc:var(--success)">
+      <span class="feature-icon">🐕</span>
+      <div class="feature-name" data-cs="Server Watchdog" data-en="Server Watchdog">Server Watchdog</div>
+      <div class="feature-desc" data-cs="Monitoring herních serverů na pozadí (UDP A2S + TCP fallback) s alertem při výpadku." data-en="Background game server monitoring (UDP A2S + TCP fallback) with downtime alerts.">Monitoring serverů na pozadí (A2S + TCP) s alertem při výpadku.</div>
+      <div class="feature-tags">
+        <span class="feature-tag tag-server">Server</span>
+      </div>
+    </div>
+
   </div>
 </section>
 
@@ -580,7 +668,7 @@ footer a:hover{color:var(--primary);text-decoration:none}
     <span data-cs="Zdarma" data-en="Free">Zdarma</span>
   </p>
   <div class="hero-actions reveal">
-    <a href="<?= GITHUB_DL ?>" class="btn-download" download="<?= DL_FILENAME ?>">
+    <a href="<?= htmlspecialchars($dl_url) ?>" class="btn-download" download="<?= DL_FILENAME ?>">
       ⬇ <span data-cs="Stáhnout <?= DL_FILENAME ?>" data-en="Download <?= DL_FILENAME ?>">Stáhnout <?= DL_FILENAME ?></span>
     </a>
     <a href="<?= GITHUB_RELEASE ?>" target="_blank" rel="noopener" class="btn-outline">

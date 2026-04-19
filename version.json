@@ -1,7 +1,7 @@
 {
-  "version": "1.8.0",
-  "release_date": "2026-04-18",
-  "changelog": "Blur redesign + Game Optimization + Advanced PC Tools (auth) + File Share + global shortcuts + profile editor + home login/PC-tools cards + web guides page + GitHub news carousel.",
+  "version": "1.9.0",
+  "release_date": "2026-04-19",
+  "changelog": "Win11 Dark Gaming theme + admin dashboard redesign + updater fixes + single-source version + favicon sync + web dynamic version + reduced feature cards + shared widgets helper.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

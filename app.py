@@ -29,12 +29,33 @@ _BTN_BG = "#1e1e1e"
 
 
 def _generate_icon():
+    """
+    F-12: prefer the prepared assets/web_favicon.ico (master icon).
+    If it exists, copy it to assets/icon.ico (the path the rest of the app expects).
+    Only fall back to PIL-generated ICO from PNG sources if web_favicon.ico is missing.
+    """
     from pathlib import Path
-    icon_path = Path(_root) / "assets" / "icon.ico"
+    import shutil
+
+    assets_dir = Path(_root) / "assets"
+    icon_path = assets_dir / "icon.ico"
+    web_favicon = assets_dir / "web_favicon.ico"
+
+    # Preferred: copy the high-quality prepared favicon over icon.ico every launch.
+    # This makes the app and the website share the exact same icon at all times.
+    if web_favicon.exists():
+        try:
+            if not icon_path.exists() or icon_path.stat().st_size != web_favicon.stat().st_size:
+                shutil.copyfile(str(web_favicon), str(icon_path))
+            return
+        except Exception:
+            pass  # fall through to PNG-based generation
+
+    # Fallback: only if icon.ico doesn't already exist, build it from the PNG logo.
     if icon_path.exists():
         return
     for png_name in ["logo_icon.png", "logo_transparent.png", "logo.png"]:
-        png_path = Path(_root) / "assets" / png_name
+        png_path = assets_dir / png_name
         if png_path.exists():
             try:
                 from PIL import Image

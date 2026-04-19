@@ -13,9 +13,20 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
-CURRENT_VERSION = "1.8.0"
-GITHUB_API_URL = "https://api.github.com/repos/ZeddiS/zeddihub-tools-desktop/releases/latest"
-GITHUB_RELEASES_URL = "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
+try:
+    from .version import APP_VERSION, GITHUB_OWNER, GITHUB_REPO, user_agent
+except Exception:
+    APP_VERSION = "1.9.0"
+    GITHUB_OWNER = "ZeddiS"
+    GITHUB_REPO = "zeddihub-tools-desktop"
+
+    def user_agent() -> str:
+        return f"ZeddiHubTools/{APP_VERSION}"
+
+# Back-compat alias (other modules historically import CURRENT_VERSION)
+CURRENT_VERSION = APP_VERSION
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
 
 
 def parse_version(v: str) -> tuple:

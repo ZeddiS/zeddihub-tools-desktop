@@ -17,11 +17,11 @@ chcp 65001 >nul 2>&1
 
 set "REPO_ROOT=%~dp0"
 set "ENV_FILE=%REPO_ROOT%.env"
-set "VERSION=1.8.0"
+set "VERSION=1.9.0"
 set "TAG=v%VERSION%"
 
 REM --- Menu definice ---
-set "MI_COUNT=11"
+set "MI_COUNT=12"
 set "MI_1=Konfigurace .env"
 set "MI_2=Test GITHUB_TOKEN"
 set "MI_3=Dependencies (Python + PyInstaller)"
@@ -33,6 +33,7 @@ set "MI_8=Smazat tag %TAG%"
 set "MI_9=Otevrit GitHub v prohlizeci"
 set "MI_10=Obnovit status (rescan)"
 set "MI_11=Rychla push (quick commit)"
+set "MI_12=Cleanup: PAT secret v historii (filter-repo)"
 
 set "MH_1=Vytvori/prepise .env (token, owner, repo, identita)."
 set "MH_2=Overi zda tvuj GITHUB_TOKEN ma spravne permissions."
@@ -45,6 +46,7 @@ set "MH_8=Smaze tag %TAG% lokalne i na GitHubu (pokud blokuje push)."
 set "MH_9=Otevre repo/releases/actions/issues v prohlizeci."
 set "MH_10=Znovu zjisti stav Pythonu, Gitu, tagu a .env (pomale - siti)."
 set "MH_11=Rychly commit + push beze zmeny verze (bez tagu)."
+set "MH_12=Prepise git historii a odstrani PAT tokeny - reseni GitHub Push Protection."
 
 set "MENU_POS=1"
 
@@ -133,6 +135,7 @@ if %MENU_POS%==8 goto delete_tag
 if %MENU_POS%==9 goto open_github
 if %MENU_POS%==10 goto key_refresh
 if %MENU_POS%==11 goto quick_push
+if %MENU_POS%==12 goto cleanup_secret
 goto render
 
 REM =======================================================================
@@ -405,15 +408,67 @@ if exist ".git\index.lock" del /f /q ".git\index.lock" 2>nul
 git add -A
 REM BEZPECNOST: odstage webhosting\data\auth.json, aby se produkcni hesla nedostala do public repa
 git reset HEAD -- webhosting/data/auth.json 2>nul
+REM BEZPECNOST: odstage .env - nesmi nikdy leaknout token
+git reset HEAD -- .env 2>nul
 git commit -m "Release %TAG%" || call :info "(nic k commitnuti)"
-git push origin %GITHUB_DEFAULT_BRANCH% || goto auto_err
+echo.
+echo   Push master (vystup se uklada do .zh_push.log pro detekci chyb)...
+git push origin %GITHUB_DEFAULT_BRANCH% > .zh_push.log 2>&1
+type .zh_push.log
+findstr /C:"Push cannot contain secrets" /C:"GH013" /C:"unblock-secret" .zh_push.log >nul
+if not errorlevel 1 goto push_secret_blocked
+findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
+if not errorlevel 1 goto auto_err
+del .zh_push.log 2>nul
 git tag %TAG% 2>nul || call :info "(tag uz existuje lokalne)"
-git push origin %TAG% || goto auto_err
+echo.
+echo   Push tagu %TAG%...
+git push origin %TAG% > .zh_push.log 2>&1
+type .zh_push.log
+findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
+if not errorlevel 1 goto auto_err
+del .zh_push.log 2>nul
 call :ok "Release pushnut. Sleduj build na:"
 echo      https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions
 goto pause_and_return_rescan
 
+:push_secret_blocked
+echo.
+call :err "Push zablokoval GitHub Push Protection - v historii je secret (PAT)."
+echo.
+echo   GitHub detekoval GitHub Personal Access Token v jednom z commitu.
+echo   Dve moznosti:
+echo.
+echo     [A] Allow-list pres GitHub UI (secret zustane v historii, ale push projde)
+echo     [B] Prepsat historii pres git filter-repo (cisty - secret zmizi)
+echo.
+choice /c ABX /n /m "  [A]llow / [B]prepsat / [X] zrusit: "
+if errorlevel 3 goto pause_and_return
+if errorlevel 2 goto cleanup_secret
+REM Cesta A - vytahne unblock URL z logu a otevre ji
+for /f "tokens=*" %%U in ('findstr /C:"unblock-secret" .zh_push.log') do (
+    set "UNBLOCK_LINE=%%U"
+)
+if defined UNBLOCK_LINE (
+    echo.
+    echo   Otevirani unblock URL v prohlizeci...
+    for /f "tokens=2 delims= " %%H in ("!UNBLOCK_LINE!") do start "" "%%H"
+) else (
+    start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/security/secret-scanning"
+)
+echo.
+call :warn "Na webu: vyber duvod 'Used in tests' nebo 'Revoked' a klikni Allow."
+call :info "Az schvalis, spust znovu [5] Auto Release."
+del .zh_push.log 2>nul
+goto pause_and_return
+
 :auto_err
+echo.
+if exist .zh_push.log (
+    echo   Detailni vystup pushe:
+    type .zh_push.log
+    del .zh_push.log 2>nul
+)
 call :err "Git push selhal. Zkontroluj pristup a stav."
 goto pause_and_return
 
@@ -478,4 +533,148 @@ goto pause_and_return_rescan
 
 REM =======================================================================
 REM  [9] OTEVRIT GITHUB
-RE
+REM =======================================================================
+:open_github
+call :header "[9] Otevrit GitHub v prohlizeci"
+echo   Otevirani stranek...
+start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%"
+start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/releases"
+start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/actions"
+call :ok "Otevreno v prohlizeci."
+goto pause_and_return
+
+REM =======================================================================
+REM  [11] QUICK PUSH (bez tagu, bez verze bumpu)
+REM =======================================================================
+:quick_push
+call :header "[11] Rychla push (quick commit)"
+if exist ".git\index.lock" del /f /q ".git\index.lock" 2>nul
+git add -A
+git reset HEAD -- webhosting/data/auth.json 2>nul
+git reset HEAD -- .env 2>nul
+echo.
+echo   Zmeny, ktere se commitnou:
+git diff --cached --stat
+echo.
+set /p "QMSG=  Commit message: "
+if "!QMSG!"=="" (
+    call :err "Prazdna zprava - preruseno."
+    goto pause_and_return
+)
+git commit -m "!QMSG!" || (
+    call :info "(nic k commitnuti)"
+    goto pause_and_return
+)
+echo.
+echo   Push master...
+git push origin %GITHUB_DEFAULT_BRANCH% > .zh_push.log 2>&1
+type .zh_push.log
+findstr /C:"Push cannot contain secrets" /C:"GH013" .zh_push.log >nul
+if not errorlevel 1 (
+    del .zh_push.log 2>nul
+    call :err "Push blokovan push-protection - spust [12] Cleanup: PAT secret v historii."
+    goto pause_and_return
+)
+findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
+if not errorlevel 1 (
+    del .zh_push.log 2>nul
+    call :err "Push selhal."
+    goto pause_and_return
+)
+del .zh_push.log 2>nul
+call :ok "Pushnuto."
+goto pause_and_return_rescan
+
+REM =======================================================================
+REM  [12] CLEANUP: PAT SECRET V HISTORII
+REM =======================================================================
+:cleanup_secret
+call :header "[12] Cleanup: PAT secret v historii (filter-repo)"
+echo.
+echo   Tato akce TRVALE prepise git historii a odstrani vsechny GitHub
+echo   Personal Access Tokeny (vzory: github_pat_..., ghp_..., ghs_...).
+echo.
+echo   Dva mody:
+echo     [A] Allow-list pres GitHub UI (nejrychlejsi, secret vsak zustava)
+echo     [B] Automaticke prepsani historie pres git filter-repo (cisty)
+echo     [X] Zrusit
+echo.
+choice /c ABX /n /m "  Volba: "
+if errorlevel 3 goto pause_and_return
+if errorlevel 2 goto cleanup_filter_repo
+
+REM --- Cesta A: otevre GitHub secret-scanning stranku
+echo.
+echo   Otevirani GitHub Secret Scanning stranky...
+start "" "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%/security/secret-scanning"
+echo.
+call :info "Na webu: najdi blokovany secret, klikni Allow a vyber duvod."
+call :info "Typicke duvody: 'Used in tests' / 'Revoked'."
+echo.
+call :warn "DOPORUCENI: pred Allow zneplatni token na https://github.com/settings/tokens"
+goto pause_and_return
+
+:cleanup_filter_repo
+echo.
+call :warn "Toto PREPISE historii. Budes muset force-pushnout."
+call :warn "Pokud je repo sdileny s jinymi lidmi, koordinuj s nimi!"
+echo.
+choice /c AN /n /m "  [A]no pokracovat / [N]e zrusit: "
+if errorlevel 2 goto pause_and_return
+echo.
+echo   Kontrola git-filter-repo...
+where git-filter-repo >nul 2>&1
+if errorlevel 1 (
+    echo   Neni nainstalovan. Instaluji pres pip...
+    python -m pip install git-filter-repo
+    if errorlevel 1 (
+        call :err "Instalace selhala. Zkus rucne: python -m pip install git-filter-repo"
+        goto pause_and_return
+    )
+)
+echo.
+echo   Vytvarim .zh_replacements.txt s token patterny...
+(
+    echo regex:github_pat_[A-Za-z0-9_]+==^>***REMOVED_PAT***
+    echo regex:ghp_[A-Za-z0-9]+==^>***REMOVED_PAT***
+    echo regex:ghs_[A-Za-z0-9]+==^>***REMOVED_PAT***
+    echo regex:gho_[A-Za-z0-9]+==^>***REMOVED_PAT***
+    echo regex:ghu_[A-Za-z0-9]+==^>***REMOVED_PAT***
+    echo regex:ghr_[A-Za-z0-9]+==^>***REMOVED_PAT***
+) > .zh_replacements.txt
+echo.
+echo   Spoustim git filter-repo...
+git-filter-repo --replace-text .zh_replacements.txt --force
+if errorlevel 1 (
+    del .zh_replacements.txt 2>nul
+    call :err "filter-repo selhalo. Overit: python -m git_filter_repo --help"
+    goto pause_and_return
+)
+del .zh_replacements.txt 2>nul
+echo.
+call :ok "Historie prepsana. Tokeny nahrazeny ***REMOVED_PAT***."
+echo.
+echo   Obnovuji remote origin (filter-repo ho odstranuje)...
+git remote add origin "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git" 2>nul
+git remote set-url origin "https://github.com/%GITHUB_OWNER%/%GITHUB_REPO%.git"
+echo.
+call :warn "Nyni musis FORCE PUSH: git push origin %GITHUB_DEFAULT_BRANCH% --force"
+echo.
+choice /c AN /n /m "  Provest force push HNED? [A]no / [N]e zrusit: "
+if errorlevel 2 (
+    call :info "Force push preskocen. Spust rucne, az budes pripraven."
+    goto pause_and_return
+)
+echo.
+git push origin %GITHUB_DEFAULT_BRANCH% --force > .zh_push.log 2>&1
+type .zh_push.log
+findstr /R /C:"! .*rejected" /C:"failed to push" .zh_push.log >nul
+if not errorlevel 1 (
+    del .zh_push.log 2>nul
+    call :err "Force push selhal. Zkontroluj branch protection rules."
+    goto pause_and_return
+)
+del .zh_push.log 2>nul
+call :ok "Force push hotov. Historie na GitHubu je cista."
+call :info "Nyni muzes znovu spustit [5] Auto Release pro tagovani v1.9.0."
+goto pause_and_return_rescan

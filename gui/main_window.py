@@ -473,10 +473,18 @@ class MainWindow(ctk.CTk):
                                          text_color=th["text_dim"])
         self._auth_label.pack(side="right", padx=10)
 
-        self._update_label = ctk.CTkLabel(right, text="",
-                                           font=ctk.CTkFont("Segoe UI", 10, "bold"),
-                                           text_color=th["primary"])
-        self._update_label.pack(side="right", padx=8)
+        # F-13: Update badge — created with a hidden pill shape that becomes
+        # visible only once _on_update_check() finds a new release.
+        self._update_label = ctk.CTkLabel(
+            right, text="",
+            image=None,
+            compound="left",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            text_color=th["primary"],
+            fg_color="transparent",
+            corner_radius=10,
+        )
+        self._update_label.pack(side="right", padx=8, pady=10)
 
         # Dark/light mode toggle — softer, more rounded
         self._mode_btn = ctk.CTkButton(
@@ -1135,45 +1143,90 @@ class MainWindow(ctk.CTk):
             pass
 
     def _on_update_check(self, result):
-        if result and result.get("available"):
-            latest = result.get("latest", "?")
+        """F-13: Wire both the header pill AND the sidebar auth-button area
+        so the user never misses a new release. Auto-popup is delayed until
+        any blocking first-launch Toplevels have closed.
+        """
+        if not (result and result.get("available")):
+            return
+
+        latest = result.get("latest", "?")
+        self._last_update_info = result
+
+        # Header pill — now with a soft orange background so it stands out.
+        try:
             self._update_label.configure(
-                image=icons.icon("arrow-up", 12, "#fb923c"),
+                image=icons.icon("arrow-up", 13, "#ffffff"),
                 compound="left",
                 text=f" v{latest}",
-                text_color="#fb923c",
-                cursor="hand2"
+                text_color="#ffffff",
+                fg_color="#fb923c",
+                cursor="hand2",
             )
+            # Re-bind each time (safe) and allow double-click too.
             self._update_label.bind("<Button-1>", lambda _: self._show_update_dialog(result))
-            # Auto-show popup once — delay ensures main window is fully rendered
-            if not getattr(self, "_update_dialog_shown", False):
-                self._update_dialog_shown = True
-                self.after(1500, lambda: self._show_update_dialog(result))
+        except Exception:
+            pass
+
+        # Auto-open the wizard once per launch. Delay up to 3 s so the
+        # first-launch tray-notice dialog can be dismissed first without
+        # stealing grab_set from a blank background.
+        if not getattr(self, "_update_dialog_shown", False):
+            self._update_dialog_shown = True
+            def _deferred():
+                # If another Toplevel (tray notice, auth dialog) is still up,
+                # wait another 2 s before trying to steal focus.
+                try:
+                    for w in self.winfo_children():
+                        if isinstance(w, ctk.CTkToplevel) and w.winfo_viewable():
+                            self.after(2000, _deferred)
+                            return
+                except Exception:
+                    pass
+                self._show_update_dialog(result)
+            self.after(2500, _deferred)
 
     def _show_update_dialog(self, update_info: dict):
-        """Update download wizard — Step 1: info, Step 2: downloading, Step 3: done."""
+        """Update download wizard — Step 1: info, Step 2: downloading, Step 3: done.
+        F-13: robust layout — pack root frame first, solid (non-transparent) cards,
+        immediate grab_set, and fallback changelog text if GitHub body is empty.
+        """
         th = get_theme(self._current_game)
         d = ctk.CTkToplevel(self)
         d.title(t("update_available"))
-        d.geometry("480x380")
+        d.geometry("540x460")
         d.configure(fg_color=th["content_bg"])
         d.resizable(False, False)
-        # Delay grab_set so the window has time to fully render before grabbing input
-        d.after(200, d.grab_set)
+        d.transient(self)
+        # Force the Toplevel to render its decorations & background before
+        # children get packed — fixes "empty window" on some Win11 themes.
+        d.update_idletasks()
+        try:
+            d.grab_set()
+        except Exception:
+            pass
 
         latest = update_info.get("latest", "?")
-        changelog = update_info.get("changelog", "")
+        changelog = (update_info.get("changelog") or "").strip()
         download_url = update_info.get("download_url", "")
 
         # ── Step 1: info ──────────────────────────────────────────────────────
-        frame1 = ctk.CTkFrame(d, fg_color="transparent")
-        frame2 = ctk.CTkFrame(d, fg_color="transparent")
-        frame3 = ctk.CTkFrame(d, fg_color="transparent")
+        # Use card_bg (visible) instead of transparent — fixes blank-dialog bug
+        # when the CTk root fg_color hasn't repainted yet.
+        frame1 = ctk.CTkFrame(d, fg_color=th["card_bg"], corner_radius=10)
+        frame2 = ctk.CTkFrame(d, fg_color=th["card_bg"], corner_radius=10)
+        frame3 = ctk.CTkFrame(d, fg_color=th["card_bg"], corner_radius=10)
 
         def _show(f):
             for ff in (frame1, frame2, frame3):
-                ff.pack_forget()
-            f.pack(fill="both", expand=True, padx=24, pady=16)
+                try:
+                    ff.pack_forget()
+                except Exception:
+                    pass
+            f.pack(fill="both", expand=True, padx=18, pady=18)
+
+        # Pack frame1 FIRST so children render into an already-laid-out parent.
+        _show(frame1)
 
         # Frame 1 — Info
         ctk.CTkLabel(frame1,
@@ -1181,21 +1234,27 @@ class MainWindow(ctk.CTk):
                      text=f"  Nová verze: v{latest}",
                      compound="left",
                      font=ctk.CTkFont("Segoe UI", 17, "bold"),
-                     text_color="#fb923c").pack(anchor="w", pady=(0, 2))
+                     text_color="#fb923c").pack(anchor="w", padx=16, pady=(16, 2))
         ctk.CTkLabel(frame1, text=f"Aktuální verze: v{CURRENT_VERSION}",
                      font=ctk.CTkFont("Segoe UI", 11),
-                     text_color=th["text_dim"]).pack(anchor="w", pady=(0, 12))
+                     text_color=th["text_dim"]).pack(anchor="w", padx=16, pady=(0, 12))
 
-        if changelog:
-            notes_box = ctk.CTkTextbox(frame1, height=110, fg_color=th["card_bg"],
-                                       text_color=th["text_dim"],
-                                       font=ctk.CTkFont("Segoe UI", 10))
-            notes_box.pack(fill="x", pady=(0, 14))
-            notes_box.insert("end", changelog[:800])
-            notes_box.configure(state="disabled")
+        if not changelog:
+            changelog = (
+                "Podrobný changelog najdete na GitHub Releases.\n"
+                "Detailed changelog is available on GitHub Releases."
+            )
+        notes_box = ctk.CTkTextbox(frame1, height=150,
+                                   fg_color=th.get("glass", th["bg"]),
+                                   text_color=th["text"],
+                                   font=ctk.CTkFont("Segoe UI", 10),
+                                   corner_radius=8)
+        notes_box.pack(fill="x", padx=16, pady=(0, 14))
+        notes_box.insert("end", changelog[:1200])
+        notes_box.configure(state="disabled")
 
         btn_row1 = ctk.CTkFrame(frame1, fg_color="transparent")
-        btn_row1.pack(fill="x")
+        btn_row1.pack(fill="x", padx=16, pady=(0, 16))
 
         ctk.CTkButton(btn_row1,
                       image=icons.icon("download", 16, "#ffffff"),
@@ -1203,12 +1262,15 @@ class MainWindow(ctk.CTk):
                       compound="left",
                       fg_color="#fb923c", hover_color="#e07b20",
                       font=ctk.CTkFont("Segoe UI", 12, "bold"), height=40,
+                      corner_radius=10,
                       command=lambda: _start_download()
                       ).pack(side="left", fill="x", expand=True, padx=(0, 8))
 
         ctk.CTkButton(btn_row1, text=t("later"),
-                      fg_color=th["secondary"], height=40,
-                      command=d.destroy).pack(side="left", width=100)
+                      fg_color=th["secondary"], hover_color=th.get("card_hover", th["secondary"]),
+                      font=ctk.CTkFont("Segoe UI", 12), height=40, width=100,
+                      corner_radius=10,
+                      command=d.destroy).pack(side="left")
 
         # Frame 2 — Downloading
         ctk.CTkLabel(frame2,
@@ -1216,19 +1278,20 @@ class MainWindow(ctk.CTk):
                      text="  Stahuji aktualizaci...",
                      compound="left",
                      font=ctk.CTkFont("Segoe UI", 15, "bold"),
-                     text_color="#fb923c").pack(anchor="w", pady=(0, 8))
+                     text_color="#fb923c").pack(anchor="w", padx=16, pady=(20, 8))
         _dl_status = ctk.CTkLabel(frame2, text="Připravuji stahování...",
                                    font=ctk.CTkFont("Segoe UI", 10),
                                    text_color=th["text_dim"])
-        _dl_status.pack(anchor="w", pady=(0, 12))
+        _dl_status.pack(anchor="w", padx=16, pady=(0, 12))
         _progress_bar = ctk.CTkProgressBar(frame2, height=14,
-                                            progress_color="#fb923c")
-        _progress_bar.pack(fill="x", pady=(0, 4))
+                                            progress_color="#fb923c",
+                                            corner_radius=7)
+        _progress_bar.pack(fill="x", padx=16, pady=(0, 4))
         _progress_bar.set(0)
         _pct_label = ctk.CTkLabel(frame2, text="0 %",
                                    font=ctk.CTkFont("Segoe UI", 10),
                                    text_color=th["text_dim"])
-        _pct_label.pack(anchor="e")
+        _pct_label.pack(anchor="e", padx=16, pady=(0, 16))
 
         # Frame 3 — Done
         ctk.CTkLabel(frame3,
@@ -1236,13 +1299,13 @@ class MainWindow(ctk.CTk):
                      text="  Aktualizace stažena!",
                      compound="left",
                      font=ctk.CTkFont("Segoe UI", 17, "bold"),
-                     text_color="#22c55e").pack(anchor="w", pady=(0, 8))
+                     text_color="#22c55e").pack(anchor="w", padx=16, pady=(20, 8))
         ctk.CTkLabel(frame3,
                      text=f"Verze v{latest} je připravena.\n"
                           "Po kliknutí na 'Restartovat' se aplikace zavře\n"
                           "a automaticky nahradí sebe novou verzí.",
                      font=ctk.CTkFont("Segoe UI", 11),
-                     text_color=th["text_dim"], justify="left").pack(anchor="w", pady=(0, 20))
+                     text_color=th["text_dim"], justify="left").pack(anchor="w", padx=16, pady=(0, 20))
 
         _new_exe_path = [None]
 
@@ -1258,7 +1321,8 @@ class MainWindow(ctk.CTk):
                       compound="left",
                       fg_color="#22c55e", hover_color="#16a34a",
                       font=ctk.CTkFont("Segoe UI", 13, "bold"), height=44,
-                      command=_restart).pack(fill="x")
+                      corner_radius=10,
+                      command=_restart).pack(fill="x", padx=16, pady=(0, 16))
 
         # ── Download logic ────────────────────────────────────────────────────
         def _start_download():
@@ -1293,7 +1357,9 @@ class MainWindow(ctk.CTk):
                 done_callback=lambda s, v: d.after(0, _on_done, s, v),
             )
 
-        _show(frame1)
+        # frame1 already packed up-front via _show(frame1) above
+        d.lift()
+        d.focus_force()
 
 
 class _LogoutDialog(ctk.CTkToplevel):
