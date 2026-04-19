@@ -228,5 +228,11 @@
   "file_share_upload": "Nahrát",
   "file_share_uploaded": "Nahráno",
   "advanced_pc_tools": "Pokročilé PC nástroje",
-  "game_opt_section": "Optimalizace her"
+  "game_opt_section": "Optimalizace her",
+  "sec_other": "Ostatní",
+  "nav_uploader": "File Uploader",
+  "nav_watchdog": "Watchdog",
+  "nav_sensitivity": "Sensitivity Converter",
+  "nav_edpi": "eDPI Kalkulačka",
+  "nav_ping_tester": "Ping Tester"
 }

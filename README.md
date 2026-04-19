@@ -131,7 +131,7 @@ Requires Python 3.11+.
 ```bash
 pip install pyinstaller
 python -m PyInstaller --onefile --windowed --name "ZeddiHub.Tools" ^
-  --icon assets/icon.ico ^
+  --icon assets/web_favicon.ico ^
   --add-data "assets;assets" ^
   --add-data "gui;gui" ^
   --add-data "locale;locale" ^

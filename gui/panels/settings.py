@@ -39,6 +39,29 @@ except ImportError:
         @staticmethod
         def icon(name, size=16, color=None): return None
 
+try:
+    from ..widgets import make_page_title, make_card, make_divider
+except ImportError:
+    def make_page_title(parent, text, theme, subtitle=None, **kw):
+        import customtkinter as _ctk
+        f = _ctk.CTkFrame(parent, fg_color="transparent")
+        _ctk.CTkLabel(f, text=text,
+                      font=_ctk.CTkFont("Segoe UI", 22, "bold"),
+                      text_color=theme.get("text", "#f0f0f0")).pack(anchor="w")
+        if subtitle:
+            _ctk.CTkLabel(f, text=subtitle,
+                          font=_ctk.CTkFont("Segoe UI", 12),
+                          text_color=theme.get("text_dim", "#888")).pack(anchor="w")
+        return f
+    def make_card(parent, theme, padding=20, **kw):
+        import customtkinter as _ctk
+        return _ctk.CTkFrame(parent, fg_color=theme.get("card_bg", "#1a1a26"),
+                             corner_radius=14, border_width=0)
+    def make_divider(parent, theme, **kw):
+        import customtkinter as _ctk
+        return _ctk.CTkFrame(parent, fg_color=theme.get("border", "#2a2a35"),
+                             height=1, corner_radius=0)
+
 ASSETS_DIR = Path(__file__).parent.parent.parent / "assets"
 LOGO_PATH = ASSETS_DIR / "logo.png"
 
@@ -58,8 +81,27 @@ class SettingsPanel(ctk.CTkFrame):
 
     def _build(self):
         th = self.theme
-        tab = ctk.CTkTabview(self, fg_color=th["sidebar_bg"])
-        tab.pack(fill="both", expand=True, padx=12, pady=12)
+
+        # Page title lives OUTSIDE the tabview (Claude-app style header)
+        outer = ctk.CTkFrame(self, fg_color="transparent")
+        outer.pack(fill="both", expand=True)
+
+        make_page_title(
+            outer, t("settings_title"), th,
+            subtitle=t("choose_language") if t("choose_language") != "choose_language" else None,
+        ).pack(fill="x", padx=32, pady=(28, 16), anchor="w")
+
+        tab = ctk.CTkTabview(
+            outer,
+            fg_color=th["content_bg"],
+            segmented_button_fg_color=th.get("input_bg", th["secondary"]),
+            segmented_button_selected_color=th["primary"],
+            segmented_button_selected_hover_color=th.get("primary_hover", th["primary"]),
+            segmented_button_unselected_color=th.get("input_bg", th["secondary"]),
+            segmented_button_unselected_hover_color=th.get("card_hover", th["secondary"]),
+            text_color=th["text"],
+        )
+        tab.pack(fill="both", expand=True, padx=24, pady=(0, 16))
 
         tab.add(t("general"))
         tab.add(t("account"))
@@ -76,12 +118,8 @@ class SettingsPanel(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
-        _label(scroll, " " + t("settings_title"), 16, bold=True, color=th["primary"],
-               image=icons.icon("cog", 18, th["primary"]), compound="left"
-               ).pack(padx=4, pady=(4, 12), anchor="w")
-
         # Language section
-        lang_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        lang_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         lang_card.pack(fill="x", pady=6)
 
         _label(lang_card, " " + t("settings_language"), 13, bold=True, color=th["primary"],
@@ -119,7 +157,7 @@ class SettingsPanel(ctk.CTkFrame):
         self._lang_notice.pack(padx=14, pady=(0, 8), anchor="w")
 
         # Appearance mode section
-        mode_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        mode_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         mode_card.pack(fill="x", pady=6)
 
         _label(mode_card, " Vzhled / Barevný režim", 13, bold=True, color=th["primary"],
@@ -147,7 +185,7 @@ class SettingsPanel(ctk.CTkFrame):
             ).pack(side="left", padx=(0, 8))
 
         # Update section
-        update_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        update_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         update_card.pack(fill="x", pady=6)
 
         _label(update_card, " Aktualizace", 13, bold=True, color=th["primary"],
@@ -166,7 +204,7 @@ class SettingsPanel(ctk.CTkFrame):
                       ).pack(padx=14, pady=(0, 14), anchor="w")
 
         # Autostart section (N-15: run at Windows startup)
-        autostart_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        autostart_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         autostart_card.pack(fill="x", pady=6)
 
         _label(autostart_card, " " + t("autostart_section"), 13, bold=True, color=th["primary"],
@@ -190,7 +228,7 @@ class SettingsPanel(ctk.CTkFrame):
         self._autostart_status.pack(padx=14, pady=(0, 14), anchor="w")
 
         # Close behavior section (F-07: minimize to tray vs. quit)
-        close_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        close_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         close_card.pack(fill="x", pady=6)
 
         _label(close_card, " " + t("close_behavior_section"), 13, bold=True, color=th["primary"],
@@ -223,7 +261,7 @@ class SettingsPanel(ctk.CTkFrame):
         ).pack(side="left")
 
         # Data folder section
-        data_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        data_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         data_card.pack(fill="x", pady=6)
 
         _label(data_card, " Složka s daty / Data folder", 13, bold=True, color=th["primary"],
@@ -243,7 +281,7 @@ class SettingsPanel(ctk.CTkFrame):
                       ).pack(padx=14, pady=(0, 14), anchor="w")
 
         # Factory reset / backup section
-        reset_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        reset_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         reset_card.pack(fill="x", pady=6)
 
         _label(reset_card, " Záloha a reset", 13, bold=True, color=th["primary"],
@@ -281,7 +319,7 @@ class SettingsPanel(ctk.CTkFrame):
                       ).pack(padx=14, pady=(6, 14), anchor="w")
 
         # ─── Shortcuts section (N-03) ─────────────────────────────────────────
-        sc_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        sc_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         sc_card.pack(fill="x", pady=6)
 
         _label(sc_card, " " + t("shortcuts_section"), 13, bold=True, color=th["primary"],
@@ -328,7 +366,7 @@ class SettingsPanel(ctk.CTkFrame):
             _label(row, desc, 11, color=th["text"]).pack(side="left", padx=(10, 0))
 
         # ─── Report a bug section (N-09) ──────────────────────────────────────
-        bug_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        bug_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         bug_card.pack(fill="x", pady=6)
 
         _label(bug_card, " " + t("report_bug_section"), 13, bold=True, color=th["primary"],
@@ -591,12 +629,8 @@ class SettingsPanel(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
-        _label(scroll, " " + t("account"), 16, bold=True, color=th["primary"],
-               image=icons.icon("user", 18, th["primary"]), compound="left"
-               ).pack(padx=4, pady=(4, 12), anchor="w")
-
         # ─── Profile section (N-10) ───────────────────────────────────────────
-        prof_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        prof_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         prof_card.pack(fill="x", pady=6)
 
         _label(prof_card, " " + t("profile_section"), 13, bold=True, color=th["primary"],
@@ -659,7 +693,7 @@ class SettingsPanel(ctk.CTkFrame):
                       command=lambda: webbrowser.open("https://zeddihub.eu/tools/account"),
                       ).pack(side="left")
 
-        auth_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        auth_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         auth_card.pack(fill="x", pady=6)
 
         _label(auth_card, t("settings_auth"), 13, bold=True, color=th["primary"]
@@ -685,7 +719,7 @@ class SettingsPanel(ctk.CTkFrame):
             ctk.CTkFrame(auth_card, fg_color="transparent", height=6).pack()
 
         # Saved credentials
-        creds_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        creds_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         creds_card.pack(fill="x", pady=6)
 
         _label(creds_card, " " + t("remember_me"), 13, bold=True, color=th["primary"],
@@ -704,7 +738,7 @@ class SettingsPanel(ctk.CTkFrame):
                       ).pack(padx=14, pady=(0, 14), anchor="w")
 
         # Register info
-        reg_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        reg_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         reg_card.pack(fill="x", pady=6)
 
         _label(reg_card, " " + t("register"), 13, bold=True, color=th["primary"],
@@ -789,7 +823,7 @@ class SettingsPanel(ctk.CTkFrame):
                ).pack(pady=(0, 16))
 
         # Info card
-        info_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        info_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         info_card.pack(fill="x", pady=6, padx=40)
 
         info_lines = [
@@ -804,7 +838,7 @@ class SettingsPanel(ctk.CTkFrame):
             _label(row, value, 11, bold=True, color=th["text"]).pack(side="right")
 
         # Link buttons
-        links_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=8)
+        links_card = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=14)
         links_card.pack(fill="x", pady=6, padx=40)
 
         _label(links_card, " Odkazy", 12, bold=True, color=th["primary"],

@@ -2,6 +2,35 @@
 
 All notable changes to ZeddiHub Tools Desktop are documented in this file.
 
+## [2.1.0] — 2026-04-19
+
+### Added
+- **Single-instance lock** — application can now run only once per PC. A second launch detects the running instance (localhost socket on port 52719) and shows a warning instead of starting a duplicate.
+- **YouTube Downloader standalone mode** — in frozen (.exe) builds yt-dlp is now downloaded as a standalone binary from the official GitHub releases into `%LOCALAPPDATA%\ZeddiHub\bin\yt-dlp.exe`, with a real progress indicator. Fixes the previous hang where `pip install yt-dlp` re-launched the app itself because `sys.executable` pointed to the frozen .exe.
+- **Auto Clicker overhaul** — full redesign with click-position modes (cursor / fixed XY with capture hotkey), click-type selector (single / double / triple), CPS slider + entry, random jitter, click-count limit, duration limit, pre-start countdown, live click counter, separate Start/Stop hotkeys, and JSON presets. Modern card layout with a live status indicator.
+- **App-wide design refresh** — deeper near-black backgrounds, richer card elevation, crisper borders, new radius tokens (`radius_card`, `radius_button`, `radius_entry`). Consistent look across home, settings, splash and the shared widget helpers.
+- **Web Uploader module** (`webhosting/uploader/`) — 100 MB limit, MIME+extension whitelist, four visibility levels (public / private / shared / premium) and tiered quotas (free 100 MB / premium 5 GB / admin unlimited). Reuses admin-panel CSRF, bcrypt auth and audit log.
+- **Admin panel bcrypt migration** — `password_verify_any()` transparently accepts `$2y$/$2a$/$2b$` hashes and plaintext legacy passwords, and upgrades plaintext to bcrypt on successful login. Removes the last plaintext-password surface inside `auth.json`.
+
+### Changed
+- **`assets/icon.ico` and `assets/logo_icon.png` removed** — every runtime reference now uses `assets/web_favicon.ico` directly. Build pipeline, tray, splash, main window fallback chain, PyInstaller spec and README updated; `app._generate_icon()` is now a no-op.
+- **Browser login badge** (`webhosting/admin/login.php`) now uses `assets/logo2.png` instead of a text badge.
+- **Admin navigation** — `users.php` consolidated into `clients.php`; flash info icon fixed from stray `i` to the correct `&#9432;`.
+
+### Fixed
+- **YouTube Downloader frozen-build bug** — root cause: `sys.executable -m pip install yt-dlp` spawned a new copy of the app because in PyInstaller `--onefile` builds `sys.executable` is the .exe itself. Fix detects `sys.frozen` and downloads the standalone binary instead.
+- **Duplicate startup when clicking the exe twice** — resolved by the single-instance lock.
+
+### Upgrade notes
+- Drop-in upgrade from v2.0.0. Existing settings, credentials, bindings and datové složka are preserved.
+- If you previously installed yt-dlp via pip inside a frozen build, the app will prefer the newly downloaded `%LOCALAPPDATA%\ZeddiHub\bin\yt-dlp.exe` — older pip installs remain usable when running from source.
+- The second launch of the .exe will now refuse to start and point you to the system tray.
+
+### Verification
+- Double-click `dist\ZeddiHubTools.exe` twice — the second launch must show "ZeddiHub Tools je již spuštěn".
+- Open PC Tools → YouTube Downloader on a machine without yt-dlp, paste a URL, click Stáhnout — a real progress indicator must advance and the file `%LOCALAPPDATA%\ZeddiHub\bin\yt-dlp.exe` must appear.
+- Open PC Tools → Autoclicker — sliders, live counter and countdown must render and work.
+
 ## [2.0.0] — 2026-04-19
 
 > **Major release.** Bumped from 1.9.0 to 2.0.0 to mark the substantial overhaul of the release tooling, the Win11 Dark Gaming desktop palette and the rebuilt admin dashboard. No breaking API changes for end users — all existing settings, data folders, credentials and bindings are preserved on upgrade.

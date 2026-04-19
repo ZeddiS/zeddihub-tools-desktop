@@ -21,11 +21,15 @@ LOGO_URL   = "https://files.zeddihub.eu/logo2.png"
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 BANNER_PATH = ASSETS_DIR / "banner.png"
 LOGO_PATH   = ASSETS_DIR / "logo.png"
-ICON_PATH   = ASSETS_DIR / "icon.ico"
+ICON_PATH   = ASSETS_DIR / "web_favicon.ico"
 
-SPLASH_BG   = "#0d0d1a"
-SPLASH_FG   = "#e07b39"
-SPLASH_TEXT = "#cccccc"
+SPLASH_BG       = "#0a0a0f"
+SPLASH_BG_INNER = "#0a0a0f"
+SPLASH_FG       = "#3b82f6"
+SPLASH_FG_ALT   = "#8b5cf6"
+SPLASH_TEXT     = "#f5f5f7"
+SPLASH_DIM      = "#7a7a90"
+SPLASH_TRACK    = "#1a1a24"
 
 INTRO_LINES = [
     "Inicializace systému...",
@@ -72,9 +76,8 @@ class SplashScreen:
         )
         self.canvas.pack(fill="both", expand=True)
 
-        # Border glow effect
-        self.canvas.create_rectangle(1, 1, w-1, h-1, outline="#e07b39", width=2)
-        self.canvas.create_rectangle(4, 4, w-4, h-4, outline="#3a2010", width=1)
+        # Flat Claude-app splash: no inner card, just the bg
+        self.canvas.create_rectangle(0, 0, w, h, fill=SPLASH_BG, outline="")
 
         self.banner_img_ref = None
         if PIL_OK and BANNER_PATH.exists():
@@ -82,32 +85,43 @@ class SplashScreen:
         else:
             self._show_text_logo(w)
 
-        # Version label
+        # Title
+        self.canvas.create_text(
+            w // 2, h - 114,
+            text="ZeddiHub Tools",
+            fill=SPLASH_TEXT, font=("Segoe UI", 18, "bold")
+        )
+        # Small muted version/tagline
+        try:
+            from .version import APP_VERSION as _v
+            _ver = f"v{_v}"
+        except Exception:
+            _ver = ""
         self.canvas.create_text(
             w // 2, h - 90,
-            text="ZeddiHub Tools Desktop",
-            fill=SPLASH_FG, font=("Segoe UI", 14, "bold")
-        )
-        self.canvas.create_text(
-            w // 2, h - 68,
-            text="by ZeddiS  |  zeddihub.eu",
-            fill="#666666", font=("Segoe UI", 9)
+            text=f"{_ver}  \u2009\u00b7\u2009  by ZeddiS  \u2009\u00b7\u2009  zeddihub.eu" if _ver
+                 else "by ZeddiS  \u2009\u00b7\u2009  zeddihub.eu",
+            fill=SPLASH_DIM, font=("Segoe UI", 11)
         )
 
         # Status text (centered above progress bar)
         self.status_var = tk.StringVar(value="Spouštění...")
         self.status_label = tk.Label(
             self.root, textvariable=self.status_var,
-            bg=SPLASH_BG, fg=SPLASH_TEXT, font=("Segoe UI", 10)
+            bg=SPLASH_BG, fg=SPLASH_DIM, font=("Segoe UI", 10)
         )
-        self.status_label.place(relx=0.5, y=h - 42, anchor="center")
+        self.status_label.place(relx=0.5, y=h - 58, anchor="center")
 
-        # Progress bar background
-        self.canvas.create_rectangle(20, h-22, w-20, h-10, fill="#1a1a2e", outline="#333333")
+        # Progress bar — very thin Claude-app style track
+        bar_left, bar_right = 80, w - 80
+        bar_top, bar_bot = h - 38, h - 34
+        self.canvas.create_rectangle(bar_left, bar_top, bar_right, bar_bot,
+                                     fill=SPLASH_TRACK, outline="")
         self.progress_bar = self.canvas.create_rectangle(
-            20, h-22, 20, h-10, fill=SPLASH_FG, outline=""
+            bar_left, bar_top, bar_left, bar_bot, fill=SPLASH_FG, outline=""
         )
-        self._progress_w = w - 40
+        self._progress_bounds = (bar_left, bar_top, bar_right, bar_bot)
+        self._progress_w = bar_right - bar_left
 
     def _show_banner(self, w, h):
         try:
@@ -120,16 +134,15 @@ class SplashScreen:
 
     def _show_text_logo(self, w):
         self.canvas.create_text(
-            w // 2, 100,
+            w // 2, 140,
             text="ZeddiHub Tools",
-            fill=SPLASH_FG, font=("Segoe UI", 32, "bold")
+            fill=SPLASH_FG, font=("Segoe UI", 34, "bold")
         )
 
     def _set_progress(self, pct: float):
-        x1 = 20
-        x2 = x1 + int(self._progress_w * pct)
-        self.canvas.coords(self.progress_bar, x1, self.root.winfo_height()-22,
-                           x2, self.root.winfo_height()-10)
+        bar_left, bar_top, _, bar_bot = self._progress_bounds
+        x2 = bar_left + int(self._progress_w * pct)
+        self.canvas.coords(self.progress_bar, bar_left, bar_top, x2, bar_bot)
 
     def _start_sequence(self):
         """Download assets then animate loading, then call on_done."""

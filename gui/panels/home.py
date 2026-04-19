@@ -33,6 +33,7 @@ except ImportError:
     def get_current_user(): return None
 
 from .. import icons
+from ..widgets import make_page_title, make_card, make_divider
 
 BANNER_PATH = Path(__file__).parent.parent.parent / "assets" / "banner.png"
 SERVER_STATUS_URL = "https://zeddihub.eu/tools/data/servers.json"
@@ -126,89 +127,97 @@ class HomePanel(ctk.CTkFrame):
         scroll.pack(fill="both", expand=True)
         self._scroll = scroll
 
+        # Page title — Claude-app style: prominent heading + muted subtitle
+        make_page_title(
+            scroll, t("welcome"), th,
+            subtitle=t("welcome_desc"),
+        ).pack(fill="x", padx=32, pady=(28, 20), anchor="w")
+
         # Banner / hero area
         self._build_banner(scroll)
 
-        # Welcome
-        welcome = ctk.CTkFrame(scroll, fg_color=th["card_bg"], corner_radius=10)
-        welcome.pack(fill="x", padx=20, pady=(8, 8))
-
-        _label(welcome, t("welcome"), 20, bold=True, color=th["primary"]
-               ).pack(padx=20, pady=(16, 4), anchor="w")
-        _label(welcome, t("welcome_desc"), 12, color=th["text_dim"]
-               ).pack(padx=20, pady=(0, 6), anchor="w")
+        # Quick links — transparent strip, no surrounding card
+        welcome = ctk.CTkFrame(scroll, fg_color="transparent")
+        welcome.pack(fill="x", padx=32, pady=(0, 8))
 
         links_row = ctk.CTkFrame(welcome, fg_color="transparent")
-        links_row.pack(padx=20, pady=(4, 16), anchor="w")
+        links_row.pack(pady=(4, 12), anchor="w")
 
         quick_links = [
-            (" ZeddiHub.eu", "https://zeddihub.eu",    "globe",   14, "#cccccc"),
-            (" Wiki",        "https://wiki.zeddihub.eu", "book",  14, "#cccccc"),
+            (" ZeddiHub.eu", "https://zeddihub.eu",    "globe",   14, th.get("text_muted", "#cccccc")),
+            (" Wiki",        "https://wiki.zeddihub.eu", "book",  14, th.get("text_muted", "#cccccc")),
             (" Discord",     "https://dsc.gg/zeddihub", "discord", 14, "#7289da"),
-            (" ZeddiS.xyz",  "https://zeddis.xyz",      "globe",   14, "#cccccc"),
+            (" ZeddiS.xyz",  "https://zeddis.xyz",      "globe",   14, th.get("text_muted", "#cccccc")),
         ]
+        nav_hover = th.get("card_hover", th["secondary"])
         for label_text, url, icon_name, icon_size, icon_color in quick_links:
             btn_kw = {}
             if icon_name:
                 btn_kw["image"] = icons.icon(icon_name, icon_size, icon_color)
                 btn_kw["compound"] = "left"
-            ctk.CTkButton(links_row, text=label_text, height=30, width=140,
-                          fg_color=th["secondary"], hover_color=th["primary"],
+            ctk.CTkButton(links_row, text=label_text, height=32, width=140,
+                          fg_color="transparent", hover_color=nav_hover,
+                          text_color=th["text"],
+                          border_width=0,
+                          corner_radius=8,
                           font=ctk.CTkFont("Segoe UI", 11),
                           command=lambda u=url: __import__("webbrowser").open(u),
                           **btn_kw
-                          ).pack(side="left", padx=4)
+                          ).pack(side="left", padx=(0, 6))
 
         # ── Login card (N-11) + PC Tools quick grid (E-01) side by side ──
         two_col = ctk.CTkFrame(scroll, fg_color="transparent")
-        two_col.pack(fill="x", padx=20, pady=(4, 8))
+        two_col.pack(fill="x", padx=32, pady=(12, 12))
         two_col.grid_columnconfigure(0, weight=1)
         two_col.grid_columnconfigure(1, weight=2)
 
-        self._login_card = ctk.CTkFrame(two_col, fg_color=th["card_bg"], corner_radius=10)
-        self._login_card.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        self._login_card = make_card(two_col, th, padding=20)
+        self._login_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         self._build_login_card(self._login_card)
 
-        self._pc_home_card = ctk.CTkFrame(two_col, fg_color=th["card_bg"], corner_radius=10)
-        self._pc_home_card.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        self._pc_home_card = make_card(two_col, th, padding=20)
+        self._pc_home_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
         self._build_pc_tools_home(self._pc_home_card)
 
-        # Server status section
+        # Server status section — flat list, no chunky cards
         srv_header = ctk.CTkFrame(scroll, fg_color="transparent")
-        srv_header.pack(fill="x", padx=20, pady=(12, 4))
+        srv_header.pack(fill="x", padx=32, pady=(20, 8))
 
-        _label(srv_header, " " + t("server_status"), 16, bold=True,
-               color=th["primary"],
-               image=icons.icon("satellite-dish", 18, th["primary"]), compound="left"
+        _label(srv_header, t("server_status"), 14, bold=True,
+               color=th.get("text_strong", th["text"])
                ).pack(side="left")
 
         self.refresh_btn = ctk.CTkButton(
             srv_header, text="↻ " + t("refresh"), height=28, width=90,
-            fg_color=th["secondary"], hover_color=th["primary"],
+            fg_color="transparent", hover_color=th.get("card_hover", th["secondary"]),
+            text_color=th.get("text_muted", th["text_dim"]),
+            border_width=0, corner_radius=8,
             font=ctk.CTkFont("Segoe UI", 10),
             command=self._refresh_status
         )
         self.refresh_btn.pack(side="right")
 
-        self.last_update_label = _label(srv_header, "", 9, color=th["text_dim"])
-        self.last_update_label.pack(side="right", padx=8)
+        self.last_update_label = _label(srv_header, "", 10,
+                                        color=th.get("text_muted", th["text_dim"]))
+        self.last_update_label.pack(side="right", padx=10)
 
-        self.servers_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self.servers_frame.pack(fill="x", padx=20, pady=4)
+        # Servers list card (holds flat rows with dividers)
+        self.servers_frame = make_card(scroll, th, padding=0)
+        self.servers_frame.pack(fill="x", padx=32, pady=4)
 
-        self.status_label = _label(scroll, t("loading") + "...", 11, color=th["text_dim"])
-        self.status_label.pack(padx=20, pady=4, anchor="w")
+        self.status_label = _label(scroll, t("loading") + "...", 11,
+                                   color=th.get("text_muted", th["text_dim"]))
+        self.status_label.pack(padx=32, pady=4, anchor="w")
 
         # Recommended tools section
         rec_header = ctk.CTkFrame(scroll, fg_color="transparent")
-        rec_header.pack(fill="x", padx=20, pady=(16, 4))
-        _label(rec_header, " " + t("recommended_tools"), 16, bold=True,
-               color=th["primary"],
-               image=icons.icon("bolt", 18, th["primary"]), compound="left"
+        rec_header.pack(fill="x", padx=32, pady=(24, 8))
+        _label(rec_header, t("recommended_tools"), 14, bold=True,
+               color=th.get("text_strong", th["text"])
                ).pack(side="left")
 
         self._rec_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._rec_frame.pack(fill="x", padx=20, pady=4)
+        self._rec_frame.pack(fill="x", padx=32, pady=4)
 
         # ── GitHub Checker (N-05) + Novinky z Releases (N-13) ────────────
         self._build_github_section(scroll)
@@ -218,16 +227,16 @@ class HomePanel(ctk.CTkFrame):
 
     def _build_login_card(self, parent):
         th = self.theme
-        _label(parent, " " + t("login_card_title"), 13, bold=True,
-               color=th["primary"],
-               image=icons.icon("user-shield", 15, th["primary"]), compound="left"
-               ).pack(padx=14, pady=(12, 4), anchor="w")
+        _label(parent, t("login_card_title"), 14, bold=True,
+               color=th.get("text_strong", th["text"]),
+               ).pack(padx=20, pady=(20, 4), anchor="w")
 
-        self._login_status = _label(parent, "", 11, color=th["text_dim"])
-        self._login_status.pack(padx=14, pady=(0, 8), anchor="w")
+        self._login_status = _label(parent, "", 11,
+                                    color=th.get("text_muted", th["text_dim"]))
+        self._login_status.pack(padx=20, pady=(0, 12), anchor="w")
 
         self._login_btn_row = ctk.CTkFrame(parent, fg_color="transparent")
-        self._login_btn_row.pack(fill="x", padx=14, pady=(0, 12))
+        self._login_btn_row.pack(fill="x", padx=20, pady=(0, 20))
 
         self._refresh_login_card()
 
@@ -300,26 +309,28 @@ class HomePanel(ctk.CTkFrame):
 
     def _build_pc_tools_home(self, parent):
         th = self.theme
+        text_muted = th.get("text_muted", th["text_dim"])
+        nav_hover = th.get("card_hover", th["secondary"])
 
         header_row = ctk.CTkFrame(parent, fg_color="transparent")
-        header_row.pack(fill="x", padx=14, pady=(12, 4))
-        _label(header_row, " " + t("pc_tools_home"), 13, bold=True,
-               color=th["primary"],
-               image=icons.icon("laptop", 15, th["primary"]), compound="left"
+        header_row.pack(fill="x", padx=20, pady=(20, 4))
+        _label(header_row, t("pc_tools_home"), 14, bold=True,
+               color=th.get("text_strong", th["text"])
                ).pack(side="left")
         ctk.CTkButton(
             header_row, text=t("pc_tools_open_full"),
-            fg_color="transparent", hover_color=th["secondary"],
+            fg_color="transparent", hover_color=nav_hover,
             text_color=th["primary"],
-            font=ctk.CTkFont("Segoe UI", 10), height=24,
+            border_width=0, corner_radius=8,
+            font=ctk.CTkFont("Segoe UI", 10), height=26,
             command=lambda: self._nav_callback("pc_tools") if self._nav_callback else None,
         ).pack(side="right")
 
         _label(parent, t("pc_tools_home_hint"),
-               10, color=th["text_dim"]).pack(padx=14, pady=(0, 8), anchor="w")
+               11, color=text_muted).pack(padx=20, pady=(0, 12), anchor="w")
 
         grid = ctk.CTkFrame(parent, fg_color="transparent")
-        grid.pack(fill="x", padx=14, pady=(0, 14))
+        grid.pack(fill="x", padx=20, pady=(0, 20))
         for c in range(3):
             grid.grid_columnconfigure(c, weight=1)
 
@@ -335,11 +346,13 @@ class HomePanel(ctk.CTkFrame):
         for i, (label, icon_name, cmd) in enumerate(actions):
             b = ctk.CTkButton(
                 grid, text=" " + label,
-                image=icons.icon(icon_name, 14, th["primary"]),
+                image=icons.icon(icon_name, 14, text_muted),
                 compound="left", anchor="w",
-                fg_color=th["secondary"], hover_color=th["primary"],
+                fg_color="transparent", hover_color=nav_hover,
+                text_color=th["text"],
+                border_width=0, corner_radius=8,
                 font=ctk.CTkFont("Segoe UI", 11),
-                height=34,
+                height=36,
                 command=cmd,
             )
             b.grid(row=i // 3, column=i % 3, padx=4, pady=4, sticky="ew")
@@ -364,8 +377,9 @@ class HomePanel(ctk.CTkFrame):
 
     def _build_banner(self, parent):
         th = self.theme
-        banner_frame = ctk.CTkFrame(parent, fg_color=th["card_bg"], corner_radius=10, height=100)
-        banner_frame.pack(fill="x", padx=20, pady=(12, 8))
+        banner_frame = make_card(parent, th, padding=16)
+        banner_frame.configure(height=100)
+        banner_frame.pack(fill="x", padx=32, pady=(4, 12))
         banner_frame.pack_propagate(False)
 
         if PIL_OK and BANNER_PATH.exists():
@@ -379,8 +393,8 @@ class HomePanel(ctk.CTkFrame):
             except Exception:
                 pass
 
-        _label(banner_frame, "ZeddiHub Tools", 26, bold=True,
-               color=th["primary"]).pack(expand=True)
+        _label(banner_frame, "ZeddiHub Tools", 24, bold=True,
+               color=th.get("text_strong", th["text"])).pack(expand=True)
 
     def _build_tools_overview(self, parent):
         th = self.theme
@@ -403,7 +417,7 @@ class HomePanel(ctk.CTkFrame):
 
         cols = 3
         for i, (name, desc, color) in enumerate(tools):
-            card = ctk.CTkFrame(grid_frame, fg_color=th["card_bg"], corner_radius=8)
+            card = ctk.CTkFrame(grid_frame, fg_color=th["card_bg"], corner_radius=14)
             card.grid(row=i // cols, column=i % cols, padx=6, pady=6, sticky="nsew")
 
             indicator = ctk.CTkFrame(card, fg_color=color, height=3, corner_radius=0)
@@ -460,14 +474,13 @@ class HomePanel(ctk.CTkFrame):
         else:
             self.status_label.configure(text="")
 
-        cols = min(len(servers), 3) if servers else 1
+        # Flat rows with subtle dividers between them
         for i, srv in enumerate(servers):
-            card = self._make_server_card(self.servers_frame, srv, th)
-            card.grid(row=i // cols, column=i % cols, padx=6, pady=6, sticky="nsew")
-            self._server_widgets.append(card)
-
-        for c in range(cols):
-            self.servers_frame.grid_columnconfigure(c, weight=1)
+            if i > 0:
+                make_divider(self.servers_frame, th).pack(fill="x", padx=16)
+            row = self._make_server_row(self.servers_frame, srv, th)
+            row.pack(fill="x")
+            self._server_widgets.append(row)
 
         now = time.strftime("%H:%M:%S")
         self.last_update_label.configure(text=f"Aktualizováno: {now}")
@@ -477,76 +490,89 @@ class HomePanel(ctk.CTkFrame):
         for srv in servers:
             threading.Thread(target=self._a2s_query_server, args=(srv,), daemon=True).start()
 
-    def _make_server_card(self, parent, srv: dict, th: dict) -> ctk.CTkFrame:
+    def _make_server_row(self, parent, srv: dict, th: dict) -> ctk.CTkFrame:
+        """Flat row: colored status dot | name + ip | map + players/ping | buttons."""
         game = srv.get("game", "default")
         game_colors = {"rust": "#f97316", "cs2": "#5b9cf6", "csgo": "#fbbf24"}
         game_color = game_colors.get(game, th["primary"])
+        text_muted = th.get("text_muted", th["text_dim"])
 
-        card = ctk.CTkFrame(parent, fg_color=th["card_bg"], corner_radius=8)
+        row = ctk.CTkFrame(parent, fg_color="transparent")
 
-        header = ctk.CTkFrame(card, fg_color=game_color, corner_radius=0, height=3)
-        header.pack(fill="x")
-        header.pack_propagate(False)
+        # Status dot (small accent block on the left)
+        dot = ctk.CTkLabel(
+            row, text="●",
+            font=ctk.CTkFont("Segoe UI", 16, "bold"),
+            text_color=text_muted,
+        )
+        dot.pack(side="left", padx=(16, 10), pady=12)
+        row._status_dot = dot
+        row._game_color = game_color
 
-        _label(card, srv.get("name", "Server"), 13, bold=True, color=th["text"]
-               ).pack(padx=12, pady=(10, 2), anchor="w")
+        # Left info stack
+        info = ctk.CTkFrame(row, fg_color="transparent")
+        info.pack(side="left", fill="y", pady=10)
+
+        name_lbl = _label(info, srv.get("name", "Server"), 12, bold=True,
+                          color=th.get("text_strong", th["text"]))
+        name_lbl.pack(anchor="w")
+        row._name_label = name_lbl
 
         ip_port = f"{srv.get('ip', '')}:{srv.get('port', '')}"
-        _label(card, ip_port, 10, color=th["text_dim"]).pack(padx=12, anchor="w")
+        _label(info, ip_port, 10, color=text_muted).pack(anchor="w")
 
-        status_lbl = ctk.CTkLabel(
-            card, text="● " + t("unknown"),
-            font=ctk.CTkFont("Segoe UI", 11, "bold"),
-            text_color="#888888"
-        )
-        status_lbl.pack(padx=12, pady=(4, 2), anchor="w")
-        card._status_label = status_lbl
+        # Right: status text + action buttons
+        right = ctk.CTkFrame(row, fg_color="transparent")
+        right.pack(side="right", padx=16, pady=10)
 
-        self._players_lbl = ctk.CTkLabel(
-            card, text="",
-            font=ctk.CTkFont("Segoe UI", 10),
-            text_color=th["text_dim"]
-        )
-        self._players_lbl.pack(padx=12, pady=(0, 2), anchor="w")
-        card._players_label = self._players_lbl
+        btn_row = ctk.CTkFrame(right, fg_color="transparent")
+        btn_row.pack(side="right")
 
-        self._map_lbl = ctk.CTkLabel(
-            card, text="",
-            font=ctk.CTkFont("Segoe UI", 10),
-            text_color=th["text_dim"]
-        )
-        self._map_lbl.pack(padx=12, pady=(0, 2), anchor="w")
-        card._map_label = self._map_lbl
-
-        self._ping_lbl = ctk.CTkLabel(
-            card, text="",
-            font=ctk.CTkFont("Segoe UI", 10),
-            text_color=th["text_dim"]
-        )
-        self._ping_lbl.pack(padx=12, pady=(0, 4), anchor="w")
-        card._ping_label = self._ping_lbl
-
-        card._srv_data = srv
-
-        btn_row = ctk.CTkFrame(card, fg_color="transparent")
-        btn_row.pack(padx=12, pady=(2, 10), anchor="w")
-
-        ctk.CTkButton(btn_row, text=" " + t("copy_ip"), height=26, width=100,
-                      fg_color=th["secondary"], hover_color=th["primary"],
-                      font=ctk.CTkFont("Segoe UI", 9),
-                      image=icons.icon("copy", 13, "#cccccc"), compound="left",
+        nav_hover = th.get("card_hover", th["secondary"])
+        ctk.CTkButton(btn_row, text=" " + t("copy_ip"), height=28, width=90,
+                      fg_color="transparent", hover_color=nav_hover,
+                      text_color=th["text"],
+                      border_width=0, corner_radius=8,
+                      font=ctk.CTkFont("Segoe UI", 10),
+                      image=icons.icon("copy", 13, text_muted), compound="left",
                       command=lambda ip=ip_port: self._copy_ip(ip)
-                      ).pack(side="left", padx=(0, 6))
+                      ).pack(side="left", padx=(0, 4))
 
-        ctk.CTkButton(btn_row, text=" Steam", height=26, width=80,
-                      fg_color="#1a3a1a", hover_color="#4ade80",
+        ctk.CTkButton(btn_row, text=" Steam", height=28, width=80,
+                      fg_color="transparent", hover_color=nav_hover,
                       text_color="#4ade80",
-                      font=ctk.CTkFont("Segoe UI", 9, "bold"),
+                      border_width=0, corner_radius=8,
+                      font=ctk.CTkFont("Segoe UI", 10, "bold"),
                       image=icons.icon("steam", 13, "#4ade80"), compound="left",
                       command=lambda ip=ip_port: self._steam_connect(ip)
                       ).pack(side="left")
 
-        return card
+        # Meta line (map / players / ping) — above the buttons
+        meta = ctk.CTkFrame(right, fg_color="transparent")
+        meta.pack(side="right", padx=(0, 16))
+
+        status_lbl = ctk.CTkLabel(
+            meta, text=t("unknown"),
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            text_color=text_muted,
+        )
+        status_lbl.pack(anchor="e")
+        row._status_label = status_lbl
+
+        meta_lbl = ctk.CTkLabel(
+            meta, text="",
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=text_muted,
+        )
+        meta_lbl.pack(anchor="e")
+        row._meta_label = meta_lbl
+        # Back-compat attributes used by _a2s_query_server
+        row._players_label = meta_lbl
+        row._map_label = meta_lbl
+        row._ping_label = meta_lbl
+
+        row._srv_data = srv
+        return row
 
     def _a2s_query_server(self, srv: dict):
         ip = srv.get("ip", "")
@@ -563,32 +589,30 @@ class HomePanel(ctk.CTkFrame):
                 if not hasattr(w, '_srv_data') or w._srv_data.get("ip") != ip:
                     continue
                 if result and result.get("online"):
+                    if hasattr(w, '_status_dot'):
+                        w._status_dot.configure(text_color="#4ade80")
                     if hasattr(w, '_status_label'):
-                        w._status_label.configure(text="● " + t("online"), text_color="#4ade80")
-                    if hasattr(w, '_players_label'):
-                        w._players_label.configure(
-                            text=t("players", current=result.get("players", 0),
-                                   max=result.get("max_players", 0)))
-                    if hasattr(w, '_map_label'):
-                        w._map_label.configure(text=t("map", map=result.get("map", "?")))
-                    if hasattr(w, '_ping_label'):
-                        w._ping_label.configure(text=f"Ping: {ping_ms} ms")
-                    # Update name from response
-                    children = w.winfo_children()
-                    for child in children:
-                        if (isinstance(child, ctk.CTkLabel) and
-                                child.cget("font") and
-                                "bold" in str(child.cget("font"))):
-                            try:
-                                child.configure(text=result.get("name", srv.get("name", "Server")))
-                            except Exception:
-                                pass
-                            break
+                        w._status_label.configure(text=t("online"), text_color="#4ade80")
+                    if hasattr(w, '_meta_label'):
+                        map_name = result.get("map", "?")
+                        players = result.get("players", 0)
+                        maxp = result.get("max_players", 0)
+                        meta_text = f"{map_name}  ·  {players}/{maxp}  ·  {ping_ms} ms"
+                        w._meta_label.configure(text=meta_text)
+                    # Update name from response (first CTkLabel inside info stack)
+                    if hasattr(w, '_name_label'):
+                        try:
+                            w._name_label.configure(
+                                text=result.get("name", srv.get("name", "Server")))
+                        except Exception:
+                            pass
                 else:
+                    if hasattr(w, '_status_dot'):
+                        w._status_dot.configure(text_color="#f87171")
                     if hasattr(w, '_status_label'):
-                        w._status_label.configure(text="● " + t("offline"), text_color="#f87171")
-                    if hasattr(w, '_ping_label'):
-                        w._ping_label.configure(text="")
+                        w._status_label.configure(text=t("offline"), text_color="#f87171")
+                    if hasattr(w, '_meta_label'):
+                        w._meta_label.configure(text="")
 
         self.after(0, update)
 
@@ -621,6 +645,7 @@ class HomePanel(ctk.CTkFrame):
 
     def _render_recommended(self, items: list):
         th = self.theme
+        text_muted = th.get("text_muted", th["text_dim"])
         for w in self._rec_frame.winfo_children():
             w.destroy()
 
@@ -630,16 +655,18 @@ class HomePanel(ctk.CTkFrame):
             nav_id = item.get("nav_id")
 
             card = ctk.CTkFrame(self._rec_frame, fg_color=th["card_bg"],
-                                corner_radius=8, cursor="hand2" if nav_id else "arrow")
-            card.grid(row=i // cols, column=i % cols, padx=6, pady=6, sticky="nsew")
+                                corner_radius=14, border_width=0,
+                                cursor="hand2" if nav_id else "arrow")
+            card.grid(row=i // cols, column=i % cols, padx=8, pady=8, sticky="nsew")
 
-            top = ctk.CTkFrame(card, fg_color=color, height=3, corner_radius=0)
+            top = ctk.CTkFrame(card, fg_color=color, height=2, corner_radius=0)
             top.pack(fill="x")
 
-            _label(card, item.get("name", ""), 12, bold=True, color=th["text"]
-                   ).pack(padx=12, pady=(10, 2), anchor="w")
-            _label(card, item.get("desc", ""), 10, color=th["text_dim"]
-                   ).pack(padx=12, pady=(0, 10), anchor="w")
+            _label(card, item.get("name", ""), 13, bold=True,
+                   color=th.get("text_strong", th["text"])
+                   ).pack(padx=16, pady=(14, 4), anchor="w")
+            _label(card, item.get("desc", ""), 11, color=text_muted
+                   ).pack(padx=16, pady=(0, 14), anchor="w")
 
             if nav_id and self._nav_callback:
                 for widget in [card, top]:
@@ -655,18 +682,18 @@ class HomePanel(ctk.CTkFrame):
 
     def _build_github_section(self, parent):
         th = self.theme
+        text_muted = th.get("text_muted", th["text_dim"])
 
         # Hlavička GitHub Checker
         gh_header = ctk.CTkFrame(parent, fg_color="transparent")
-        gh_header.pack(fill="x", padx=20, pady=(20, 4))
-        _label(gh_header, " " + t("github_checker_section"), 16, bold=True,
-               color=th["primary"],
-               image=icons.icon("github", 18, th["primary"]), compound="left"
+        gh_header.pack(fill="x", padx=32, pady=(24, 8))
+        _label(gh_header, t("github_checker_section"), 14, bold=True,
+               color=th.get("text_strong", th["text"])
                ).pack(side="left")
 
         # Čtyři statistické karty (Issues, Stars, Forks, Downloads)
         stats = ctk.CTkFrame(parent, fg_color="transparent")
-        stats.pack(fill="x", padx=20, pady=(4, 6))
+        stats.pack(fill="x", padx=32, pady=(0, 6))
         for c in range(4):
             stats.grid_columnconfigure(c, weight=1)
 
@@ -678,24 +705,22 @@ class HomePanel(ctk.CTkFrame):
             ("downloads", t("github_downloads"), "#4ade80"),
         ]
         for i, (key, label, color) in enumerate(stat_defs):
-            card = ctk.CTkFrame(stats, fg_color=th["card_bg"], corner_radius=8)
+            card = ctk.CTkFrame(stats, fg_color=th["card_bg"], corner_radius=14, border_width=0)
             card.grid(row=0, column=i, padx=6, pady=4, sticky="nsew")
-            ctk.CTkFrame(card, fg_color=color, height=3, corner_radius=0).pack(fill="x")
-            val_lbl = _label(card, "…", 18, bold=True, color=color)
-            val_lbl.pack(padx=12, pady=(8, 0), anchor="w")
-            _label(card, label, 10, color=th["text_dim"]).pack(padx=12, pady=(0, 8), anchor="w")
+            val_lbl = _label(card, "…", 22, bold=True, color=color)
+            val_lbl.pack(padx=18, pady=(16, 0), anchor="w")
+            _label(card, label, 11, color=text_muted).pack(padx=18, pady=(2, 16), anchor="w")
             self._gh_stat_labels[key] = val_lbl
 
         # Novinky (Releases)
         news_header = ctk.CTkFrame(parent, fg_color="transparent")
-        news_header.pack(fill="x", padx=20, pady=(14, 4))
-        _label(news_header, " " + t("news_section"), 16, bold=True,
-               color=th["primary"],
-               image=icons.icon("newspaper", 18, th["primary"]), compound="left"
+        news_header.pack(fill="x", padx=32, pady=(20, 8))
+        _label(news_header, t("news_section"), 14, bold=True,
+               color=th.get("text_strong", th["text"])
                ).pack(side="left")
 
         self._news_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        self._news_frame.pack(fill="x", padx=20, pady=(0, 16))
+        self._news_frame.pack(fill="x", padx=32, pady=(0, 24))
         self._news_loading_lbl = _label(self._news_frame, t("news_loading"),
                                          11, color=th["text_dim"])
         self._news_loading_lbl.pack(padx=4, pady=8, anchor="w")
@@ -767,6 +792,7 @@ class HomePanel(ctk.CTkFrame):
                    ).pack(padx=4, pady=8, anchor="w")
             return
 
+        text_muted = th.get("text_muted", th["text_dim"])
         for rel in releases:
             tag = rel.get("tag_name", "?")
             name = rel.get("name") or tag
@@ -774,26 +800,29 @@ class HomePanel(ctk.CTkFrame):
             published = (rel.get("published_at") or "")[:10]
             html_url = rel.get("html_url", "")
 
-            card = ctk.CTkFrame(self._news_frame, fg_color=th["card_bg"], corner_radius=8)
-            card.pack(fill="x", pady=4)
-            top = ctk.CTkFrame(card, fg_color=th["primary"], height=3, corner_radius=0)
-            top.pack(fill="x")
+            card = ctk.CTkFrame(self._news_frame, fg_color=th["card_bg"],
+                                corner_radius=14, border_width=0)
+            card.pack(fill="x", pady=6)
             head_row = ctk.CTkFrame(card, fg_color="transparent")
-            head_row.pack(fill="x", padx=12, pady=(8, 0))
-            _label(head_row, f"{name}  ({tag})", 13, bold=True, color=th["text"]
+            head_row.pack(fill="x", padx=20, pady=(16, 0))
+            _label(head_row, f"{name}  ({tag})", 13, bold=True,
+                   color=th.get("text_strong", th["text"])
                    ).pack(side="left")
             if published:
-                _label(head_row, published, 10, color=th["text_dim"]
+                _label(head_row, published, 10, color=text_muted
                        ).pack(side="right")
             # Body — první 3 řádky
             body_short = "\n".join(body.splitlines()[:3]).strip()
             if body_short:
-                _label(card, body_short, 10, color=th["text_dim"],
+                _label(card, body_short, 11, color=text_muted,
                        wraplength=700, justify="left"
-                       ).pack(padx=12, pady=(4, 4), anchor="w")
+                       ).pack(padx=20, pady=(6, 4), anchor="w")
             if html_url:
-                ctk.CTkButton(card, text=t("open_github"), height=26, width=120,
-                              fg_color=th["secondary"], hover_color=th["primary"],
+                nav_hover = th.get("card_hover", th["secondary"])
+                ctk.CTkButton(card, text=t("open_github"), height=28, width=120,
+                              fg_color="transparent", hover_color=nav_hover,
+                              text_color=th["text"],
+                              border_width=0, corner_radius=8,
                               font=ctk.CTkFont("Segoe UI", 10),
                               command=lambda u=html_url: webbrowser.open(u)
-                              ).pack(padx=12, pady=(0, 10), anchor="w")
+                              ).pack(padx=16, pady=(4, 16), anchor="w")

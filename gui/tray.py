@@ -31,7 +31,7 @@ def _make_fallback_icon() -> "Image.Image":
 
 
 def _load_icon_image() -> "Image.Image":
-    for name in ["web_favicon.ico", "icon.ico", "logo_icon.png", "logo_transparent.png", "logo.png"]:
+    for name in ["web_favicon.ico", "logo_transparent.png", "logo.png", "logo2.png"]:
         p = ASSETS_DIR / name
         if p.exists():
             try:

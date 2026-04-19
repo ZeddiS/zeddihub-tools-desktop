@@ -1,20 +1,57 @@
 """
 ZeddiHub Tools Desktop - Main GUI entry point.
-v1.3.0
 
 Usage:
     python app.py
-    pyinstaller --onefile --windowed --icon=assets/icon.ico --name "ZeddiHub.Tools" app.py
+    pyinstaller --onefile --windowed --icon=assets/web_favicon.ico --name "ZeddiHub.Tools" app.py
 """
 
 import sys
 import os
+import socket
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 _root = os.path.dirname(os.path.abspath(__file__))
 if _root not in sys.path:
     sys.path.insert(0, _root)
+
+# Single-instance lock port (arbitrary unused port on loopback)
+_SINGLE_INSTANCE_PORT = 52719
+_single_instance_socket = None
+
+
+def _acquire_single_instance_lock() -> bool:
+    """
+    Attempt to bind a socket on localhost to prevent multiple instances.
+    Returns True if this is the first instance, False if another is running.
+    Holds the socket in a module-level variable for the process lifetime.
+    """
+    global _single_instance_socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        s.bind(("127.0.0.1", _SINGLE_INSTANCE_PORT))
+        s.listen(1)
+        _single_instance_socket = s
+        return True
+    except OSError:
+        return False
+
+
+def _show_already_running_dialog():
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showwarning(
+            "ZeddiHub Tools",
+            "ZeddiHub Tools je již spuštěn.\n\n"
+            "Může běžet pouze jedna instance aplikace.\n"
+            "Zkontrolujte systémovou lištu (tray) u hodin."
+        )
+        root.destroy()
+    except Exception:
+        pass
 
 import customtkinter as ctk
 
@@ -29,42 +66,8 @@ _BTN_BG = "#1e1e1e"
 
 
 def _generate_icon():
-    """
-    F-12: prefer the prepared assets/web_favicon.ico (master icon).
-    If it exists, copy it to assets/icon.ico (the path the rest of the app expects).
-    Only fall back to PIL-generated ICO from PNG sources if web_favicon.ico is missing.
-    """
-    from pathlib import Path
-    import shutil
-
-    assets_dir = Path(_root) / "assets"
-    icon_path = assets_dir / "icon.ico"
-    web_favicon = assets_dir / "web_favicon.ico"
-
-    # Preferred: copy the high-quality prepared favicon over icon.ico every launch.
-    # This makes the app and the website share the exact same icon at all times.
-    if web_favicon.exists():
-        try:
-            if not icon_path.exists() or icon_path.stat().st_size != web_favicon.stat().st_size:
-                shutil.copyfile(str(web_favicon), str(icon_path))
-            return
-        except Exception:
-            pass  # fall through to PNG-based generation
-
-    # Fallback: only if icon.ico doesn't already exist, build it from the PNG logo.
-    if icon_path.exists():
-        return
-    for png_name in ["logo_icon.png", "logo_transparent.png", "logo.png"]:
-        png_path = assets_dir / png_name
-        if png_path.exists():
-            try:
-                from PIL import Image
-                img = Image.open(png_path).convert("RGBA")
-                img.save(str(icon_path), format="ICO",
-                         sizes=[(16, 16), (32, 32), (48, 48), (64, 64)])
-                return
-            except Exception:
-                pass
+    """No-op: app uses assets/web_favicon.ico directly."""
+    return
 
 
 def _show_first_launch_wizard() -> tuple:
@@ -207,6 +210,10 @@ def _show_first_launch_wizard() -> tuple:
 
 def main():
     _generate_icon()
+
+    if not _acquire_single_instance_lock():
+        _show_already_running_dialog()
+        sys.exit(0)
 
     from gui.locale import init as locale_init, set_lang, is_first_launch
 

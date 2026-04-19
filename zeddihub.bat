@@ -321,10 +321,6 @@ if not exist "ZeddiHubTools.spec" (
     echo   !RED![CHYBA]!R! ZeddiHubTools.spec nenalezen!
     call :FN_PAUSE & exit /b
 )
-if exist "assets\web_favicon.ico" (
-    copy /y "assets\web_favicon.ico" "assets\icon.ico" >nul 2>&1
-    echo   !GRN![OK]!R! Favicon zkopirovan  (web_favicon.ico -> icon.ico)
-)
 echo   !YEL![INFO]!R! Spoustim PyInstaller ...
 echo.
 pyinstaller --noconfirm ZeddiHubTools.spec

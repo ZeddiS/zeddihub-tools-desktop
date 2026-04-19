@@ -9,6 +9,7 @@ import sys
 import ctypes
 import ctypes.wintypes
 import platform
+import random
 import subprocess
 import threading
 import socket
@@ -18,8 +19,9 @@ import urllib.request
 import urllib.error
 import tkinter as tk
 import customtkinter as ctk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
 from pathlib import Path
+from typing import Optional
 from .. import icons
 
 try:
@@ -1235,55 +1237,226 @@ class PCToolsPanel(ctk.CTkFrame):
                           ).pack(padx=14, pady=10, anchor="w")
             return
 
-        cfg_card = _card(scroll, th)
-        cfg_card.pack(fill="x", pady=6)
+        # ── Status / Counter karta (nahoře, prominentní) ──────────────────
+        status_card = _card(scroll, th)
+        status_card.pack(fill="x", pady=(2, 10))
 
-        _label(cfg_card, "Nastavení", 13, bold=True, color=th["primary"]
+        status_row = ctk.CTkFrame(status_card, fg_color="transparent")
+        status_row.pack(fill="x", padx=16, pady=(14, 6))
+
+        self._ac_status_dot = _label(status_row, "●", 22, bold=True,
+                                     color=th.get("text_dim", "#888"))
+        self._ac_status_dot.pack(side="left", padx=(0, 8))
+
+        self._ac_status_label = _label(status_row, "Zastaven", 13, bold=True,
+                                       color=th.get("text_dim", "#888"))
+        self._ac_status_label.pack(side="left")
+
+        counters_row = ctk.CTkFrame(status_card, fg_color="transparent")
+        counters_row.pack(fill="x", padx=16, pady=(2, 14))
+
+        self._ac_clicks_label = _label(counters_row, "Kliknutí: 0", 18, bold=True,
+                                       color=th.get("primary", "#4aa6ff"))
+        self._ac_clicks_label.pack(side="left", padx=(0, 24))
+
+        self._ac_elapsed_label = _label(counters_row, "Čas: 00:00", 14,
+                                        color=th.get("text", "#f0f0f0"))
+        self._ac_elapsed_label.pack(side="left")
+
+        # ── Režim (pozice kliku) ──────────────────────────────────────────
+        mode_card = _card(scroll, th)
+        mode_card.pack(fill="x", pady=6)
+        _label(mode_card, "Režim kliku", 13, bold=True, color=th["primary"]
                ).pack(padx=14, pady=(12, 6), anchor="w")
 
-        # CPS
-        cps_row = ctk.CTkFrame(cfg_card, fg_color="transparent")
-        cps_row.pack(fill="x", padx=14, pady=4)
-        _label(cps_row, "Kliknutí/s (CPS):", 11, color=th["text_dim"]
-               ).pack(side="left", padx=(0, 8))
-        self._ac_cps_var = ctk.StringVar(value="10")
-        ctk.CTkEntry(cps_row, textvariable=self._ac_cps_var,
-                     fg_color=th["secondary"], text_color=th["text"],
-                     font=ctk.CTkFont("Segoe UI", 12), height=32, width=80
-                     ).pack(side="left")
+        self._ac_pos_mode_var = ctk.StringVar(value="cursor")
+        seg_pos = ctk.CTkSegmentedButton(
+            mode_card,
+            values=["Na pozici kurzoru", "Pevná souřadnice"],
+            fg_color=th["secondary"],
+            selected_color=th["primary"], selected_hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 11),
+            command=self._ac_on_pos_mode_change,
+        )
+        seg_pos.set("Na pozici kurzoru")
+        seg_pos.pack(fill="x", padx=14, pady=(0, 8))
 
-        # Tlačítko myši
-        btn_row2 = ctk.CTkFrame(cfg_card, fg_color="transparent")
-        btn_row2.pack(fill="x", padx=14, pady=4)
-        _label(btn_row2, "Tlačítko myši:", 11, color=th["text_dim"]
-               ).pack(side="left", padx=(0, 8))
+        # Fixed XY row
+        fixed_row = ctk.CTkFrame(mode_card, fg_color="transparent")
+        fixed_row.pack(fill="x", padx=14, pady=(0, 8))
+        fixed_row.grid_columnconfigure(6, weight=1)
+        _label(fixed_row, "X:", 11, color=th["text_dim"]).grid(row=0, column=0, padx=(0, 4))
+        self._ac_x_var = ctk.StringVar(value="0")
+        self._ac_x_entry = ctk.CTkEntry(fixed_row, textvariable=self._ac_x_var,
+                                        fg_color=th["secondary"], text_color=th["text"],
+                                        font=ctk.CTkFont("Segoe UI", 11), height=30, width=80,
+                                        state="disabled")
+        self._ac_x_entry.grid(row=0, column=1, padx=(0, 10))
+        _label(fixed_row, "Y:", 11, color=th["text_dim"]).grid(row=0, column=2, padx=(0, 4))
+        self._ac_y_var = ctk.StringVar(value="0")
+        self._ac_y_entry = ctk.CTkEntry(fixed_row, textvariable=self._ac_y_var,
+                                        fg_color=th["secondary"], text_color=th["text"],
+                                        font=ctk.CTkFont("Segoe UI", 11), height=30, width=80,
+                                        state="disabled")
+        self._ac_y_entry.grid(row=0, column=3, padx=(0, 10))
+        self._ac_capture_btn = ctk.CTkButton(
+            fixed_row, text="🎯 Zaměřit (F8)",
+            fg_color=th["secondary"], hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 11), height=30, width=140,
+            command=self._ac_start_capture, state="disabled",
+        )
+        self._ac_capture_btn.grid(row=0, column=4, padx=(0, 8))
+
+        # Tlačítko myši + typ kliku
+        btn_row = ctk.CTkFrame(mode_card, fg_color="transparent")
+        btn_row.pack(fill="x", padx=14, pady=(0, 12))
+        btn_row.grid_columnconfigure(5, weight=1)
+        _label(btn_row, "Tlačítko:", 11, color=th["text_dim"]).grid(row=0, column=0, padx=(0, 6))
         self._ac_button_var = ctk.StringVar(value="left")
-        ctk.CTkOptionMenu(btn_row2, variable=self._ac_button_var,
+        ctk.CTkOptionMenu(btn_row, variable=self._ac_button_var,
                           values=["left", "right", "middle"],
                           fg_color=th["secondary"], button_color=th["primary"],
-                          font=ctk.CTkFont("Segoe UI", 11), height=30, width=100
-                          ).pack(side="left")
+                          font=ctk.CTkFont("Segoe UI", 11), height=30, width=110
+                          ).grid(row=0, column=1, padx=(0, 14))
+        _label(btn_row, "Typ:", 11, color=th["text_dim"]).grid(row=0, column=2, padx=(0, 6))
+        self._ac_type_var = ctk.StringVar(value="Jednoduchý")
+        ctk.CTkOptionMenu(btn_row, variable=self._ac_type_var,
+                          values=["Jednoduchý", "Dvojklik", "Trojklik"],
+                          fg_color=th["secondary"], button_color=th["primary"],
+                          font=ctk.CTkFont("Segoe UI", 11), height=30, width=130
+                          ).grid(row=0, column=3, padx=(0, 0))
 
-        # Hotkey
-        hotkey_row = ctk.CTkFrame(cfg_card, fg_color="transparent")
-        hotkey_row.pack(fill="x", padx=14, pady=4)
-        _label(hotkey_row, "Klávesa (toggle):", 11, color=th["text_dim"]
+        # ── Rychlost ──────────────────────────────────────────────────────
+        speed_card = _card(scroll, th)
+        speed_card.pack(fill="x", pady=6)
+        _label(speed_card, "Rychlost", 13, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(12, 6), anchor="w")
+
+        cps_frame = ctk.CTkFrame(speed_card, fg_color="transparent")
+        cps_frame.pack(fill="x", padx=14, pady=(0, 8))
+        cps_frame.grid_columnconfigure(1, weight=1)
+
+        _label(cps_frame, "CPS:", 11, color=th["text_dim"]).grid(row=0, column=0, padx=(0, 8), sticky="w")
+
+        self._ac_cps_var = ctk.StringVar(value="10")
+        self._ac_cps_slider_updating = False
+
+        self._ac_cps_slider = ctk.CTkSlider(
+            cps_frame, from_=0.5, to=100, number_of_steps=199,
+            fg_color=th["secondary"], progress_color=th["primary"],
+            button_color=th["primary"], button_hover_color=th["primary_hover"],
+            command=self._ac_on_cps_slider,
+        )
+        self._ac_cps_slider.set(10)
+        self._ac_cps_slider.grid(row=0, column=1, sticky="ew", padx=(0, 10))
+
+        self._ac_cps_entry = ctk.CTkEntry(
+            cps_frame, textvariable=self._ac_cps_var,
+            fg_color=th["secondary"], text_color=th["text"],
+            font=ctk.CTkFont("Segoe UI", 12), height=30, width=80,
+        )
+        self._ac_cps_entry.grid(row=0, column=2, padx=(0, 8))
+        self._ac_cps_var.trace_add("write", self._ac_on_cps_entry)
+
+        self._ac_interval_label = _label(cps_frame, "interval: 100 ms", 10,
+                                         color=th["text_dim"])
+        self._ac_interval_label.grid(row=0, column=3)
+
+        # Jitter
+        jitter_row = ctk.CTkFrame(speed_card, fg_color="transparent")
+        jitter_row.pack(fill="x", padx=14, pady=(0, 12))
+        _label(jitter_row, "Náhodný rozptyl (± ms):", 11, color=th["text_dim"]
                ).pack(side="left", padx=(0, 8))
-        self._ac_hotkey_var = ctk.StringVar(value="F6")
-        ctk.CTkEntry(hotkey_row, textvariable=self._ac_hotkey_var,
+        self._ac_jitter_var = ctk.StringVar(value="0")
+        ctk.CTkEntry(jitter_row, textvariable=self._ac_jitter_var,
                      fg_color=th["secondary"], text_color=th["text"],
-                     font=ctk.CTkFont("Segoe UI", 12), height=32, width=80
+                     font=ctk.CTkFont("Segoe UI", 11), height=30, width=80
                      ).pack(side="left")
-        _label(hotkey_row, "(globální, funguje i z tray)", 10, color=th["text_dim"]
+        _label(jitter_row, "(0 = bez rozptylu)", 10, color=th["text_dim"]
                ).pack(side="left", padx=(8, 0))
 
-        # Varování pokud chybí pynput — globální hotkey by jinak nefungoval při minimalizaci
+        # ── Limity ────────────────────────────────────────────────────────
+        lim_card = _card(scroll, th)
+        lim_card.pack(fill="x", pady=6)
+        _label(lim_card, "Limity", 13, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(12, 6), anchor="w")
+
+        self._ac_count_mode_var = ctk.StringVar(value="Neomezeno")
+        seg_count = ctk.CTkSegmentedButton(
+            lim_card,
+            values=["Neomezeno", "Pevný počet"],
+            fg_color=th["secondary"],
+            selected_color=th["primary"], selected_hover_color=th["primary_hover"],
+            font=ctk.CTkFont("Segoe UI", 11),
+            command=self._ac_on_count_mode_change,
+        )
+        seg_count.set("Neomezeno")
+        seg_count.pack(fill="x", padx=14, pady=(0, 6))
+
+        cnt_row = ctk.CTkFrame(lim_card, fg_color="transparent")
+        cnt_row.pack(fill="x", padx=14, pady=(0, 8))
+        _label(cnt_row, "Počet kliknutí:", 11, color=th["text_dim"]
+               ).pack(side="left", padx=(0, 8))
+        self._ac_count_var = ctk.StringVar(value="100")
+        self._ac_count_entry = ctk.CTkEntry(cnt_row, textvariable=self._ac_count_var,
+                                            fg_color=th["secondary"], text_color=th["text"],
+                                            font=ctk.CTkFont("Segoe UI", 11), height=30, width=100,
+                                            state="disabled")
+        self._ac_count_entry.pack(side="left")
+
+        dur_row = ctk.CTkFrame(lim_card, fg_color="transparent")
+        dur_row.pack(fill="x", padx=14, pady=(0, 12))
+        _label(dur_row, "Zastavit po (sekundy, 0 = neomezeno):", 11, color=th["text_dim"]
+               ).pack(side="left", padx=(0, 8))
+        self._ac_duration_var = ctk.StringVar(value="0")
+        ctk.CTkEntry(dur_row, textvariable=self._ac_duration_var,
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 11), height=30, width=80
+                     ).pack(side="left")
+
+        # ── Spuštění (hotkey, countdown, presety) ─────────────────────────
+        run_card = _card(scroll, th)
+        run_card.pack(fill="x", pady=6)
+        _label(run_card, "Spuštění", 13, bold=True, color=th["primary"]
+               ).pack(padx=14, pady=(12, 6), anchor="w")
+
+        hk_frame = ctk.CTkFrame(run_card, fg_color="transparent")
+        hk_frame.pack(fill="x", padx=14, pady=(0, 6))
+        hk_frame.grid_columnconfigure(5, weight=1)
+        _label(hk_frame, "Start klávesa:", 11, color=th["text_dim"]
+               ).grid(row=0, column=0, padx=(0, 6), sticky="w")
+        self._ac_hotkey_var = ctk.StringVar(value="F6")
+        ctk.CTkEntry(hk_frame, textvariable=self._ac_hotkey_var,
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 11), height=30, width=80
+                     ).grid(row=0, column=1, padx=(0, 14))
+        _label(hk_frame, "Stop klávesa:", 11, color=th["text_dim"]
+               ).grid(row=0, column=2, padx=(0, 6), sticky="w")
+        self._ac_hotkey_stop_var = ctk.StringVar(value="F6")
+        ctk.CTkEntry(hk_frame, textvariable=self._ac_hotkey_stop_var,
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 11), height=30, width=80
+                     ).grid(row=0, column=3, padx=(0, 8))
+        _label(hk_frame, "(stejná = toggle)", 10, color=th["text_dim"]
+               ).grid(row=0, column=4, padx=(0, 0), sticky="w")
+
+        cd_row = ctk.CTkFrame(run_card, fg_color="transparent")
+        cd_row.pack(fill="x", padx=14, pady=(0, 8))
+        _label(cd_row, "Odložený start (sekundy):", 11, color=th["text_dim"]
+               ).pack(side="left", padx=(0, 8))
+        self._ac_countdown_var = ctk.StringVar(value="3")
+        ctk.CTkEntry(cd_row, textvariable=self._ac_countdown_var,
+                     fg_color=th["secondary"], text_color=th["text"],
+                     font=ctk.CTkFont("Segoe UI", 11), height=30, width=80
+                     ).pack(side="left")
+
+        # Varování pokud chybí pynput
         if not PYNPUT_OK:
-            pynput_row = ctk.CTkFrame(cfg_card, fg_color="transparent")
+            pynput_row = ctk.CTkFrame(run_card, fg_color="transparent")
             pynput_row.pack(fill="x", padx=14, pady=(6, 2))
             _label(pynput_row,
-                   "⚠ Pro globální hotkey (funguje i při minimalizaci) je třeba pynput.",
-                   10, color=th["warning"], wraplength=500, justify="left"
+                   "⚠ Pro globální hotkey je třeba pynput.",
+                   10, color=th["warning"], wraplength=400, justify="left"
                    ).pack(side="left", padx=(0, 8))
             ctk.CTkButton(pynput_row, text="Nainstalovat pynput",
                           fg_color=th["primary"], hover_color=th["primary_hover"],
@@ -1291,22 +1464,31 @@ class PCToolsPanel(ctk.CTkFrame):
                           command=self._install_pynput
                           ).pack(side="right")
 
-        ctk.CTkFrame(cfg_card, fg_color=th["border"], height=1).pack(fill="x", padx=14, pady=8)
+        # Presety
+        preset_row = ctk.CTkFrame(run_card, fg_color="transparent")
+        preset_row.pack(fill="x", padx=14, pady=(4, 12))
+        ctk.CTkButton(preset_row, text="💾 Uložit preset",
+                      fg_color=th["secondary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=30, width=140,
+                      command=self._ac_save_preset
+                      ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(preset_row, text="📂 Načíst preset",
+                      fg_color=th["secondary"], hover_color=th["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 11), height=30, width=140,
+                      command=self._ac_load_preset
+                      ).pack(side="left")
 
-        # Start / Stop
-        ctrl_row = ctk.CTkFrame(cfg_card, fg_color="transparent")
-        ctrl_row.pack(fill="x", padx=14, pady=(0, 14))
+        # ── Velký Start/Stop ──────────────────────────────────────────────
+        action_card = _card(scroll, th)
+        action_card.pack(fill="x", pady=(6, 6))
 
         self._ac_start_btn = ctk.CTkButton(
-            ctrl_row, text=" ▶ Spustit",
+            action_card, text="▶  Spustit",
             fg_color=th["primary"], hover_color=th["primary_hover"],
-            font=ctk.CTkFont("Segoe UI", 12, "bold"), height=36,
+            font=ctk.CTkFont("Segoe UI", 14, "bold"), height=48,
             command=self._toggle_autoclicker
         )
-        self._ac_start_btn.pack(side="left", padx=(0, 12))
-
-        self._ac_status_label = _label(ctrl_row, "Zastaven", 11, color=th["text_dim"])
-        self._ac_status_label.pack(side="left")
+        self._ac_start_btn.pack(fill="x", padx=14, pady=14)
 
         # Spustit listener pro globální hotkey
         self._ac_setup_hotkey()
@@ -1318,6 +1500,228 @@ class PCToolsPanel(ctk.CTkFrame):
                "ℹ Přesuňte myš do rohu obrazovky pro nouzové zastavení (pyautogui FAILSAFE).",
                10, color=th["text_dim"], wraplength=500, justify="left"
                ).pack(padx=14, pady=12, anchor="w")
+
+    # ── AC helpers ─────────────────────────────────────────────────────────
+
+    def _ac_on_pos_mode_change(self, value):
+        fixed = (value == "Pevná souřadnice")
+        self._ac_pos_mode_var.set("fixed" if fixed else "cursor")
+        state = "normal" if fixed else "disabled"
+        for w in (self._ac_x_entry, self._ac_y_entry, self._ac_capture_btn):
+            try:
+                w.configure(state=state)
+            except Exception:
+                pass
+
+    def _ac_on_count_mode_change(self, value):
+        fixed = (value == "Pevný počet")
+        self._ac_count_mode_var.set("fixed" if fixed else "unlimited")
+        try:
+            self._ac_count_entry.configure(state="normal" if fixed else "disabled")
+        except Exception:
+            pass
+
+    def _ac_on_cps_slider(self, val):
+        if self._ac_cps_slider_updating:
+            return
+        try:
+            v = float(val)
+            self._ac_cps_slider_updating = True
+            self._ac_cps_var.set(f"{v:.1f}")
+            self._ac_cps_slider_updating = False
+            self._ac_update_interval_label(v)
+        except Exception:
+            self._ac_cps_slider_updating = False
+
+    def _ac_on_cps_entry(self, *args):
+        if self._ac_cps_slider_updating:
+            return
+        try:
+            v = float(self._ac_cps_var.get().strip())
+            if 0.5 <= v <= 100:
+                self._ac_cps_slider_updating = True
+                self._ac_cps_slider.set(v)
+                self._ac_cps_slider_updating = False
+            self._ac_update_interval_label(v)
+        except Exception:
+            self._ac_cps_slider_updating = False
+
+    def _ac_update_interval_label(self, cps):
+        try:
+            if cps <= 0:
+                self._ac_interval_label.configure(text="interval: —")
+                return
+            ms = 1000.0 / cps
+            self._ac_interval_label.configure(text=f"interval: {ms:.0f} ms")
+        except Exception:
+            pass
+
+    def _ac_start_capture(self):
+        """3s countdown, pak zachytí pozici kurzoru do X/Y."""
+        th = self.theme
+
+        def _tick(n):
+            if n > 0:
+                try:
+                    self._ac_capture_btn.configure(text=f"⏳ {n}…")
+                except Exception:
+                    return
+                self.after(1000, _tick, n - 1)
+            else:
+                try:
+                    x, y = pyautogui.position()
+                    self._ac_x_var.set(str(int(x)))
+                    self._ac_y_var.set(str(int(y)))
+                    self._ac_capture_btn.configure(text="🎯 Zaměřit (F8)")
+                except Exception:
+                    try:
+                        self._ac_capture_btn.configure(text="🎯 Zaměřit (F8)")
+                    except Exception:
+                        pass
+
+        _tick(3)
+
+    # ── Presets ────────────────────────────────────────────────────────────
+
+    def _ac_presets_path(self):
+        try:
+            from ..config import get_data_dir
+            p = Path(get_data_dir()) / "autoclicker_presets.json"
+        except Exception:
+            p = Path.home() / ".zeddihub_ac.json"
+        return p
+
+    def _ac_collect_settings(self) -> dict:
+        return {
+            "pos_mode": self._ac_pos_mode_var.get(),
+            "x": self._ac_x_var.get(),
+            "y": self._ac_y_var.get(),
+            "button": self._ac_button_var.get(),
+            "click_type": self._ac_type_var.get(),
+            "cps": self._ac_cps_var.get(),
+            "jitter": self._ac_jitter_var.get(),
+            "count_mode": self._ac_count_mode_var.get(),
+            "count": self._ac_count_var.get(),
+            "duration": self._ac_duration_var.get(),
+            "countdown": self._ac_countdown_var.get(),
+            "hotkey_start": self._ac_hotkey_var.get(),
+            "hotkey_stop": self._ac_hotkey_stop_var.get(),
+        }
+
+    def _ac_apply_settings(self, d: dict):
+        try:
+            self._ac_pos_mode_var.set(d.get("pos_mode", "cursor"))
+            self._ac_x_var.set(d.get("x", "0"))
+            self._ac_y_var.set(d.get("y", "0"))
+            self._ac_button_var.set(d.get("button", "left"))
+            self._ac_type_var.set(d.get("click_type", "Jednoduchý"))
+            self._ac_cps_var.set(d.get("cps", "10"))
+            self._ac_jitter_var.set(d.get("jitter", "0"))
+            self._ac_count_mode_var.set(d.get("count_mode", "unlimited"))
+            self._ac_count_var.set(d.get("count", "100"))
+            self._ac_duration_var.set(d.get("duration", "0"))
+            self._ac_countdown_var.set(d.get("countdown", "3"))
+            self._ac_hotkey_var.set(d.get("hotkey_start", "F6"))
+            self._ac_hotkey_stop_var.set(d.get("hotkey_stop", "F6"))
+            # sync UI state
+            fixed = (self._ac_pos_mode_var.get() == "fixed")
+            for w in (self._ac_x_entry, self._ac_y_entry, self._ac_capture_btn):
+                try:
+                    w.configure(state="normal" if fixed else "disabled")
+                except Exception:
+                    pass
+            try:
+                self._ac_count_entry.configure(
+                    state="normal" if self._ac_count_mode_var.get() == "fixed" else "disabled")
+            except Exception:
+                pass
+            # CPS slider sync
+            try:
+                v = float(self._ac_cps_var.get())
+                self._ac_cps_slider_updating = True
+                self._ac_cps_slider.set(max(0.5, min(100, v)))
+                self._ac_cps_slider_updating = False
+                self._ac_update_interval_label(v)
+            except Exception:
+                self._ac_cps_slider_updating = False
+        except Exception as e:
+            messagebox.showerror("Autoclicker", f"Nelze použít preset:\n{e}")
+
+    def _ac_load_presets_file(self) -> dict:
+        p = self._ac_presets_path()
+        if not p.exists():
+            return {}
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _ac_write_presets_file(self, data: dict):
+        p = self._ac_presets_path()
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception as e:
+            messagebox.showerror("Autoclicker", f"Nelze uložit preset:\n{e}")
+
+    def _ac_save_preset(self):
+        name = simpledialog.askstring("Uložit preset", "Název presetu:", parent=self)
+        if not name:
+            return
+        data = self._ac_load_presets_file()
+        data[name] = self._ac_collect_settings()
+        self._ac_write_presets_file(data)
+        messagebox.showinfo("Autoclicker", f"Preset '{name}' uložen.")
+
+    def _ac_load_preset(self):
+        data = self._ac_load_presets_file()
+        if not data:
+            messagebox.showinfo("Autoclicker", "Žádné uložené presety.")
+            return
+        th = self.theme
+        # Malé dialog okno s OptionMenu
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Načíst preset")
+        dlg.configure(fg_color=th["content_bg"])
+        dlg.geometry("320x160")
+        dlg.transient(self.winfo_toplevel())
+        dlg.grab_set()
+
+        _label(dlg, "Vyberte preset:", 12, bold=True, color=th["text"]
+               ).pack(padx=16, pady=(16, 8), anchor="w")
+        names = sorted(data.keys())
+        sel_var = ctk.StringVar(value=names[0])
+        ctk.CTkOptionMenu(dlg, variable=sel_var, values=names,
+                          fg_color=th["secondary"], button_color=th["primary"],
+                          font=ctk.CTkFont("Segoe UI", 11), height=32
+                          ).pack(fill="x", padx=16, pady=4)
+
+        btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_row.pack(fill="x", padx=16, pady=12)
+
+        def _apply():
+            n = sel_var.get()
+            if n in data:
+                self._ac_apply_settings(data[n])
+            dlg.destroy()
+
+        def _delete():
+            n = sel_var.get()
+            if n in data and messagebox.askyesno("Smazat preset",
+                                                  f"Smazat preset '{n}'?", parent=dlg):
+                data.pop(n, None)
+                self._ac_write_presets_file(data)
+                dlg.destroy()
+
+        ctk.CTkButton(btn_row, text="Načíst", fg_color=th["primary"],
+                      hover_color=th["primary_hover"], height=30,
+                      command=_apply).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btn_row, text="Smazat", fg_color=th["secondary"],
+                      hover_color="#8b2020", height=30,
+                      command=_delete).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btn_row, text="Zrušit", fg_color=th["secondary"],
+                      hover_color=th["primary_hover"], height=30,
+                      command=dlg.destroy).pack(side="right")
 
     def _install_pyautogui(self):
         import subprocess as sp
@@ -1343,30 +1747,51 @@ class PCToolsPanel(ctk.CTkFrame):
         except Exception as e:
             messagebox.showerror("Chyba instalace", f"Nepodařilo se nainstalovat pynput:\n{e}")
 
+    def _ac_key_matches(self, key, hotkey_str: str) -> bool:
+        """Check if pynput key matches the hotkey string (e.g. 'F6', 'A')."""
+        if not hotkey_str:
+            return False
+        hotkey_str = hotkey_str.strip().upper()
+        if not hotkey_str:
+            return False
+        try:
+            if hotkey_str.startswith("F") and hotkey_str[1:].isdigit():
+                expected = f"f{hotkey_str[1:]}"
+                return hasattr(key, "name") and key.name == expected
+            key_name = None
+            if hasattr(key, "char") and key.char:
+                key_name = key.char.upper()
+            elif hasattr(key, "name") and key.name:
+                key_name = key.name.upper()
+            return key_name == hotkey_str
+        except Exception:
+            return False
+
     def _ac_setup_hotkey(self):
-        """Spustí pynput listener pro globální toggle hotkey — funguje i při minimalizaci do tray."""
+        """Spustí pynput listener pro globální start/stop hotkey."""
         if not PYNPUT_OK:
-            return  # pynput není nainstalován — varování a tlačítko pro instalaci jsou v UI
+            return
         try:
             from pynput import keyboard as _kb
 
             def _on_press(key):
                 try:
-                    hotkey_str = self._ac_hotkey_var.get().strip().upper()
-                    # Funkční klávesy (F1–F12)
-                    if hotkey_str.startswith("F") and hotkey_str[1:].isdigit():
-                        expected = f"f{hotkey_str[1:]}"
-                        if hasattr(key, "name") and key.name == expected:
+                    start_hk = self._ac_hotkey_var.get().strip().upper()
+                    stop_hk = self._ac_hotkey_stop_var.get().strip().upper()
+                    # F8 vždy zachytává kurzor v režimu "Pevná souřadnice"
+                    if (hasattr(key, "name") and key.name == "f8"
+                            and self._ac_pos_mode_var.get() == "fixed"
+                            and not self._ac_running):
+                        self.after(0, self._ac_start_capture)
+                        return
+                    if start_hk and start_hk == stop_hk:
+                        if self._ac_key_matches(key, start_hk):
                             self.after(0, self._toggle_autoclicker)
                     else:
-                        # Znakové klávesy
-                        key_name = None
-                        if hasattr(key, "char") and key.char:
-                            key_name = key.char.upper()
-                        elif hasattr(key, "name") and key.name:
-                            key_name = key.name.upper()
-                        if key_name == hotkey_str:
-                            self.after(0, self._toggle_autoclicker)
+                        if self._ac_key_matches(key, start_hk):
+                            self.after(0, self._start_autoclicker)
+                        elif self._ac_key_matches(key, stop_hk):
+                            self.after(0, self._stop_autoclicker)
                 except Exception:
                     pass
 
@@ -1375,7 +1800,7 @@ class PCToolsPanel(ctk.CTkFrame):
             listener.start()
             self._ac_hotkey_listener = listener
         except ImportError:
-            pass  # pynput není nainstalován — hotkey nefunguje, tlačítko funguje
+            pass
 
     def _toggle_autoclicker(self):
         if self._ac_running:
@@ -1386,49 +1811,192 @@ class PCToolsPanel(ctk.CTkFrame):
     def _start_autoclicker(self):
         if self._ac_running or not PYAUTOGUI_OK:
             return
+        # Validace CPS
         try:
             cps = float(self._ac_cps_var.get().strip())
-            if cps <= 0 or cps > 100:
+            if cps < 0.5 or cps > 100:
                 raise ValueError
         except ValueError:
-            messagebox.showerror("Autoclicker", "CPS musí být číslo 1–100.")
+            messagebox.showerror("Autoclicker", "CPS musí být číslo 0.5–100.")
             return
-
+        # Validace jitter
+        try:
+            jitter_ms = float(self._ac_jitter_var.get().strip() or "0")
+            if jitter_ms < 0:
+                jitter_ms = 0
+        except ValueError:
+            messagebox.showerror("Autoclicker", "Rozptyl musí být nezáporné číslo.")
+            return
+        # Validace limit počtu
+        max_clicks = None
+        if self._ac_count_mode_var.get() == "fixed":
+            try:
+                max_clicks = int(self._ac_count_var.get().strip())
+                if max_clicks <= 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Autoclicker", "Počet kliknutí musí být kladné celé číslo.")
+                return
+        # Validace duration
+        try:
+            duration = float(self._ac_duration_var.get().strip() or "0")
+            if duration < 0:
+                duration = 0
+        except ValueError:
+            messagebox.showerror("Autoclicker", "Doba běhu musí být nezáporné číslo.")
+            return
+        # Countdown
+        try:
+            countdown = int(float(self._ac_countdown_var.get().strip() or "0"))
+            if countdown < 0:
+                countdown = 0
+        except ValueError:
+            countdown = 0
+        # Fixed pos
+        use_fixed = (self._ac_pos_mode_var.get() == "fixed")
+        fx = fy = None
+        if use_fixed:
+            try:
+                fx = int(float(self._ac_x_var.get().strip()))
+                fy = int(float(self._ac_y_var.get().strip()))
+            except ValueError:
+                messagebox.showerror("Autoclicker", "X a Y musí být celá čísla.")
+                return
+        # Click type
+        type_map = {"Jednoduchý": 1, "Dvojklik": 2, "Trojklik": 3}
+        clicks_per_iter = type_map.get(self._ac_type_var.get(), 1)
         button = self._ac_button_var.get()
+
         self._ac_running = True
         self._ac_stop_event.clear()
         th = self.theme
-        if hasattr(self, "_ac_start_btn"):
-            self._ac_start_btn.configure(
-                text=" ⏹ Zastavit", fg_color="#8b2020", hover_color="#6b1818")
-        if hasattr(self, "_ac_status_label"):
-            self._ac_status_label.configure(
-                text=f"Běží — {cps} CPS ({button})",
-                text_color=th.get("success", "#4ade80"))
+        # UI flip to "running"
+        self._ac_set_ui_running(True)
 
-        interval = 1.0 / cps
+        def _start_real():
+            if not self._ac_running:
+                return
+            interval = 1.0 / cps
+            jitter_s = jitter_ms / 1000.0
+            start_ts = time.time()
+            count_holder = {"n": 0, "last_pushed": 0}
 
-        def _worker():
-            while not self._ac_stop_event.is_set():
+            def _push_counters(final=False):
+                n = count_holder["n"]
+                elapsed = int(time.time() - start_ts)
                 try:
-                    pyautogui.click(button=button)
+                    self._ac_clicks_label.configure(text=f"Kliknutí: {n}")
+                    self._ac_elapsed_label.configure(text=f"Čas: {_fmt_time(elapsed)}")
                 except Exception:
-                    break
-                self._ac_stop_event.wait(interval)
+                    pass
 
-        self._ac_thread = threading.Thread(target=_worker, daemon=True)
-        self._ac_thread.start()
+            def _tick_elapsed():
+                if not self._ac_running:
+                    return
+                _push_counters()
+                self.after(500, _tick_elapsed)
+            self.after(500, _tick_elapsed)
+
+            def _worker():
+                try:
+                    while not self._ac_stop_event.is_set():
+                        if max_clicks is not None and count_holder["n"] >= max_clicks:
+                            break
+                        if duration > 0 and (time.time() - start_ts) >= duration:
+                            break
+                        try:
+                            if use_fixed:
+                                pyautogui.click(x=fx, y=fy, button=button,
+                                                clicks=clicks_per_iter,
+                                                interval=0.02 if clicks_per_iter > 1 else 0.0)
+                            else:
+                                pyautogui.click(button=button,
+                                                clicks=clicks_per_iter,
+                                                interval=0.02 if clicks_per_iter > 1 else 0.0)
+                        except Exception:
+                            break
+                        count_holder["n"] += clicks_per_iter
+                        # Batch UI every ~5 clicks
+                        if count_holder["n"] - count_holder["last_pushed"] >= 5:
+                            count_holder["last_pushed"] = count_holder["n"]
+                            self.after(0, _push_counters)
+                        # Sleep (with jitter)
+                        wait = interval
+                        if jitter_s > 0:
+                            wait = interval + random.uniform(-jitter_s, jitter_s)
+                        wait = max(0.001, wait)
+                        if self._ac_stop_event.wait(wait):
+                            break
+                finally:
+                    self.after(0, _push_counters, True)
+                    self.after(0, self._stop_autoclicker)
+
+            self._ac_thread = threading.Thread(target=_worker, daemon=True)
+            self._ac_thread.start()
+
+        # Pre-start countdown (non-blocking via self.after)
+        if countdown > 0:
+            def _count_tick(n):
+                if not self._ac_running:
+                    return
+                if n > 0:
+                    try:
+                        self._ac_status_label.configure(
+                            text=f"Start za {n}…",
+                            text_color=th.get("warning", "#fbbf24"))
+                        self._ac_status_dot.configure(
+                            text_color=th.get("warning", "#fbbf24"))
+                    except Exception:
+                        pass
+                    self.after(1000, _count_tick, n - 1)
+                else:
+                    _start_real()
+            _count_tick(countdown)
+        else:
+            _start_real()
+
+    def _ac_set_ui_running(self, running: bool):
+        th = self.theme
+        if running:
+            try:
+                self._ac_start_btn.configure(
+                    text="⏹  Zastavit",
+                    fg_color="#8b2020", hover_color="#6b1818")
+            except Exception:
+                pass
+            try:
+                self._ac_status_label.configure(
+                    text="Běží", text_color=th.get("success", "#4ade80"))
+                self._ac_status_dot.configure(
+                    text_color=th.get("success", "#4ade80"))
+            except Exception:
+                pass
+            try:
+                self._ac_clicks_label.configure(text="Kliknutí: 0")
+                self._ac_elapsed_label.configure(text="Čas: 00:00")
+            except Exception:
+                pass
+        else:
+            try:
+                self._ac_start_btn.configure(
+                    text="▶  Spustit",
+                    fg_color=th["primary"], hover_color=th["primary_hover"])
+            except Exception:
+                pass
+            try:
+                self._ac_status_label.configure(
+                    text="Zastaven", text_color=th.get("text_dim", "#888"))
+                self._ac_status_dot.configure(
+                    text_color=th.get("text_dim", "#888"))
+            except Exception:
+                pass
 
     def _stop_autoclicker(self):
+        if not self._ac_running:
+            return
         self._ac_running = False
         self._ac_stop_event.set()
-        th = self.theme
-        if hasattr(self, "_ac_start_btn"):
-            self._ac_start_btn.configure(
-                text=" ▶ Spustit",
-                fg_color=th["primary"], hover_color=th["primary_hover"])
-        if hasattr(self, "_ac_status_label"):
-            self._ac_status_label.configure(text="Zastaven", text_color=th["text_dim"])
+        self._ac_set_ui_running(False)
 
     # ─── YOUTUBE DOWNLOADER ───────────────────────────────────────────────────
 
@@ -1526,17 +2094,70 @@ class PCToolsPanel(ctk.CTkFrame):
         if d:
             self._ytdl_outdir_var.set(d)
 
+    def _ytdl_is_frozen(self) -> bool:
+        return bool(getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"))
+
+    def _ytdl_local_bin_path(self) -> Path:
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+        return Path(base) / "ZeddiHub" / "bin" / "yt-dlp.exe"
+
+    def _ytdl_resolve_binary(self) -> Optional[str]:
+        """Vrátí cestu k yt-dlp.exe pokud existuje (lokální cache, PATH), jinak None."""
+        local = self._ytdl_local_bin_path()
+        if local.exists():
+            return str(local)
+        import shutil as _sh
+        found = _sh.which("yt-dlp")
+        if found:
+            return found
+        return None
+
     def _ytdl_check_installed(self) -> bool:
-        """Zkontroluje, zda je yt-dlp dostupný jako příkaz nebo Python modul."""
-        import shutil
-        if shutil.which("yt-dlp"):
+        if self._ytdl_resolve_binary():
             return True
+        if self._ytdl_is_frozen():
+            return False
         try:
             import importlib
             importlib.import_module("yt_dlp")
             return True
         except ImportError:
             return False
+
+    def _ytdl_download_standalone(self, url: str):
+        """Stáhne yt-dlp.exe standalone binary z GitHub do LOCALAPPDATA."""
+        import urllib.request
+        target = self._ytdl_local_bin_path()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        src = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+        tmp = target.with_suffix(".exe.tmp")
+
+        def _report(done: int, total: int):
+            if total > 0:
+                frac = min(0.95, done / total)
+                self.after(0, self._ytdl_progress.set, frac)
+                self.after(0, self._ytdl_status_var.set,
+                           f"Stahuji yt-dlp... {done//1024} / {total//1024} KB")
+
+        req = urllib.request.Request(src, headers={"User-Agent": "ZeddiHubTools"})
+        with urllib.request.urlopen(req, timeout=30) as resp, open(tmp, "wb") as out:
+            total = int(resp.headers.get("Content-Length") or 0)
+            done = 0
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                out.write(chunk)
+                done += len(chunk)
+                _report(done, total)
+        if target.exists():
+            try:
+                target.unlink()
+            except Exception:
+                pass
+        tmp.rename(target)
+        self.after(0, self._ytdl_status_var.set, "yt-dlp nainstalován. Spouštím stahování...")
+        self.after(0, lambda: self._ytdl_run(url))
 
     def _ytdl_start(self):
         url = self._ytdl_url_entry.get().strip()
@@ -1548,29 +2169,37 @@ class PCToolsPanel(ctk.CTkFrame):
             answer = messagebox.askyesno(
                 "Nainstalovat yt-dlp?",
                 "Nástroj yt-dlp není nainstalován.\n\n"
-                "Je nezbytný pro stahování videí a stáhne se\n"
-                "automaticky (~10 MB).\n\n"
-                "Chceš nainstalovat yt-dlp nyní?"
+                "Stáhne se standalone binárka (~13 MB) do\n"
+                "%LOCALAPPDATA%\\ZeddiHub\\bin\\yt-dlp.exe.\n\n"
+                "Pokračovat?"
             )
             if not answer:
                 self._ytdl_status_var.set("Stahování zrušeno — yt-dlp není nainstalován.")
                 return
 
-            self._ytdl_status_var.set("Instaluji yt-dlp, čekejte...")
-            self._set_textbox(self._ytdl_log, "Instaluji yt-dlp...")
+            self._ytdl_status_var.set("Stahuji yt-dlp...")
+            self._set_textbox(self._ytdl_log,
+                              f"Stahuji yt-dlp.exe z GitHub releases\n→ {self._ytdl_local_bin_path()}")
             self._ytdl_progress.set(0.05)
 
             def _install():
-                import subprocess as _sp, sys as _sys
                 try:
-                    _sp.check_call(
-                        [_sys.executable, "-m", "pip", "install", "yt-dlp"],
-                        creationflags=0x08000000
-                    )
-                    self.after(0, self._ytdl_status_var.set, "yt-dlp nainstalován. Spouštím stahování...")
-                    self.after(0, lambda: self._ytdl_run(url))
+                    if self._ytdl_is_frozen():
+                        self._ytdl_download_standalone(url)
+                    else:
+                        import subprocess as _sp
+                        _sp.check_call(
+                            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
+                            creationflags=0x08000000
+                        )
+                        self.after(0, self._ytdl_status_var.set,
+                                   "yt-dlp nainstalován. Spouštím stahování...")
+                        self.after(0, lambda: self._ytdl_run(url))
                 except Exception as e:
-                    self.after(0, self._set_textbox, self._ytdl_log, f"Chyba instalace yt-dlp:\n{e}")
+                    self.after(0, self._set_textbox, self._ytdl_log,
+                               f"Chyba instalace yt-dlp:\n{e}\n\n"
+                               f"Stáhni ručně z:\nhttps://github.com/yt-dlp/yt-dlp/releases/latest\n"
+                               f"a ulož jako:\n{self._ytdl_local_bin_path()}")
                     self.after(0, self._ytdl_status_var.set, "❌ Chyba instalace yt-dlp.")
                     self.after(0, self._ytdl_progress.set, 0)
 
@@ -1580,7 +2209,7 @@ class PCToolsPanel(ctk.CTkFrame):
         self._ytdl_run(url)
 
     def _ytdl_run(self, url: str):
-        import re as _re, sys as _sys, shutil as _shutil
+        import re as _re
         fmt_choice = self._ytdl_fmt_var.get()
         outdir = self._ytdl_outdir_var.get().strip() or str(Path.home() / "Downloads")
 
@@ -1593,12 +2222,16 @@ class PCToolsPanel(ctk.CTkFrame):
         else:
             fmt_args = ["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"]
 
-        yt_cmd = _shutil.which("yt-dlp")
+        yt_cmd = self._ytdl_resolve_binary()
         if yt_cmd:
             cmd = [yt_cmd] + fmt_args + ["-o", f"{outdir}/%(title)s.%(ext)s", url]
-        else:
-            cmd = [_sys.executable, "-m", "yt_dlp"] + fmt_args + [
+        elif not self._ytdl_is_frozen():
+            cmd = [sys.executable, "-m", "yt_dlp"] + fmt_args + [
                 "-o", f"{outdir}/%(title)s.%(ext)s", url]
+        else:
+            self._ytdl_status_var.set("❌ yt-dlp nenalezen.")
+            self._set_textbox(self._ytdl_log, "yt-dlp binárka nenalezena. Spusť instalaci znovu.")
+            return
 
         self._ytdl_status_var.set("Stahuji...")
         self._ytdl_progress.set(0.05)

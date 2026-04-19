@@ -27,17 +27,15 @@ from . import telemetry
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 LOGO_PATH = ASSETS_DIR / "logo2.png"          # header / sidebar logo
 ICON_PATH = ASSETS_DIR / "web_favicon.ico"    # window + tray icon
-LOGO_ICON_PATH = ASSETS_DIR / "logo_icon.png" # fallback
 
-SIDEBAR_W = 240
-HEADER_H = 54
+SIDEBAR_W = 244
+HEADER_H = 64
 
 # Section definitions: (section_id, label, fa_icon, game, items)
 # items: [(nav_id, label, fa_icon, requires_auth), ...]
 NAV_SECTIONS = [
     ("home",     None,    "house",        None,   None, False),
     ("pc_tools", None,    "laptop",       None,   None, False),
-    ("watchdog", None,    "bell",         None,   None, False),
     ("sec_cs2",  "CS2",   "crosshairs",   "cs2",  [
         ("cs2_player",  "player_tools",  "user",     False),
         ("cs2_server",  "server_tools",  "server",   True),
@@ -53,7 +51,18 @@ NAV_SECTIONS = [
         ("rust_server",  "server_tools",  "server",   True),
         ("rust_keybind", "keybind",       "keyboard", False),
     ], None),
-    ("game_tools", None, "gamepad", None, None, False),
+    # v2.1.0: Game Tools split into 4 panels
+    ("sec_game_tools", "game_tools_section", "gamepad", None, [
+        ("translator",      "translator",      "globe",           False),
+        ("sensitivity",     "nav_sensitivity", "crosshairs",      False),
+        ("edpi",            "nav_edpi",        "gauge",           False),
+        ("ping_tester",     "nav_ping_tester", "tower-broadcast", False),
+    ], None),
+    # v2.1.0: "Ostatní" section
+    ("sec_other", "sec_other", "bars", None, [
+        ("watchdog",  "nav_watchdog",  "bell",   False),
+        ("uploader",  "nav_uploader",  "upload", False),
+    ], None),
 ]
 
 # Map nav_id -> game for theme switching
@@ -63,13 +72,15 @@ NAV_GAME_MAP = {
     "rust_player": "rust", "rust_server": "rust", "rust_keybind": "rust",
     "home": "default", "pc_tools": "default", "translator": "default",
     "game_tools": "default",
+    "sensitivity": "default", "edpi": "default", "ping_tester": "default",
     "links": "default", "settings": "default", "watchdog": "default",
-    "about": "default",
+    "uploader": "default", "about": "default",
 }
 
 # nav_ids that show NO game badge in header
 NO_BADGE_IDS = {"home", "pc_tools", "translator", "game_tools", "links",
-                "settings", "watchdog", "about"}
+                "settings", "watchdog", "uploader", "about",
+                "sensitivity", "edpi", "ping_tester"}
 
 
 class AuthDialog(ctk.CTkToplevel):
@@ -384,7 +395,7 @@ class MainWindow(ctk.CTk):
                 return
             except Exception:
                 pass
-        for png_path in [LOGO_ICON_PATH, LOGO_PATH]:
+        for png_path in [LOGO_PATH]:
             if PIL_OK and png_path.exists():
                 try:
                     img = Image.open(png_path).resize((32, 32), Image.LANCZOS)
@@ -405,8 +416,8 @@ class MainWindow(ctk.CTk):
         self._header.pack_propagate(False)
         self._build_header()
 
-        # Thin separator
-        self._header_sep = ctk.CTkFrame(self._main, fg_color=th["border"], height=1, corner_radius=0)
+        # Thin separator — subtle Claude-app style divider
+        self._header_sep = ctk.CTkFrame(self._main, fg_color=th.get("divider", th["border"]), height=1, corner_radius=0)
         self._header_sep.pack(fill="x")
 
         # Body
@@ -419,8 +430,8 @@ class MainWindow(ctk.CTk):
         self._sidebar.pack_propagate(False)
         self._build_sidebar()
 
-        # Thin vertical separator
-        self._sidebar_sep = ctk.CTkFrame(body, fg_color=th["border"], width=1, corner_radius=0)
+        # Thin vertical separator — subtle divider
+        self._sidebar_sep = ctk.CTkFrame(body, fg_color=th.get("divider", th["border"]), width=1, corner_radius=0)
         self._sidebar_sep.pack(fill="y", side="left")
 
         # Content
@@ -433,28 +444,26 @@ class MainWindow(ctk.CTk):
         left = ctk.CTkFrame(self._header, fg_color="transparent")
         left.pack(side="left", padx=18, fill="y")
 
+        # v2.1.0: brand title lives in the sidebar — header keeps only the
+        # small logo + game badge to avoid duplication.
         if PIL_OK and LOGO_PATH.exists():
             try:
-                img = Image.open(LOGO_PATH).resize((32, 32), Image.LANCZOS)
-                self._header_logo = ctk.CTkImage(img, size=(32, 32))
+                img = Image.open(LOGO_PATH).resize((28, 28), Image.LANCZOS)
+                self._header_logo = ctk.CTkImage(img, size=(28, 28))
                 ctk.CTkLabel(left, image=self._header_logo, text="").pack(side="left", padx=(0, 10))
             except Exception:
                 pass
 
-        ctk.CTkLabel(left, text="ZeddiHub Tools",
-                     font=ctk.CTkFont("Segoe UI", 16, "bold"),
-                     text_color=th["primary"]).pack(side="left")
-
-        # Game badge gets a pill background for the new "Blur" look
+        # Game badge — rounded pill, colored by active game theme
         self._game_badge = ctk.CTkLabel(
             left, text="",
             font=ctk.CTkFont("Segoe UI", 10, "bold"),
             text_color=th["text_dim"],
             fg_color=th["glass"],
-            corner_radius=10,
-            padx=10 if False else 0,  # CTkLabel ignores padx — use text padding instead
+            corner_radius=12,
+            height=24,
         )
-        self._game_badge.pack(side="left", padx=(12, 0), pady=14)
+        self._game_badge.pack(side="left", padx=(14, 0), pady=16)
 
         # Right: auth status + version
         right = ctk.CTkFrame(self._header, fg_color="transparent")
@@ -510,42 +519,43 @@ class MainWindow(ctk.CTk):
     def _build_sidebar(self):
         th = self._get_current_theme()
         nav_text = th["text"]
-        nav_dim = th["text_dim"]
-        nav_hover = th["card_bg"]
+        nav_dim = th.get("text_muted", th["text_dim"])
+        nav_hover = th.get("nav_hover", th["card_bg"])
+        divider = th.get("divider", th["border"])
 
-        # Top logo area
-        logo_area = ctk.CTkFrame(self._sidebar, fg_color=th["bg"], height=60, corner_radius=0)
+        # Top logo area — generous breathing room
+        logo_area = ctk.CTkFrame(self._sidebar, fg_color=th["sidebar_bg"], height=80, corner_radius=0)
         logo_area.pack(fill="x")
         logo_area.pack_propagate(False)
 
         if PIL_OK and LOGO_PATH.exists():
             try:
-                img = Image.open(LOGO_PATH).resize((36, 36), Image.LANCZOS)
-                self._sidebar_logo_img = ctk.CTkImage(img, size=(36, 36))
+                img = Image.open(LOGO_PATH).resize((34, 34), Image.LANCZOS)
+                self._sidebar_logo_img = ctk.CTkImage(img, size=(34, 34))
                 ctk.CTkLabel(logo_area, image=self._sidebar_logo_img, text="").pack(
-                    side="left", padx=12, pady=12)
+                    side="left", padx=(16, 10), pady=22)
             except Exception:
                 pass
 
         ctk.CTkLabel(logo_area, text="ZeddiHub\nTools",
-                     font=ctk.CTkFont("Segoe UI", 11, "bold"),
-                     text_color=th["primary"], justify="left"
-                     ).pack(side="left", pady=12)
+                     font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                     text_color=th.get("text_strong", th["text"]), justify="left"
+                     ).pack(side="left", pady=22)
 
-        ctk.CTkFrame(self._sidebar, fg_color=th["border"], height=1).pack(fill="x")
+        ctk.CTkFrame(self._sidebar, fg_color=divider, height=1).pack(fill="x")
 
         # Scrollable nav area
         self._nav_scroll = ctk.CTkScrollableFrame(
             self._sidebar, fg_color="transparent",
-            scrollbar_button_color=th["border"],
+            scrollbar_button_color=divider,
             scrollbar_button_hover_color=th["secondary"]
         )
-        self._nav_scroll.pack(fill="both", expand=True, padx=0, pady=4)
+        self._nav_scroll.pack(fill="both", expand=True, padx=0, pady=6)
 
         self._build_nav_items()
 
         # Bottom section: settings + language
-        ctk.CTkFrame(self._sidebar, fg_color=th["border"], height=1).pack(fill="x", side="bottom")
+        ctk.CTkFrame(self._sidebar, fg_color=divider, height=1).pack(fill="x", side="bottom")
 
         lang = get_lang()
         lang_flag = "🇨🇿" if lang == "cs" else "🇬🇧"
@@ -556,60 +566,64 @@ class MainWindow(ctk.CTk):
             fg_color="transparent", hover_color=nav_hover,
             text_color=nav_dim, anchor="w",
             font=ctk.CTkFont("Segoe UI", 10),
-            height=30,
-            corner_radius=10,
+            height=32,
+            corner_radius=8,
+            border_width=0,
             command=self._toggle_language
         )
-        self._lang_btn.pack(fill="x", padx=8, pady=(2, 4), side="bottom")
+        self._lang_btn.pack(fill="x", padx=10, pady=(4, 6), side="bottom")
 
         self._auth_btn = ctk.CTkButton(
             self._sidebar,
-            image=icons.icon("right-to-bracket", 15, nav_text),
+            image=icons.icon("right-to-bracket", 15, nav_dim),
             text=" " + t("login"),
             compound="left",
             fg_color="transparent", hover_color=nav_hover,
             text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
             height=36,
-            corner_radius=10,
+            corner_radius=8,
+            border_width=0,
             command=self._show_auth_dialog
         )
-        self._auth_btn.pack(fill="x", padx=8, pady=2, side="bottom")
+        self._auth_btn.pack(fill="x", padx=10, pady=1, side="bottom")
 
         self._settings_btn = ctk.CTkButton(
             self._sidebar,
-            image=icons.icon("gear", 15, nav_text),
+            image=icons.icon("gear", 15, nav_dim),
             text="  " + t("settings"),
             compound="left",
             fg_color="transparent", hover_color=nav_hover,
             text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
             height=36,
-            corner_radius=10,
+            corner_radius=8,
+            border_width=0,
             command=lambda: self._navigate("settings")
         )
-        self._settings_btn.pack(fill="x", padx=8, pady=2, side="bottom")
+        self._settings_btn.pack(fill="x", padx=10, pady=1, side="bottom")
 
         self._links_btn = ctk.CTkButton(
             self._sidebar,
-            image=icons.icon("link", 15, nav_text),
+            image=icons.icon("link", 15, nav_dim),
             text="  " + t("links"),
             compound="left",
             fg_color="transparent", hover_color=nav_hover,
             text_color=nav_text, anchor="w",
             font=ctk.CTkFont("Segoe UI", 11),
             height=36,
-            corner_radius=10,
+            corner_radius=8,
+            border_width=0,
             command=lambda: self._navigate("links")
         )
-        self._links_btn.pack(fill="x", padx=8, pady=2, side="bottom")
+        self._links_btn.pack(fill="x", padx=10, pady=1, side="bottom")
 
     def _build_nav_items(self):
         th = self._get_current_theme()
         nav_text = th["text"]
-        nav_dim = th["text_dim"]
+        nav_dim = th.get("text_muted", th["text_dim"])
         nav_dim2 = th["text_dark"]
-        nav_hover = th["card_bg"]
+        nav_hover = th.get("nav_hover", th["card_bg"])
 
         # Load saved section states
         settings = load_settings()
@@ -627,24 +641,24 @@ class MainWindow(ctk.CTk):
                 display_label = {
                     "home":       t("home"),
                     "pc_tools":   t("pc_tools"),
-                    "watchdog":   "Watchdog",
                     "game_tools": t("game_tools"),
                 }.get(nav_id, nav_id)
                 btn = ctk.CTkButton(
                     self._nav_scroll,
-                    image=icons.icon(icon, 16, nav_text),
+                    image=icons.icon(icon, 16, nav_dim),
                     text=f"  {display_label}",
                     compound="left",
                     fg_color="transparent",
                     hover_color=nav_hover,
                     text_color=nav_text,
+                    border_width=0,
                     anchor="w",
                     font=ctk.CTkFont("Segoe UI", 12),
-                    height=38,
-                    corner_radius=10,
+                    height=36,
+                    corner_radius=8,
                     command=lambda nid=nav_id: self._navigate(nid)
                 )
-                btn.pack(fill="x", padx=8, pady=2)
+                btn.pack(fill="x", padx=10, pady=1)
                 self._nav_buttons[nav_id] = btn
             else:
                 # Wrapper keeps section header + children together so
@@ -659,21 +673,24 @@ class MainWindow(ctk.CTk):
                 arrow = "▼" if is_expanded else "▶"
                 # Translate label if it's a locale key (contains underscore), else use as-is
                 display_sec_label = t(label) if label and "_" in label else (label or "")
+                # Claude-app style: subtle tracked-caps category label, no background
+                spaced_label = "\u2009".join(display_sec_label.upper())
                 section_btn = ctk.CTkButton(
                     outer,
-                    image=icons.icon(icon, 14, nav_dim),
-                    text=f"  {display_sec_label}  {arrow}",
+                    image=icons.icon(icon, 12, nav_dim),
+                    text=f"  {spaced_label}   {arrow}",
                     compound="left",
                     fg_color="transparent",
                     hover_color=nav_hover,
                     text_color=nav_dim,
+                    border_width=0,
                     anchor="w",
-                    font=ctk.CTkFont("Segoe UI", 11, "bold"),
-                    height=34,
+                    font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                    height=30,
                     corner_radius=8,
                     command=lambda sid=sec_id: self._toggle_section(sid)
                 )
-                section_btn.pack(fill="x", padx=8, pady=(8, 2))
+                section_btn.pack(fill="x", padx=14, pady=(14, 2))
                 self._section_btns[sec_id] = section_btn
 
                 # Children frame lives inside outer — toggling it never reorders siblings
@@ -701,13 +718,14 @@ class MainWindow(ctk.CTk):
                         fg_color=fg,
                         hover_color=nav_hover,
                         text_color=tc,
+                        border_width=0,
                         anchor="w",
                         font=ctk.CTkFont("Segoe UI", 11),
-                        height=36,
-                        corner_radius=10,
+                        height=34,
+                        corner_radius=8,
                         command=lambda nid=nav_id, auth=requires_auth: self._on_nav_click(nid, auth)
                     )
-                    btn.pack(fill="x", padx=14, pady=1)
+                    btn.pack(fill="x", padx=10, pady=1)
                     self._nav_buttons[nav_id] = btn
 
     def _toggle_section(self, sec_id: str):
@@ -762,6 +780,14 @@ class MainWindow(ctk.CTk):
         self._navigate(nav_id)
 
     def _navigate(self, nav_id: str):
+        # v2.1.0: uploader is a web link, not a panel — open browser and return
+        if nav_id == "uploader":
+            try:
+                webbrowser.open("https://zeddihub.eu/tools/uploader/")
+            except Exception:
+                pass
+            return
+
         self._current_nav_id = nav_id
 
         # Determine game for this nav_id
@@ -772,13 +798,14 @@ class MainWindow(ctk.CTk):
 
         # Update header game badge
         if nav_id in NO_BADGE_IDS:
-            self._game_badge.configure(text="")
+            self._game_badge.configure(text="", fg_color="transparent")
         else:
             t_dict = get_theme(game)
             game_names = {"cs2": "Counter-Strike 2", "csgo": "CS:GO", "rust": "Rust"}
             self._game_badge.configure(
-                text=game_names.get(game, ""),
-                text_color=t_dict["primary"]
+                text="  " + game_names.get(game, "") + "  ",
+                text_color=t_dict["primary"],
+                fg_color=t_dict.get("accent_soft", t_dict["glass"]),
             )
 
         # Update nav button styles
@@ -787,26 +814,39 @@ class MainWindow(ctk.CTk):
             nid_game = NAV_GAME_MAP.get(nid, "default")
             btn_th = get_theme(nid_game, mode)
             cur_th = get_theme(self._current_game, mode)
+            nav_hover = cur_th.get("nav_hover", cur_th["card_bg"])
             if nid == nav_id:
-                btn.configure(fg_color=btn_th["primary"], text_color="#ffffff",
-                              hover_color=btn_th["primary_hover"])
+                active_bg = btn_th.get("nav_active_bg", btn_th["primary"])
+                active_text = btn_th.get("nav_active_text", "#ffffff")
+                btn.configure(fg_color=active_bg, text_color=active_text,
+                              hover_color=active_bg)
             else:
                 is_locked = nid in self._locked_navs
                 tc = cur_th["text_dark"] if is_locked else cur_th["text"]
                 fg = cur_th["secondary"] if is_locked else "transparent"
-                btn.configure(fg_color=fg, text_color=tc, hover_color=cur_th["card_bg"])
+                btn.configure(fg_color=fg, text_color=tc, hover_color=nav_hover)
 
-        # Update settings / links button highlights
+        # Update settings / links button highlights — pill style
+        def_th = get_theme("default", mode)
+        nav_hover_def = def_th.get("nav_hover", def_th["card_bg"])
+        active_bg_def = def_th.get("nav_active_bg", def_th["primary"])
+        active_text_def = def_th.get("nav_active_text", "#ffffff")
         if nav_id == "settings":
-            self._settings_btn.configure(fg_color=get_theme("default")["primary"], text_color="#ffffff")
+            self._settings_btn.configure(fg_color=active_bg_def, text_color=active_text_def,
+                                          hover_color=active_bg_def)
         else:
-            self._settings_btn.configure(fg_color="transparent", text_color="#aaaaaa")
+            self._settings_btn.configure(fg_color="transparent",
+                                          text_color=def_th["text"],
+                                          hover_color=nav_hover_def)
 
         if hasattr(self, "_links_btn"):
             if nav_id == "links":
-                self._links_btn.configure(fg_color=get_theme("default")["primary"], text_color="#ffffff")
+                self._links_btn.configure(fg_color=active_bg_def, text_color=active_text_def,
+                                           hover_color=active_bg_def)
             else:
-                self._links_btn.configure(fg_color="transparent", text_color="#aaaaaa")
+                self._links_btn.configure(fg_color="transparent",
+                                           text_color=def_th["text"],
+                                           hover_color=nav_hover_def)
 
         self._show_panel(nav_id)
 
@@ -822,14 +862,14 @@ class MainWindow(ctk.CTk):
         if hasattr(self, "_main"):
             self._main.configure(fg_color=th["bg"])
         if hasattr(self, "_header_sep"):
-            self._header_sep.configure(fg_color=th["border"])
+            self._header_sep.configure(fg_color=th.get("divider", th["border"]))
         if hasattr(self, "_sidebar_sep"):
-            self._sidebar_sep.configure(fg_color=th["border"])
+            self._sidebar_sep.configure(fg_color=th.get("divider", th["border"]))
 
         # Update all nav button hover/inactive colors for new theme
         nav_text = th["text"]
         nav_dim = th["text_dark"]
-        nav_hover = th["card_bg"]
+        nav_hover = th.get("nav_hover", th["card_bg"])
         for nid, btn in self._nav_buttons.items():
             if nid == self._current_nav_id:
                 continue  # keep active highlight
@@ -842,7 +882,7 @@ class MainWindow(ctk.CTk):
 
         # Update section header buttons
         for sid, sbtn in self._section_btns.items():
-            sbtn.configure(text_color=th["text_dim"], hover_color=nav_hover)
+            sbtn.configure(text_color=th.get("text_muted", th["text_dim"]), hover_color=nav_hover)
 
         # Update bottom sidebar buttons
         for attr in ("_settings_btn", "_links_btn", "_auth_btn", "_lang_btn"):
@@ -921,9 +961,21 @@ class MainWindow(ctk.CTk):
         elif nav_id == "rust_keybind":
             from .panels.keybind import KeybindPanel
             panel = KeybindPanel(container, game="rust", theme=th)
-        elif nav_id in ("translator", "game_tools"):
+        elif nav_id == "game_tools":
             from .panels.game_tools import GameToolsPanel
             panel = GameToolsPanel(container, theme=_th())
+        elif nav_id == "translator":
+            from .panels.translator import TranslatorPanel
+            panel = TranslatorPanel(container, theme=_th())
+        elif nav_id == "sensitivity":
+            from .panels.sensitivity import SensitivityPanel
+            panel = SensitivityPanel(container, theme=_th())
+        elif nav_id == "edpi":
+            from .panels.edpi import EDPIPanel
+            panel = EDPIPanel(container, theme=_th())
+        elif nav_id == "ping_tester":
+            from .panels.ping_tester import PingTesterPanel
+            panel = PingTesterPanel(container, theme=_th())
         elif nav_id == "links":
             from .panels.links import LinksPanel
             panel = LinksPanel(container, theme=_th())

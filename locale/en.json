@@ -228,5 +228,11 @@
   "file_share_upload": "Upload",
   "file_share_uploaded": "Uploaded",
   "advanced_pc_tools": "Advanced PC Tools",
-  "game_opt_section": "Game Optimization"
+  "game_opt_section": "Game Optimization",
+  "sec_other": "Other",
+  "nav_uploader": "File Uploader",
+  "nav_watchdog": "Watchdog",
+  "nav_sensitivity": "Sensitivity Converter",
+  "nav_edpi": "eDPI Calculator",
+  "nav_ping_tester": "Ping Tester"
 }

@@ -49,16 +49,22 @@ _THEME_FALLBACKS = {
     "sidebar_bg": "#0f0f17",
     "header_bg": "#0d0d16",
     "content_bg": "#111119",
-    "card_bg": "#1a1a26",
-    "card_hover": "#232333",
+    "card_bg": "#13131a",
+    "card_hover": "#181820",
     "glass": "#1e1e2c",
-    "secondary": "#1a8cdd",
+    "secondary": "#1a1a24",
     "border": "#2a2a3a",
     "outline": "#3a3a4a",
+    "divider": "#1a1a24",
+    "input_bg": "#1a1a24",
+    "nav_hover": "#1a1a22",
+    "nav_active_bg": "#0078D4",
+    "nav_active_text": "#ffffff",
     "text": "#e8e8f0",
+    "text_strong": "#f5f5f7",
     "text_dim": "#8080a0",
+    "text_muted": "#7a7a90",
     "text_dark": "#0a0a0f",
-    "text_muted": "#5a5a78",
     "success": "#22c55e",
     "error": "#ef4444",
     "warning": "#f59e0b",
@@ -109,6 +115,28 @@ def _theme_get(theme: dict, key: str, default: Any = None) -> Any:
         return (
             theme.get("secondary") if theme else None
         ) or _THEME_FALLBACKS.get("accent_soft")
+    if key == "divider":
+        return (
+            theme.get("border") if theme else None
+        ) or _THEME_FALLBACKS.get("divider")
+    if key == "input_bg":
+        return (
+            theme.get("secondary") if theme else None
+        ) or _THEME_FALLBACKS.get("input_bg")
+    if key == "nav_hover":
+        return (
+            theme.get("card_hover") if theme else None
+        ) or _THEME_FALLBACKS.get("nav_hover")
+    if key == "nav_active_bg":
+        return (
+            theme.get("primary") if theme else None
+        ) or _THEME_FALLBACKS.get("nav_active_bg")
+    if key == "nav_active_text":
+        return _THEME_FALLBACKS.get("nav_active_text")
+    if key == "text_strong":
+        return (
+            theme.get("text") if theme else None
+        ) or _THEME_FALLBACKS.get("text_strong")
     return _THEME_FALLBACKS.get(key)
 
 
@@ -171,22 +199,37 @@ def make_button(
     theme: dict,
     *,
     width: int = 180,
-    height: int = 36,
+    height: int = 40,
     accent: str = "primary",
+    variant: str = "primary",
     icon: Any = None,
     **kwargs,
 ) -> ctk.CTkButton:
-    """Create a themed CTkButton.
+    """Create a themed CTkButton with Claude-app aesthetic.
 
-    ``accent`` can be one of ``"primary"``, ``"secondary"``, ``"accent"``,
-    ``"danger"``, ``"success"``, ``"warning"`` - it chooses ``fg_color`` from
-    the theme.
+    ``variant`` (new): one of ``"primary"`` (filled accent),
+    ``"secondary"`` (transparent with hover fill), ``"ghost"`` (text-only).
+    The legacy ``accent`` kwarg still selects the accent color used by the
+    primary variant (``"primary"`` | ``"secondary"`` | ``"accent"`` |
+    ``"danger"`` | ``"success"`` | ``"warning"``).
     """
-    fg = _accent_color(theme, accent)
-    hover = _accent_hover(theme, accent)
-    text_color = _theme_get(theme, "button_fg")
-    # For subtle accents on dark bg ensure contrast
-    kwargs.setdefault("corner_radius", 10)
+    kwargs.setdefault("corner_radius", int(theme.get("radius_button", 10)) if theme else 10)
+    kwargs.setdefault("border_width", 0)
+
+    if variant == "ghost":
+        fg = "transparent"
+        hover = "transparent"
+        text_color = _theme_get(theme, "text_muted")
+    elif variant == "secondary":
+        fg = "transparent"
+        hover = _theme_get(theme, "card_hover")
+        text_color = _theme_get(theme, "text")
+    else:
+        fg = _accent_color(theme, accent)
+        hover = _accent_hover(theme, accent)
+        # Pick contrasting text color for filled button
+        text_color = _theme_get(theme, "nav_active_text") if accent == "primary" else _theme_get(theme, "button_fg")
+
     btn = ctk.CTkButton(
         parent,
         text=text,
@@ -207,31 +250,38 @@ def make_card(
     theme: dict,
     *,
     title: Optional[str] = None,
-    padding: int = 14,
+    padding: int = 20,
+    bordered: bool = False,
     **kwargs,
 ) -> ctk.CTkFrame:
-    """Create a card frame with border and optional H3 title label.
+    """Create a borderless card frame (Claude-app style).
 
-    If ``title`` is given the returned frame will already contain the title
-    label packed at the top; subsequent children added by the caller will stack
-    below it when packed with ``fill="x"``.
+    By default the card is borderless and relies on a subtle ``card_bg`` fill
+    to distinguish itself from the ``content_bg``. Pass ``bordered=True`` to
+    add a 1px ``divider``-colored outline for places that truly need a
+    visible boundary.
+
+    The ``padding`` kwarg is used for the optional title label and is also
+    stored on the returned frame as ``_card_padding`` so callers can reuse
+    the value for consistent inner spacing.
     """
-    kwargs.setdefault("corner_radius", 10)
+    kwargs.setdefault("corner_radius", int(theme.get("radius_card", 14)) if theme else 14)
     kwargs.setdefault("fg_color", _theme_get(theme, "card_bg"))
-    kwargs.setdefault("border_width", 1)
-    kwargs.setdefault("border_color", _theme_get(theme, "border"))
+    if bordered:
+        kwargs.setdefault("border_width", 1)
+        kwargs.setdefault("border_color", _theme_get(theme, "divider"))
+    else:
+        kwargs.setdefault("border_width", 0)
     card = ctk.CTkFrame(parent, **kwargs)
+    card._card_padding = padding
     if title:
         lbl = ctk.CTkLabel(
             card,
             text=title,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=_theme_get(theme, "text"),
+            font=ctk.CTkFont("Segoe UI", 14, "normal"),
+            text_color=_theme_get(theme, "text_strong"),
         )
-        lbl.pack(padx=padding, pady=(padding, padding // 2), anchor="w")
-    # Note: caller is responsible for further padding; padding arg is exposed
-    # for future use (e.g., inner container creation) but kept unused here to
-    # avoid forcing a layout mode on the consumer.
+        lbl.pack(padx=padding, pady=(padding, 8), anchor="w")
     return card
 
 
@@ -250,15 +300,15 @@ def make_entry(
     Placeholder is supported where customtkinter exposes ``placeholder_text``
     (>=5.x). On older versions the placeholder is silently dropped.
     """
-    border_normal = _theme_get(theme, "border")
     border_focus = _accent_color(theme, on_focus_accent)
+    input_bg = _theme_get(theme, "input_bg")
     entry_kwargs = dict(
         textvariable=var,
         width=width,
-        corner_radius=8,
-        border_width=1,
-        border_color=border_normal,
-        fg_color=_theme_get(theme, "glass"),
+        corner_radius=int(theme.get("radius_entry", 8)) if theme else 8,
+        border_width=0,
+        border_color=input_bg,
+        fg_color=input_bg,
         text_color=_theme_get(theme, "text"),
     )
     if placeholder:
@@ -281,13 +331,13 @@ def make_entry(
 
     def _on_focus_in(_e=None):
         try:
-            entry.configure(border_color=border_focus)
+            entry.configure(border_width=1, border_color=border_focus)
         except Exception:
             pass
 
     def _on_focus_out(_e=None):
         try:
-            entry.configure(border_color=border_normal)
+            entry.configure(border_width=0, border_color=input_bg)
         except Exception:
             pass
 
@@ -382,7 +432,7 @@ def make_dropdown(
         variable=var,
         values=list(values),
         width=width,
-        corner_radius=8,
+        corner_radius=int(theme.get("radius_entry", 8)) if theme else 8,
         fg_color=_theme_get(theme, "card_bg"),
         button_color=_theme_get(theme, "primary"),
         button_hover_color=_theme_get(theme, "primary_hover"),
@@ -404,7 +454,7 @@ def make_tabview(
     """Create a themed CTkTabview with Win11 pill-style segmented buttons."""
     tv_kwargs = dict(
         fg_color=_theme_get(theme, "content_bg"),
-        corner_radius=10,
+        corner_radius=int(theme.get("radius_card", 14)) if theme else 14,
         segmented_button_fg_color=_theme_get(theme, "card_bg"),
         segmented_button_selected_color=_theme_get(theme, "primary"),
         segmented_button_selected_hover_color=_theme_get(theme, "primary_hover"),
@@ -424,16 +474,74 @@ def make_section_title(
     theme: dict,
     **kwargs,
 ) -> ctk.CTkLabel:
-    """Small uppercase, dim section title used above groups of form rows."""
+    """Section title inside a card — 14px medium weight, strong text color."""
     kwargs.setdefault("anchor", "w")
     lbl = ctk.CTkLabel(
         parent,
-        text=text.upper(),
-        font=ctk.CTkFont(size=11, weight="bold"),
+        text=text,
+        font=ctk.CTkFont("Segoe UI", 14, "bold"),
+        text_color=_theme_get(theme, "text_strong"),
+        **kwargs,
+    )
+    return lbl
+
+
+def make_category_label(
+    parent,
+    text: str,
+    theme: dict,
+    **kwargs,
+) -> ctk.CTkLabel:
+    """Small uppercase, tracked category label — used for sidebar section
+    groupings. Tracked-caps via hair-space is intentional here."""
+    kwargs.setdefault("anchor", "w")
+    spaced = "\u2009".join(text.upper())
+    lbl = ctk.CTkLabel(
+        parent,
+        text=spaced,
+        font=ctk.CTkFont("Segoe UI", 10, "bold"),
         text_color=_theme_get(theme, "text_muted"),
         **kwargs,
     )
     return lbl
+
+
+def make_page_title(
+    parent,
+    text: str,
+    theme: dict,
+    *,
+    subtitle: Optional[str] = None,
+    **kwargs,
+) -> ctk.CTkFrame:
+    """Page-level title stack: 22px semi-bold title + optional 12px muted
+    subtitle. Returns a transparent frame — caller packs it at the top of the
+    content area."""
+    frame = ctk.CTkFrame(parent, fg_color="transparent", **kwargs)
+    ctk.CTkLabel(
+        frame,
+        text=text,
+        font=ctk.CTkFont("Segoe UI", 22, "bold"),
+        text_color=_theme_get(theme, "text_strong"),
+        anchor="w",
+    ).pack(anchor="w", pady=(0, 2 if subtitle else 0))
+    if subtitle:
+        ctk.CTkLabel(
+            frame,
+            text=subtitle,
+            font=ctk.CTkFont("Segoe UI", 12),
+            text_color=_theme_get(theme, "text_muted"),
+            anchor="w",
+        ).pack(anchor="w")
+    return frame
+
+
+def make_divider(parent, theme: dict, **kwargs) -> ctk.CTkFrame:
+    """1px horizontal divider line using the subtle ``divider`` token."""
+    kwargs.setdefault("height", 1)
+    kwargs.setdefault("corner_radius", 0)
+    kwargs.setdefault("fg_color", _theme_get(theme, "divider"))
+    return ctk.CTkFrame(parent, **kwargs)
 
 
 # ----------------------------------------------------------------------------
@@ -451,9 +559,9 @@ def apply_sidebar_active_style(button, theme: dict) -> None:
     """
     try:
         button.configure(
-            fg_color=_theme_get(theme, "accent_soft"),
-            hover_color=_theme_get(theme, "card_hover"),
-            text_color=_theme_get(theme, "primary"),
+            fg_color=_theme_get(theme, "nav_active_bg"),
+            hover_color=_theme_get(theme, "nav_active_bg"),
+            text_color=_theme_get(theme, "nav_active_text"),
         )
     except Exception:
         pass
@@ -498,6 +606,9 @@ __all__ = [
     "make_dropdown",
     "make_tabview",
     "make_section_title",
+    "make_category_label",
+    "make_page_title",
+    "make_divider",
     "apply_sidebar_active_style",
     "apply_animated_hover",
 ]
