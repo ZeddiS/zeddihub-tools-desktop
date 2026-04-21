@@ -2,6 +2,30 @@
 
 All notable changes to ZeddiHub Tools Desktop are documented in this file.
 
+## [1.7.2] — 2026-04-20
+
+### Added
+- **N-09 — Nahlásit chybu** (`gui/panels/about.py`): červené tlačítko v About panelu otevře dialog (stručný popis + podrobnosti), po odeslání otevře předvyplněný GitHub Issue s labely `bug,from-app` a automatickou zápatí (verze, OS, Python). Bez tokenu — přes `issues/new?title=&body=` URL v prohlížeči.
+- **N-13 — Novinky z GitHub Releases** (`gui/panels/news.py`): nový panel v sekci *Ostatní*. Asynchronně fetch posledních 10 release, karty s tagem, datem, názvem a zkráceným changelogem (≤ 700 znaků), tlačítko *Otevřít* na release URL.
+
+### Fixed
+- **F-07** — Nové nastavení *Chování při zavření okna* (minimize/quit). Tray notifikace při prvním skrytí do tray (uloženo v `settings.json` jako `tray_hint_shown`, zobrazí se jen jednou).
+- **F-12** — `app._generate_icon()` je no-op. Aplikace i tray používají `assets/web_favicon.ico` přímo, bez runtime generování PNG→ICO.
+- **F-13** — Updater dialog: `d.update_idletasks()` + deferred `grab_set()` opravuje prázdné okno. Header pill s novou verzí má nyní oranžové pozadí a je klikatelný (otevře dialog).
+- **E-05** — `gui/widgets.make_entry` používá nové theme tokeny `input_border` (1px klidově) a `input_focus` (2px focus ring v akcentové barvě). Dropdowny mají `input_bg` fill. Vstupní pole už neslévají s pozadím karty.
+
+### Changed
+- Tab *Účet* v *Nastavení* je skryt pokud uživatel není přihlášen.
+- Sidebar kompletně skrývá locked admin/premium položky pro uživatele bez oprávnění (nejen zamčená ikona).
+- Sidebar se plně přebuduje při změně auth stavu (`_rebuild_nav_items()`), místo in-place stylů.
+- `gui/version.py APP_VERSION = "1.7.2"` (bump z 2.0.2).
+
+### Files touched
+`gui/version.py`, `version.json`, `gui/main_window.py`, `gui/panels/about.py`, `gui/panels/news.py` (nový), `gui/panels/settings.py`, `gui/widgets.py`, `gui/themes.py`, `locale/cs.json`, `locale/en.json`.
+
+### Open items (for future releases)
+N-02, N-03, N-04, N-06, N-07, N-08, N-10, N-23 · E-01, E-02, E-03, E-04 · F-09, F-10, F-11 (většina webové úkoly mimo repo).
+
 ## [2.0.2] — 2026-04-19
 
 ### Added

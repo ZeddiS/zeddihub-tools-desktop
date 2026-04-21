@@ -73,10 +73,12 @@ def _label(parent, text, font_size=12, bold=False, color=None, **kw):
 
 
 class SettingsPanel(ctk.CTkFrame):
-    def __init__(self, parent, theme: dict, on_language_change: Optional[Callable] = None, **kwargs):
+    def __init__(self, parent, theme: dict, on_language_change: Optional[Callable] = None,
+                 on_auth_change: Optional[Callable] = None, **kwargs):
         super().__init__(parent, fg_color=theme["content_bg"], **kwargs)
         self.theme = theme
         self._on_language_change = on_language_change
+        self._on_auth_change = on_auth_change
         self._build()
 
     def _build(self):
@@ -104,12 +106,37 @@ class SettingsPanel(ctk.CTkFrame):
         tab.pack(fill="both", expand=True, padx=24, pady=(0, 16))
 
         tab.add(t("general"))
-        tab.add(t("account"))
+        # Account tab is only shown when the user is actually logged in.
+        # Logged-out visitors have nothing to manage there (see v2.0.3 UX pass).
+        show_account = False
+        try:
+            show_account = bool(is_authenticated())
+        except Exception:
+            show_account = False
+        if show_account:
+            tab.add(t("account"))
         tab.add(t("about"))
 
         self._build_general(tab.tab(t("general")))
-        self._build_account(tab.tab(t("account")))
+        if show_account:
+            self._build_account(tab.tab(t("account")))
         self._build_about(tab.tab(t("about")))
+
+        # Expose for external navigation (sidebar auth button → Účet tab)
+        self._tab = tab
+        self._has_account_tab = show_account
+
+    def switch_to_tab(self, name: str):
+        """Public: flip to a tab by semantic name ('general' | 'account' | 'about')."""
+        try:
+            if name == "account" and getattr(self, "_has_account_tab", False):
+                self._tab.set(t("account"))
+            elif name == "general":
+                self._tab.set(t("general"))
+            elif name == "about":
+                self._tab.set(t("about"))
+        except Exception:
+            pass
 
     # ─── GENERAL ──────────────────────────────────────────────────────────────
 
@@ -809,6 +836,14 @@ class SettingsPanel(ctk.CTkFrame):
 
     def _do_logout(self):
         logout()
+        # Propagate to MainWindow so the header chip, sidebar-locked items,
+        # and home login card all refresh — otherwise the user "looks"
+        # logged in everywhere except this panel.
+        if self._on_auth_change:
+            try:
+                self._on_auth_change()
+            except Exception:
+                pass
         # Refresh the panel by rebuilding
         for w in self.winfo_children():
             w.destroy()

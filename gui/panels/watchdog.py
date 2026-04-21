@@ -178,21 +178,34 @@ class WatchdogPanel(ctk.CTkFrame):
         self._log_box.pack(fill="x", padx=20, pady=(0, 16))
 
     def _load_servers(self):
-        """Load servers from the web API and populate the list."""
+        """Load servers from the web API and populate the list. Always prepends
+        the built-in ZeddiHub defaults so every user starts with them."""
+        defaults = [
+            {"name": "ZeddiHub Rust",  "ip": "93.99.7.86", "port": 28045, "game": "rust"},
+            {"name": "ZeddiHub CS2",   "ip": "93.99.7.63", "port": 27330, "game": "cs2"},
+            {"name": "ZeddiHub CS:GO #1", "ip": "93.99.7.63", "port": 27380, "game": "csgo"},
+            {"name": "ZeddiHub CS:GO #2", "ip": "93.99.7.86", "port": 27355, "game": "csgo"},
+            {"name": "ZeddiHub CS:GO #3", "ip": "93.99.7.86", "port": 27415, "game": "csgo"},
+        ]
+
         def _fetch():
+            merged = list(defaults)
             try:
                 req = urllib.request.Request(
                     SERVER_STATUS_URL,
                     headers={"User-Agent": "ZeddiHubTools/1.4.0"}
                 )
                 with urllib.request.urlopen(req, timeout=5) as resp:
-                    servers = json.loads(resp.read().decode())
-                self.after(0, self._populate_servers, servers)
+                    remote = json.loads(resp.read().decode())
+                seen = {(s["ip"], int(s["port"])) for s in merged}
+                for srv in remote:
+                    key = (srv.get("ip", ""), int(srv.get("port", 0)))
+                    if key not in seen:
+                        merged.append(srv)
+                        seen.add(key)
             except Exception:
-                # Add demo server
-                self.after(0, self._populate_servers, [
-                    {"name": "ZeddiHub Rust #1", "ip": "rust1.zeddihub.eu", "port": 28015, "game": "rust"},
-                ])
+                pass
+            self.after(0, self._populate_servers, merged)
 
         threading.Thread(target=_fetch, daemon=True).start()
 

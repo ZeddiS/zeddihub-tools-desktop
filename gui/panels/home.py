@@ -118,7 +118,7 @@ class HomePanel(ctk.CTkFrame):
         self._nav_callback = nav_callback
         self._server_widgets = []
         self._build()
-        self._start_status_refresh()
+        # Server status section removed — no background refresh anymore.
         self._load_recommended()
 
     def _build(self):
@@ -179,35 +179,12 @@ class HomePanel(ctk.CTkFrame):
         self._pc_home_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
         self._build_pc_tools_home(self._pc_home_card)
 
-        # Server status section — flat list, no chunky cards
-        srv_header = ctk.CTkFrame(scroll, fg_color="transparent")
-        srv_header.pack(fill="x", padx=32, pady=(20, 8))
-
-        _label(srv_header, t("server_status"), 14, bold=True,
-               color=th.get("text_strong", th["text"])
-               ).pack(side="left")
-
-        self.refresh_btn = ctk.CTkButton(
-            srv_header, text="↻ " + t("refresh"), height=28, width=90,
-            fg_color="transparent", hover_color=th.get("card_hover", th["secondary"]),
-            text_color=th.get("text_muted", th["text_dim"]),
-            border_width=0, corner_radius=8,
-            font=ctk.CTkFont("Segoe UI", 10),
-            command=self._refresh_status
-        )
-        self.refresh_btn.pack(side="right")
-
-        self.last_update_label = _label(srv_header, "", 10,
-                                        color=th.get("text_muted", th["text_dim"]))
-        self.last_update_label.pack(side="right", padx=10)
-
-        # Servers list card (holds flat rows with dividers)
-        self.servers_frame = make_card(scroll, th, padding=0)
-        self.servers_frame.pack(fill="x", padx=32, pady=4)
-
-        self.status_label = _label(scroll, t("loading") + "...", 11,
-                                   color=th.get("text_muted", th["text_dim"]))
-        self.status_label.pack(padx=32, pady=4, anchor="w")
+        # Server status section removed per user request (ZeddiHub-branded
+        # servers are no longer shown on the home page).
+        self.refresh_btn = None
+        self.servers_frame = None
+        self.status_label = None
+        self.last_update_label = None
 
         # Recommended tools section
         rec_header = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -442,16 +419,30 @@ class HomePanel(ctk.CTkFrame):
         threading.Thread(target=self._fetch_status, daemon=True).start()
 
     def _fetch_status(self):
+        defaults = [
+            {"name": "ZeddiHub Rust",     "ip": "93.99.7.86", "port": 28045, "game": "rust"},
+            {"name": "ZeddiHub CS2",      "ip": "93.99.7.63", "port": 27330, "game": "cs2"},
+            {"name": "ZeddiHub CS:GO #1", "ip": "93.99.7.63", "port": 27380, "game": "csgo"},
+            {"name": "ZeddiHub CS:GO #2", "ip": "93.99.7.86", "port": 27355, "game": "csgo"},
+            {"name": "ZeddiHub CS:GO #3", "ip": "93.99.7.86", "port": 27415, "game": "csgo"},
+        ]
+        merged = list(defaults)
         try:
             req = urllib.request.Request(
                 SERVER_STATUS_URL,
                 headers={"User-Agent": "ZeddiHubTools/1.0.0"}
             )
             with urllib.request.urlopen(req, timeout=8) as resp:
-                servers = json.loads(resp.read().decode())
-            self.after(0, self._update_server_cards, servers)
+                remote = json.loads(resp.read().decode())
+            seen = {(s["ip"], int(s["port"])) for s in merged}
+            for srv in remote:
+                key = (srv.get("ip", ""), int(srv.get("port", 0)))
+                if key not in seen:
+                    merged.append(srv)
+                    seen.add(key)
         except Exception:
-            self.after(0, self._update_server_cards, [])
+            pass
+        self.after(0, self._update_server_cards, merged)
 
     def _update_server_cards(self, servers: list):
         th = self.theme
@@ -466,11 +457,6 @@ class HomePanel(ctk.CTkFrame):
         if not servers:
             self.status_label.configure(
                 text="⚠ Nelze načíst status serverů (offline nebo API nedostupné).")
-            servers = [
-                {"name": "ZeddiHub Rust #1",  "ip": "rust1.zeddihub.eu",  "port": 28015, "game": "rust"},
-                {"name": "ZeddiHub CS2 #1",   "ip": "cs2.zeddihub.eu",    "port": 27015, "game": "cs2"},
-                {"name": "ZeddiHub CS:GO #1", "ip": "csgo.zeddihub.eu",   "port": 27015, "game": "csgo"},
-            ]
         else:
             self.status_label.configure(text="")
 

@@ -44,7 +44,13 @@ HEADER_H = 64
 # items: [(nav_id, label, fa_icon, requires_auth), ...]
 NAV_SECTIONS = [
     ("home",     None,    "house",        None,   None, False),
-    ("pc_tools", None,    "laptop",       None,   None, False),
+    ("sec_pc_tools", "nav_pc_tools_section", "laptop", None, [
+        ("pc_sysinfo",     "nav_pc_sysinfo",     "laptop",               False),
+        ("pc_nettools",    "nav_pc_nettools",    "tower-broadcast",      False),
+        ("pc_utility",     "nav_pc_utility",     "screwdriver-wrench",   False),
+        ("pc_gameopt",     "nav_pc_gameopt",     "gamepad",              False),
+        ("pc_advanced",    "nav_pc_advanced",    "shield-halved",        False),
+    ], None),
     ("sec_cs2",  "CS2",   "crosshairs",   "cs2",  [
         ("cs2_player",  "player_tools",  "user",     False),
         ("cs2_server",  "server_tools",  "server",   True),
@@ -67,12 +73,8 @@ NAV_SECTIONS = [
         ("edpi",            "nav_edpi",        "gauge",           False),
         ("ping_tester",     "nav_ping_tester", "tower-broadcast", False),
     ], None),
-    # v2.1.0: "Ostatní" section
-    ("sec_other", "sec_other", "bars", None, [
-        ("watchdog",       "nav_watchdog",       "bell",      False),
-        ("uploader",       "nav_uploader",       "upload",    False),
-        ("server_updater", "nav_server_updater", "cloud-arrow-down", True),
-    ], None),
+    # v2.1.0: "Ostatní" section removed — server_updater was moved to the
+    # downloadable modules catalog (admin-only) per user request.
 ]
 
 # Map nav_id -> game for theme switching
@@ -86,52 +88,193 @@ NAV_GAME_MAP = {
     "links": "default", "settings": "default", "watchdog": "default",
     "uploader": "default", "about": "default",
     "tools_download": "default",
-    "server_updater": "default",
+    "news": "default",
+    "pc_sysinfo": "default", "pc_nettools": "default",
+    "pc_utility": "default", "pc_gameopt": "default", "pc_advanced": "default",
 }
 
 # nav_ids that show NO game badge in header
 NO_BADGE_IDS = {"home", "pc_tools", "translator", "game_tools", "links",
-                "settings", "watchdog", "uploader", "about",
+                "settings", "watchdog", "uploader", "about", "news",
                 "sensitivity", "edpi", "ping_tester", "tools_download",
-                "server_updater"}
+                "pc_sysinfo", "pc_nettools", "pc_utility",
+                "pc_gameopt", "pc_advanced"}
 
 
-class AuthDialog(ctk.CTkToplevel):
-    """Login dialog for server tools access with registration info."""
+def _fade_in_toplevel(win, duration_ms: int = 160):
+    """Fade a CTkToplevel in from alpha 0 → 1 over ~duration_ms.
+    Silently no-ops on platforms where `-alpha` isn't supported."""
+    try:
+        win.attributes("-alpha", 0.0)
+    except Exception:
+        return
+    frames = max(1, duration_ms // 16)
+    step = 1.0 / frames
 
-    def __init__(self, parent, theme: dict, on_success=None):
-        super().__init__(parent)
+    def _tick(a: float):
+        try:
+            if not win.winfo_exists():
+                return
+            win.attributes("-alpha", min(a, 1.0))
+        except Exception:
+            return
+        if a < 1.0:
+            win.after(16, lambda: _tick(a + step))
+
+    win.after(10, lambda: _tick(step))
+
+
+class AuthDialog(ctk.CTkFrame):
+    """Centered in-window login overlay for server tools access.
+
+    Renders as a dimmed backdrop + centered card inside the main window
+    instead of a separate Toplevel. Dismissed via Esc, × button, or by
+    clicking the backdrop outside the card.
+    """
+
+    def __init__(self, parent, theme: dict, on_success=None, on_close=None):
+        # parent is the main CTk window — we place ourselves over its full area
+        super().__init__(parent, fg_color="#000000", corner_radius=0)
         self.theme = theme
         self.result = False
         self._on_success = on_success
-        self.title(t("login_title") + " – Server Tools")
-        self.geometry("480x560")
-        self.resizable(False, False)
-        self.configure(fg_color=theme.get("bg", theme["content_bg"]))
-        self.grab_set()
+        self._on_close = on_close
+        self._parent = parent
         self._user_var = ctk.StringVar(value="")
         self._pass_var = ctk.StringVar(value="")
+
+        # Place as full-window backdrop
+        self.place(relx=0, rely=0, relwidth=1, relheight=1)
+        # Embedded frames can't do real transparency, but we can fake a dim
+        # by blending over the current content_bg instead of a solid black —
+        # the underlying UI stays visually present under the backdrop.
+        try:
+            base = theme.get("content_bg", "#111119")
+            dim = self._darken(base, 0.55)
+            self.configure(fg_color=dim)
+        except Exception:
+            try:
+                self.configure(fg_color="#0f1014")
+            except Exception:
+                pass
+
+        # Build card
         self._build()
 
-        # Try to load saved credentials
+        # Load saved credentials
         saved = load_credentials()
         if saved:
             self._user_var.set(saved[0])
             self._pass_var.set(saved[1])
             self._remember_var.set(True)
 
+        # Click on backdrop (not card) = close
+        self.bind("<Button-1>", self._on_backdrop_click)
+        # Esc at toplevel closes overlay
+        try:
+            top = self.winfo_toplevel()
+            self._esc_binding = top.bind("<Escape>", lambda _e: self._safe_close(), add="+")
+        except Exception:
+            self._esc_binding = None
+
+        # Focus into username entry shortly after mount
+        self.after(80, self._focus_first_entry)
+
+    @staticmethod
+    def _darken(hex_color: str, factor: float) -> str:
+        """Multiply RGB by (1-factor). factor in [0..1]."""
+        try:
+            c = hex_color.lstrip("#")
+            r = int(c[0:2], 16); g = int(c[2:4], 16); b = int(c[4:6], 16)
+            k = max(0.0, 1.0 - factor)
+            r = int(r * k); g = int(g * k); b = int(b * k)
+            return "#%02x%02x%02x" % (r, g, b)
+        except Exception:
+            return "#0f1014"
+
+    def _focus_first_entry(self):
+        try:
+            self._user_entry.focus_set()
+        except Exception:
+            pass
+
+    def _on_backdrop_click(self, event):
+        # Only dismiss if the click landed on the backdrop itself (not on
+        # any child widget of the card).
+        if event.widget is self:
+            self._safe_close()
+
+    def _safe_close(self):
+        # Unbind escape
+        try:
+            if self._esc_binding is not None:
+                self.winfo_toplevel().unbind("<Escape>", self._esc_binding)
+        except Exception:
+            pass
+        cb = self._on_close
+        parent = self._parent
+        # Hide first so the underlying UI is visible the moment we destroy
+        try:
+            self.place_forget()
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        # Force a repaint of the parent so the content behind shows up
+        try:
+            parent.update_idletasks()
+        except Exception:
+            pass
+        if cb:
+            try:
+                cb()
+            except Exception:
+                pass
+
     def _build(self):
         th = self.theme
 
-        # Root container with 32px generous padding (Claude-style)
-        root = ctk.CTkFrame(self, fg_color="transparent")
-        root.pack(fill="both", expand=True, padx=32, pady=32)
+        # Centered card (fixed-ish size, pinned by .place on backdrop)
+        card = ctk.CTkFrame(
+            self,
+            fg_color=th.get("bg", th["content_bg"]),
+            border_color=th.get("divider", th.get("border", "#2a2a2a")),
+            border_width=1,
+            corner_radius=16,
+            width=480, height=560,
+        )
+        card.place(relx=0.5, rely=0.5, anchor="center")
+        card.pack_propagate(False)
+        self._card = card
+
+        # Swallow clicks on the card so backdrop handler doesn't fire
+        card.bind("<Button-1>", lambda _e: "break")
+
+        # Top row with close × button
+        top_row = ctk.CTkFrame(card, fg_color="transparent", height=32)
+        top_row.pack(fill="x", padx=16, pady=(12, 0))
+        top_row.pack_propagate(False)
+        ctk.CTkButton(
+            top_row, text="×", width=28, height=28,
+            fg_color="transparent",
+            hover_color=th.get("card_hover", th["secondary"]),
+            text_color=th.get("text_muted", th["text_dim"]),
+            font=ctk.CTkFont("Segoe UI", 16, "bold"),
+            corner_radius=8,
+            command=self._safe_close,
+        ).pack(side="right")
+
+        # Root content container with generous padding (Claude-style)
+        root = ctk.CTkFrame(card, fg_color="transparent")
+        root.pack(fill="both", expand=True, padx=28, pady=(4, 24))
 
         # Page title
         make_page_title(
             root, t("login_title"), th,
             subtitle=t("login_subtitle"),
-        ).pack(fill="x", anchor="w", pady=(0, 20))
+        ).pack(fill="x", anchor="w", pady=(0, 16))
 
         # Tab view: Login / Register (styled via tabview defaults)
         self._tab = ctk.CTkTabview(
@@ -218,7 +361,7 @@ class AuthDialog(ctk.CTkToplevel):
         ).pack(side="left", fill="x", expand=True, padx=(0, 8))
 
         make_button(
-            btn_row, t("cancel"), self.destroy, th,
+            btn_row, t("cancel"), self._safe_close, th,
             variant="ghost",
             height=42, width=100,
             font=ctk.CTkFont("Segoe UI", 12),
@@ -286,18 +429,49 @@ class AuthDialog(ctk.CTkToplevel):
                 self.result = True
                 from . import telemetry as _telem
                 _telem.on_login(user)
-                if self._on_success:
-                    self._on_success()
-                self.destroy()
+                # Capture parent + callback BEFORE destroying the overlay —
+                # `self.master` / `self.after` are unusable once the widget
+                # has been torn down.
+                parent = self._parent
+                cb = self._on_success
+                self._safe_close()
+                if cb and parent is not None:
+                    try:
+                        parent.after(0, cb)
+                    except Exception:
+                        try:
+                            cb()
+                        except Exception:
+                            pass
             else:
-                self.status_var.set(f"✗ {msg}")
+                try:
+                    self.status_var.set(f"✗ {msg}")
+                except Exception:
+                    pass
 
-        verify_access(user, pw, callback=lambda s, m: self.after(0, on_result, s, m))
+        # Guard the bounce-back — if the overlay was closed before verify_access
+        # finishes, `self.after` would explode on a dead widget.
+        def _dispatch(s, m):
+            try:
+                if self.winfo_exists():
+                    self.after(0, on_result, s, m)
+            except Exception:
+                pass
+        verify_access(user, pw, callback=_dispatch)
 
 
 class MainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
+
+        # CRITICAL: hide window IMMEDIATELY to prevent any paint flash.
+        # Must be the first thing after super().__init__() — before any
+        # widget is created. Order: alpha=0 first, then withdraw.
+        try:
+            self.attributes("-alpha", 0.0)
+            self.withdraw()
+        except Exception:
+            pass
 
         # Initialize locale
         locale_init()
@@ -310,12 +484,18 @@ class MainWindow(ctk.CTk):
         self._current_game: str = "default"
         self._current_nav_id: str = "home"
         self._locked_navs: set = set()
+        # Module-update tracking (filled by background thread)
+        self._updatable_slugs: dict[str, str] = {}  # slug -> newest_version
+        self._module_update_toast = None
 
         icons.preload()
         self._setup_window()
         self._setup_icon()
         self._build_layout()
         self._navigate("home")
+
+        # Reveal window with a short fade-in once the layout is painted.
+        self.after(10, self._reveal_with_fade)
 
         # Check for updates in background (callback safely scheduled on main thread)
         check_for_update(callback=lambda r: self.after(0, self._on_update_check, r))
@@ -328,6 +508,9 @@ class MainWindow(ctk.CTk):
 
         # Telemetry: launch event (fire after a short delay so UI is ready)
         self.after(2000, lambda: telemetry.on_launch(get_current_user()))
+
+        # Check installed modules for new versions in background
+        self.after(1500, self._check_module_updates_bg)
 
         # System tray
         self._tray = None
@@ -427,6 +610,45 @@ class MainWindow(ctk.CTk):
                       fg_color=th["primary"], hover_color=th["primary_hover"],
                       font=ctk.CTkFont("Segoe UI", 11), height=34,
                       command=d.destroy).pack(pady=(14, 16))
+
+    def _reveal_with_fade(self, duration_ms: int = 140):
+        """Fade the main window in from alpha 0 → 1. Hides the Win11 black
+        flash by forcing a full paint BEFORE the window becomes visible."""
+        try:
+            # Pre-paint while still at alpha 0 and withdrawn
+            self.attributes("-alpha", 0.0)
+            self.update_idletasks()
+            self.deiconify()
+            self.update_idletasks()
+            self.lift()
+        except Exception:
+            pass
+
+        steps = max(5, duration_ms // 16)
+        inc = 1.0 / steps
+
+        def _step(alpha: float):
+            try:
+                eased = 1.0 - (1.0 - alpha) * (1.0 - alpha)
+                self.attributes("-alpha", min(eased, 1.0))
+            except Exception:
+                return
+            if alpha < 1.0:
+                self.after(16, lambda: _step(min(alpha + inc, 1.0)))
+
+        _step(inc)
+
+    def show_with_fade(self):
+        """Public entrypoint used by tray / restore paths."""
+        try:
+            self.state("normal")
+        except Exception:
+            pass
+        self._reveal_with_fade(duration_ms=140)
+        try:
+            self.focus_force()
+        except Exception:
+            pass
 
     def _setup_window(self):
         self.title("ZeddiHub Tools")
@@ -675,22 +897,57 @@ class MainWindow(ctk.CTk):
         )
         self._links_btn.pack(fill="x", padx=10, pady=1, side="bottom")
 
+    def _rebuild_nav_items(self):
+        """Destroy and re-render sidebar nav items — used on auth state change
+        so locked/unlocked items can appear/disappear cleanly."""
+        try:
+            for child in list(self._nav_scroll.winfo_children()):
+                child.destroy()
+        except Exception:
+            pass
+        self._nav_buttons = {}
+        self._section_btns = {}
+        self._section_frames = {}
+        self._locked_navs = set()
+        # _build_nav_items already calls _build_external_tools_section at its
+        # tail — never call it a second time here (that caused duplicate
+        # "Ostatní nástroje" sections after login).
+        self._build_nav_items()
+
     def _build_nav_items(self):
         th = self._get_current_theme()
         nav_text = th["text"]
         nav_dim = th.get("text_muted", th["text_dim"])
         nav_dim2 = th["text_dark"]
         nav_hover = th.get("nav_hover", th["card_bg"])
+        divider_color = th.get("divider", th.get("border", "#2a2a3a"))
+
+        def _pack_divider(parent=self._nav_scroll):
+            tk.Frame(parent, height=1, bg=divider_color,
+                     bd=0, highlightthickness=0).pack(
+                fill="x", padx=14, pady=(8, 0))
 
         # Load saved section states
         settings = load_settings()
         saved_states = settings.get("sidebar_sections", {})
 
+        first_rendered = False
         for entry in NAV_SECTIONS:
             if len(entry) == 6:
                 sec_id, label, icon, game, children, _ = entry
             else:
                 continue
+
+            # Skip section if all children require auth and user isn't authenticated
+            if children is not None:
+                _visible = [c for c in children
+                            if not (len(c) >= 4 and c[3] and not is_authenticated())]
+                if not _visible:
+                    continue
+
+            if first_rendered:
+                _pack_divider()
+            first_rendered = True
 
             if children is None:
                 # Top-level nav button (home, pc_tools, watchdog)
@@ -718,6 +975,15 @@ class MainWindow(ctk.CTk):
                 btn.pack(fill="x", padx=10, pady=1)
                 self._nav_buttons[nav_id] = btn
             else:
+                # Skip the whole section if every child is locked — v2.0.3:
+                # locked tools must not be visible at all to users without access.
+                visible_children = [
+                    c for c in children
+                    if not (len(c) >= 4 and c[3] and not is_authenticated())
+                ]
+                if not visible_children:
+                    continue
+
                 # Wrapper keeps section header + children together so
                 # pack_forget/pack on children_frame never changes order.
                 outer = ctk.CTkFrame(self._nav_scroll, fg_color="transparent")
@@ -758,40 +1024,80 @@ class MainWindow(ctk.CTk):
                     children_frame.pack(fill="x", padx=0, pady=0)
 
                 for nav_id, child_label_key, child_icon, requires_auth in children:
+                    # v2.0.3: locked items are hidden entirely, not rendered dimmed.
+                    if requires_auth and not is_authenticated():
+                        self._locked_navs.add(nav_id)
+                        continue
                     # child_label_key is a locale key → translate it
                     child_label = t(child_label_key)
-                    locked = requires_auth and not is_authenticated()
-                    if locked:
-                        self._locked_navs.add(nav_id)
-                    child_img = icons.icon("lock", 14, nav_dim2) if locked else icons.icon(child_icon, 14, nav_text)
-                    tc = nav_dim2 if locked else nav_text
-                    fg = th["secondary"] if locked else "transparent"
+                    child_img = icons.icon(child_icon, 14, nav_text)
+                    tc = nav_text
+                    fg = "transparent"
 
-                    btn = ctk.CTkButton(
-                        children_frame,
-                        image=child_img,
-                        text=f"   {child_label}",
-                        compound="left",
-                        fg_color=fg,
-                        hover_color=nav_hover,
-                        text_color=tc,
-                        border_width=0,
-                        anchor="w",
-                        font=ctk.CTkFont("Segoe UI", 11),
-                        height=34,
-                        corner_radius=8,
-                        command=lambda nid=nav_id, auth=requires_auth: self._on_nav_click(nid, auth)
-                    )
-                    btn.pack(fill="x", padx=10, pady=1)
-                    self._nav_buttons[nav_id] = btn
+                    # Premium/Admin pill for items that were locked and are
+                    # now visible because the user authenticated.
+                    show_pill = bool(requires_auth) and is_authenticated()
+                    if show_pill:
+                        admin_flag = False
+                        try:
+                            admin_flag = bool(is_admin())
+                        except Exception:
+                            admin_flag = False
+                        row = ctk.CTkFrame(children_frame, fg_color="transparent")
+                        row.pack(fill="x", padx=10, pady=1)
+                        btn = ctk.CTkButton(
+                            row,
+                            image=child_img,
+                            text=f"   {child_label}",
+                            compound="left",
+                            fg_color=fg,
+                            hover_color=nav_hover,
+                            text_color=tc,
+                            border_width=0,
+                            anchor="w",
+                            font=ctk.CTkFont("Segoe UI", 11),
+                            height=34,
+                            corner_radius=8,
+                            command=lambda nid=nav_id, auth=requires_auth: self._on_nav_click(nid, auth)
+                        )
+                        btn.pack(side="left", fill="x", expand=True)
+                        pill_text = "ADMIN" if admin_flag else "PREMIUM"
+                        pill_bg = "#f5a623" if admin_flag else "#22c55e"
+                        ctk.CTkLabel(
+                            row, text=pill_text,
+                            font=ctk.CTkFont("Segoe UI", 8, "bold"),
+                            text_color="#0a0a0a",
+                            fg_color=pill_bg,
+                            corner_radius=10,
+                            width=56, height=18,
+                        ).pack(side="right", padx=(0, 6))
+                        self._nav_buttons[nav_id] = btn
+                    else:
+                        btn = ctk.CTkButton(
+                            children_frame,
+                            image=child_img,
+                            text=f"   {child_label}",
+                            compound="left",
+                            fg_color=fg,
+                            hover_color=nav_hover,
+                            text_color=tc,
+                            border_width=0,
+                            anchor="w",
+                            font=ctk.CTkFont("Segoe UI", 11),
+                            height=34,
+                            corner_radius=8,
+                            command=lambda nid=nav_id, auth=requires_auth: self._on_nav_click(nid, auth)
+                        )
+                        btn.pack(fill="x", padx=10, pady=1)
+                        self._nav_buttons[nav_id] = btn
 
         # Admin-only "Ostatní nástroje" section (external tools)
+        if first_rendered:
+            _pack_divider()
         self._build_external_tools_section()
 
     def _build_external_tools_section(self):
-        """Admin-only sidebar section for external downloaded tools."""
-        if not is_admin():
-            return
+        """Sidebar section for downloadable modules — catalog + installed."""
         th = self._get_current_theme()
         nav_text = th["text"]
         nav_dim = th.get("text_muted", th["text_dim"])
@@ -846,20 +1152,208 @@ class MainWindow(ctk.CTk):
         for entry in external_tools.list_installed():
             slug = entry.get("slug")
             icon_name = entry.get("icon", "wrench")
+            has_update = slug in getattr(self, "_updatable_slugs", {})
+            label_text = f"   {entry.get('name', slug)}"
+            if has_update:
+                # Append orange bell suffix (FontAwesome bell rendered via PIL
+                # is a single-color image, so we use a unicode bell to keep the
+                # color orange inline with the label text). CTk buttons only
+                # accept one `image`, so the right-side bell is a sibling label
+                # placed after the button via a small container frame.
+                label_text = f"   {entry.get('name', slug)}"
+            row = ctk.CTkFrame(children_frame, fg_color="transparent")
+            row.pack(fill="x", padx=10, pady=1)
             ebtn = ctk.CTkButton(
-                children_frame,
+                row,
                 image=icons.icon(icon_name, 14, nav_text),
-                text=f"   {entry.get('name', slug)}",
+                text=label_text,
                 compound="left", fg_color="transparent",
                 hover_color=nav_hover, text_color=nav_text,
                 border_width=0, anchor="w",
                 font=ctk.CTkFont("Segoe UI", 11), height=34, corner_radius=8,
-                command=lambda s=slug: external_tools.launch_tool(s)
+                command=lambda s=slug: self._open_installed_module(s)
             )
-            ebtn.pack(fill="x", padx=10, pady=1)
+            ebtn.pack(side="left", fill="x", expand=True)
+            if has_update:
+                bell_lbl = ctk.CTkLabel(
+                    row,
+                    image=icons.icon("bell", 13, "#f0a500"),
+                    text="",
+                    fg_color="transparent",
+                )
+                bell_lbl.pack(side="right", padx=(0, 8))
+                # Bell click → navigate to updates page
+                bell_lbl.bind("<Button-1>", lambda _e: self._navigate("tools_download"))
+                try:
+                    bell_lbl.configure(cursor="hand2")
+                except Exception:
+                    pass
+            self._nav_buttons[f"mod:{slug}"] = ebtn
+
+    def _open_installed_module(self, slug: str):
+        """Navigate to a dynamic panel backed by an installed module."""
+        self._navigate(f"mod:{slug}")
+
+    # ── Module update detection ─────────────────────────────────────────────
+    @staticmethod
+    def _ver_tuple(v: str) -> tuple:
+        try:
+            return tuple(int(x) for x in str(v).strip().lstrip("v").split(".") if x.isdigit())
+        except Exception:
+            return (0,)
+
+    def _check_module_updates_bg(self):
+        """Fetch catalog in a background thread and flag installed modules
+        whose version is older than the catalog version."""
+        import threading
+
+        def _worker():
+            try:
+                catalog = external_tools.fetch_catalog()
+            except Exception:
+                catalog = []
+            installed = {e.get("slug"): e for e in external_tools.list_installed()}
+            updatable: dict[str, str] = {}
+            for item in catalog:
+                slug = item.get("slug")
+                if not slug or slug not in installed:
+                    continue
+                cat_ver = item.get("version", "0.0.0")
+                inst_ver = installed[slug].get("version", "0.0.0")
+                if self._ver_tuple(cat_ver) > self._ver_tuple(inst_ver):
+                    updatable[slug] = cat_ver
+            try:
+                self.after(0, self._on_module_updates_found, updatable)
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_module_updates_found(self, updatable: dict):
+        self._updatable_slugs = updatable or {}
+        if not self._updatable_slugs:
+            return
+        # Refresh sidebar so bells appear next to installed modules
+        try:
+            self.refresh_external_tools_sidebar()
+        except Exception:
+            pass
+        # Show a toast in bottom-right corner
+        try:
+            self._show_module_update_toast()
+        except Exception:
+            pass
+
+    def _show_module_update_toast(self):
+        """Floating card bottom-right — 'N nástrojů má aktualizaci'. Auto-dismiss 8s."""
+        if not self._updatable_slugs:
+            return
+        # Dismiss any previous
+        try:
+            if self._module_update_toast is not None:
+                self._module_update_toast.destroy()
+        except Exception:
+            pass
+
+        th = self._get_current_theme()
+        n = len(self._updatable_slugs)
+        first_name = None
+        # Try to show first slug's pretty name from installed registry
+        for e in external_tools.list_installed():
+            if e.get("slug") in self._updatable_slugs:
+                first_name = e.get("name", e.get("slug"))
+                break
+
+        toast = ctk.CTkFrame(
+            self,
+            fg_color=th.get("card_bg", "#1a1a1a"),
+            border_color="#f0a500",
+            border_width=1,
+            corner_radius=12,
+        )
+        self._module_update_toast = toast
+
+        # Header row: bell + title + close
+        hdr = ctk.CTkFrame(toast, fg_color="transparent")
+        hdr.pack(fill="x", padx=14, pady=(12, 2))
+        ctk.CTkLabel(
+            hdr, image=icons.icon("bell", 16, "#f0a500"), text="",
+            fg_color="transparent",
+        ).pack(side="left")
+        ctk.CTkLabel(
+            hdr,
+            text="  Dostupná aktualizace" if n == 1 else f"  Dostupné aktualizace ({n})",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            text_color=th.get("text_strong", th["text"]),
+            fg_color="transparent",
+        ).pack(side="left")
+        ctk.CTkButton(
+            hdr, text="×", width=24, height=24,
+            fg_color="transparent", hover_color=th.get("card_hover", th["secondary"]),
+            text_color=th.get("text_muted", th["text_dim"]),
+            font=ctk.CTkFont("Segoe UI", 14, "bold"),
+            corner_radius=8, command=self._dismiss_module_update_toast,
+        ).pack(side="right")
+
+        # Body text
+        if n == 1 and first_name:
+            body_text = f"{first_name} má novější verzi."
+        else:
+            body_text = f"{n} nainstalovaných nástrojů má novější verzi."
+        ctk.CTkLabel(
+            toast, text=body_text,
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=th.get("text_muted", th["text_dim"]),
+            fg_color="transparent", anchor="w", justify="left",
+        ).pack(fill="x", padx=14, pady=(0, 8))
+
+        # Action row
+        act = ctk.CTkFrame(toast, fg_color="transparent")
+        act.pack(fill="x", padx=14, pady=(0, 12))
+        ctk.CTkButton(
+            act, text="Zobrazit", width=110, height=30,
+            fg_color="#f0a500", hover_color="#d99400",
+            text_color="#111111",
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            corner_radius=8,
+            command=self._open_updates_from_toast,
+        ).pack(side="left")
+        ctk.CTkButton(
+            act, text="Později", width=80, height=30,
+            fg_color="transparent",
+            hover_color=th.get("card_hover", th["secondary"]),
+            text_color=th.get("text_muted", th["text_dim"]),
+            font=ctk.CTkFont("Segoe UI", 10),
+            corner_radius=8,
+            command=self._dismiss_module_update_toast,
+        ).pack(side="left", padx=(6, 0))
+
+        toast.place(relx=1.0, rely=1.0, anchor="se", x=-20, y=-20)
+        # Auto-dismiss after 8s
+        self.after(8000, self._dismiss_module_update_toast)
+
+    def _open_updates_from_toast(self):
+        self._dismiss_module_update_toast()
+        self._navigate("tools_download")
+
+    def _dismiss_module_update_toast(self):
+        try:
+            if self._module_update_toast is not None and self._module_update_toast.winfo_exists():
+                self._module_update_toast.destroy()
+        except Exception:
+            pass
+        self._module_update_toast = None
 
     def refresh_external_tools_sidebar(self):
         """Rebuild only the external tools section (called after install/uninstall)."""
+        # Prune stale nav button refs — widgets inside the outer frame are
+        # about to be destroyed, and leaving dangling Tcl paths in
+        # _nav_buttons crashes every subsequent _navigate() call.
+        stale = [nid for nid in self._nav_buttons
+                 if nid == "tools_download" or nid.startswith("mod:")]
+        for nid in stale:
+            self._nav_buttons.pop(nid, None)
+
         if hasattr(self, "_external_section_outer"):
             try:
                 self._external_section_outer.destroy()
@@ -909,12 +1403,12 @@ class MainWindow(ctk.CTk):
 
     def _on_nav_click(self, nav_id: str, requires_auth: bool):
         if requires_auth and not is_authenticated():
-            dialog = AuthDialog(self, get_theme(self._current_game),
-                                on_success=lambda: self.after(0, self._update_auth_ui))
-            self.wait_window(dialog)
-            if not dialog.result:
-                return
-            self._update_auth_ui()
+            def _after_login():
+                self._update_auth_ui()
+                self._navigate(nav_id)
+            AuthDialog(self, get_theme(self._current_game),
+                       on_success=lambda: self.after(0, _after_login))
+            return
 
         self._navigate(nav_id)
 
@@ -935,17 +1429,49 @@ class MainWindow(ctk.CTk):
             self._current_game = game
             self._apply_theme()
 
-        # Update header game badge
-        if nav_id in NO_BADGE_IDS:
-            self._game_badge.configure(text="", fg_color="transparent")
+        # Update header badge — every panel gets a label pill
+        t_dict = get_theme(game)
+        game_names = {"cs2": "Counter-Strike 2", "csgo": "CS:GO", "rust": "Rust"}
+        section_labels = {
+            "home": t("home"),
+            "pc_tools": t("pc_tools"),
+            "pc_sysinfo": t("pc_tools"),
+            "pc_nettools": t("pc_tools"),
+            "pc_utility": t("pc_tools"),
+            "pc_gameopt": t("pc_tools"),
+            "pc_advanced": t("pc_tools"),
+            "game_tools": t("game_tools_section"),
+            "translator": t("game_tools_section"),
+            "sensitivity": t("game_tools_section"),
+            "edpi": t("game_tools_section"),
+            "ping_tester": t("game_tools_section"),
+            "links": t("links"),
+            "settings": t("settings_title"),
+            "about": t("about"),
+            "tools_download": t("nav_tools_download"),
+            "news": t("news_title"),
+            "watchdog": t("nav_watchdog"),
+        }
+        if nav_id and nav_id.startswith("mod:"):
+            slug = nav_id[4:]
+            try:
+                reg = external_tools.load_registry()
+                entry = reg.get("installed", {}).get(slug, {})
+                label_text = entry.get("name", slug)
+            except Exception:
+                label_text = slug
+        elif game in game_names:
+            label_text = game_names[game]
         else:
-            t_dict = get_theme(game)
-            game_names = {"cs2": "Counter-Strike 2", "csgo": "CS:GO", "rust": "Rust"}
+            label_text = section_labels.get(nav_id, "")
+        if label_text:
             self._game_badge.configure(
-                text="  " + game_names.get(game, "") + "  ",
+                text="  " + label_text + "  ",
                 text_color=t_dict["primary"],
                 fg_color=t_dict.get("accent_soft", t_dict["glass"]),
             )
+        else:
+            self._game_badge.configure(text="", fg_color="transparent")
 
         # Update nav button styles
         mode = ctk.get_appearance_mode().lower()
@@ -1069,10 +1595,23 @@ class MainWindow(ctk.CTk):
         elif nav_id == "pc_tools":
             from .panels.pc_tools import PCToolsPanel
             panel = PCToolsPanel(container, theme=_th())
+        elif nav_id and nav_id.startswith("pc_"):
+            from .panels import pc_subpanels
+            _pc_map = {
+                "pc_sysinfo":     pc_subpanels.PCSysInfoPanel,
+                "pc_nettools":    pc_subpanels.PCNetToolsPanel,
+                "pc_utility":     pc_subpanels.PCUtilityPanel,
+                "pc_gameopt":     pc_subpanels.PCGameOptPanel,
+                "pc_advanced":    pc_subpanels.PCAdvancedPanel,
+            }
+            cls = _pc_map.get(nav_id)
+            if cls is not None:
+                panel = cls(container, theme=_th())
         elif nav_id == "settings":
             from .panels.settings import SettingsPanel
             panel = SettingsPanel(container, theme=_th(),
-                                   on_language_change=self._on_language_change)
+                                   on_language_change=self._on_language_change,
+                                   on_auth_change=self._update_auth_ui)
         elif nav_id == "cs2_player":
             from .panels.cs2 import CS2PlayerPanel
             panel = CS2PlayerPanel(container, theme=th)
@@ -1125,20 +1664,85 @@ class MainWindow(ctk.CTk):
             # N-12: O aplikaci panel
             from .panels.about import AboutPanel
             panel = AboutPanel(container, theme=_th(), nav_callback=self._navigate)
+        elif nav_id == "news":
+            # N-13: Novinky z GitHub Releases
+            from .panels.news import NewsPanel
+            panel = NewsPanel(container, theme=_th(), nav_callback=self._navigate)
         elif nav_id == "tools_download":
             from .panels.tools_download import ToolsDownloadPanel
             panel = ToolsDownloadPanel(
                 container, theme=_th(),
                 on_refresh_sidebar=self.refresh_external_tools_sidebar,
+                on_open_module=self._open_installed_module,
             )
-        elif nav_id == "server_updater":
-            from .panels.server_updater import ServerUpdaterPanel
-            panel = ServerUpdaterPanel(container, theme=_th())
-
+        elif nav_id and nav_id.startswith("mod:"):
+            slug = nav_id[4:]
+            try:
+                cls, _name = external_tools.load_panel_class(slug)
+                panel = cls(container, theme=_th(), nav_callback=self._navigate)
+            except Exception as e:
+                panel = ctk.CTkFrame(container, fg_color=_th().get("content_bg", "#0a0a0f"))
+                ctk.CTkLabel(
+                    panel,
+                    text=f"Chyba načtení modulu '{slug}':\n{e}",
+                    font=ctk.CTkFont("Segoe UI", 12),
+                    text_color=_th().get("text", "#fff"),
+                    justify="left", wraplength=520,
+                ).pack(padx=24, pady=24, anchor="w")
         if panel:
+            # Force a layout pass BEFORE pack so children resolve their
+            # themed colors; then pack as the final atomic render.
+            try:
+                panel.update_idletasks()
+                container.update_idletasks()
+            except Exception:
+                pass
             panel.pack(fill="both", expand=True)
             self._current_panel = panel
             telemetry.on_panel_open(nav_id, get_current_user())
+
+    def _fade_in_panel(self, panel):
+        """Subtle opacity-like fade on panel switch by interpolating the
+        panel's fg_color from container bg → target over ~140 ms.
+        Uses a tiny color easing via widget update after() calls.
+        """
+        try:
+            target = panel.cget("fg_color")
+        except Exception:
+            return
+        # Skip transparent panels — they'd look jumpy without a base color.
+        if not target or target == "transparent":
+            return
+
+        bg = self._get_current_theme().get("content_bg", "#111119")
+
+        def _mix(c1: str, c2: str, r: float) -> str:
+            try:
+                a = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+                b = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+                return "#%02x%02x%02x" % (
+                    int(a[0] + (b[0] - a[0]) * r),
+                    int(a[1] + (b[1] - a[1]) * r),
+                    int(a[2] + (b[2] - a[2]) * r),
+                )
+            except Exception:
+                return c2
+
+        tgt = target if isinstance(target, str) else str(target)
+        if not tgt.startswith("#") or len(tgt) != 7:
+            return
+
+        def _step(t: float):
+            if not panel.winfo_exists():
+                return
+            try:
+                panel.configure(fg_color=_mix(bg, tgt, min(t, 1.0)))
+            except Exception:
+                return
+            if t < 1.0:
+                panel.after(16, lambda: _step(t + 0.15))
+
+        _step(0.0)
 
     def _open_auth_dialog(self, on_success=None):
         """N-11: Public wrapper — opens login/logout dialog with optional success callback.
@@ -1159,22 +1763,61 @@ class MainWindow(ctk.CTk):
                 if on_success:
                     self.after(50, on_success)
         else:
-            dialog = AuthDialog(self, get_theme(self._current_game),
-                                on_success=_combined_success)
-            self.wait_window(dialog)
-            if dialog.result:
-                self.after(0, self._update_auth_ui)
-                if on_success:
-                    self.after(50, on_success)
+            # In-window overlay — callback handles success; no wait_window.
+            AuthDialog(self, get_theme(self._current_game),
+                       on_success=_combined_success)
 
     def _show_auth_dialog(self):
-        """Sidebar auth button — delegates to _open_auth_dialog without extra callback."""
+        """Sidebar auth button.
+
+        - Authenticated → navigate to Settings > Účet (no popup).
+        - Not authenticated → open the login overlay.
+        """
+        if is_authenticated():
+            self._navigate("settings")
+            # After the panel mounts, force the Account tab to open.
+            self.after(50, self._focus_settings_account_tab)
+            return
         self._open_auth_dialog()
 
-    def _update_auth_ui(self):
-        # Refresh admin-only external tools sidebar section on auth change
+    def _focus_settings_account_tab(self):
+        """Flip SettingsPanel to its 'Účet' tab if it exposes a hook."""
         try:
-            self.refresh_external_tools_sidebar()
+            panel = self._current_panel
+            if panel is None:
+                return
+            # Common hooks: switch_to_tab(name) / _tab.set(name) / set_section().
+            if hasattr(panel, "switch_to_tab"):
+                panel.switch_to_tab("account")
+                return
+            if hasattr(panel, "_tab"):
+                try:
+                    panel._tab.set(t("account"))
+                    return
+                except Exception:
+                    try:
+                        panel._tab.set("Účet")
+                        return
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    def _update_auth_ui(self):
+        # v2.0.3: rebuild entire sidebar nav so locked items are hidden/shown
+        # cleanly on auth state change (previously they were just re-styled).
+        try:
+            self._rebuild_nav_items()
+        except Exception:
+            pass
+        # Re-apply current active-nav styling (rebuild cleared button state)
+        try:
+            if self._current_nav_id and self._current_nav_id in self._nav_buttons:
+                th = get_theme(NAV_GAME_MAP.get(self._current_nav_id, "default"))
+                self._nav_buttons[self._current_nav_id].configure(
+                    fg_color=th.get("nav_active_bg", th["primary"]),
+                    text_color=th.get("nav_active_text", "#ffffff"),
+                )
         except Exception:
             pass
         if is_authenticated():
@@ -1185,31 +1828,6 @@ class MainWindow(ctk.CTk):
             self._auth_btn.configure(
                 image=icons.icon("check", 15, "#4ade80"),
                 text=f"  {t('logged_in_as', user=user)}", text_color="#4ade80")
-
-            # Unlock locked nav items
-            for entry in NAV_SECTIONS:
-                if len(entry) < 6:
-                    continue
-                sec_id, label, icon, game, children, _ = entry
-                if children is None:
-                    continue
-                for nav_id, child_label_key, child_icon, requires_auth in children:
-                    child_label = t(child_label_key)
-                    if requires_auth and nav_id in self._nav_buttons:
-                        self._locked_navs.discard(nav_id)
-                        btn = self._nav_buttons[nav_id]
-                        if nav_id == self._current_nav_id:
-                            th = get_theme(NAV_GAME_MAP.get(nav_id, "default"))
-                            btn.configure(
-                                image=icons.icon(child_icon, 14, "#ffffff"),
-                                text=f"   {child_label}",
-                                fg_color=th["primary"], text_color="#ffffff")
-                        else:
-                            cur_th = self._get_current_theme()
-                            btn.configure(
-                                image=icons.icon(child_icon, 14, cur_th["text"]),
-                                text=f"   {child_label}",
-                                fg_color="transparent", text_color=cur_th["text"])
         else:
             self._auth_label.configure(
                 image=icons.icon("lock-open", 13, "#666666"),
@@ -1224,26 +1842,6 @@ class MainWindow(ctk.CTk):
                 self._current_panel._refresh_login_card()
         except Exception:
             pass
-
-        if not is_authenticated():
-            # Re-lock nav items
-            th = self._get_current_theme()
-            for entry in NAV_SECTIONS:
-                if len(entry) < 6:
-                    continue
-                sec_id, label, icon, game, children, _ = entry
-                if children is None:
-                    continue
-                for nav_id, child_label_key, child_icon, requires_auth in children:
-                    child_label = t(child_label_key)
-                    if requires_auth and nav_id in self._nav_buttons:
-                        self._locked_navs.add(nav_id)
-                        btn = self._nav_buttons[nav_id]
-                        btn.configure(
-                            image=icons.icon("lock", 14, th["text_dark"]),
-                            text=f"   {child_label}",
-                            fg_color=th["secondary"], text_color=th["text_dark"]
-                        )
 
     def _toggle_appearance_mode(self):
         current = ctk.get_appearance_mode().lower()
@@ -1313,6 +1911,10 @@ class MainWindow(ctk.CTk):
                 save_settings(settings)
                 self._show_tray_notice()
                 return  # notice has its own close/minimize buttons
+            try:
+                self.attributes("-alpha", 0.0)
+            except Exception:
+                pass
             self.withdraw()
             # F-07: volitelná tray notifikace
             try:
@@ -1363,11 +1965,29 @@ class MainWindow(ctk.CTk):
                       ).pack(side="left", width=90)
 
     def _quit_app(self):
-        """Full shutdown: stop tray then destroy window."""
-        if self._tray is not None:
-            self._tray.stop()
+        """Full shutdown: stop tray, end mainloop, destroy window, force-exit.
+
+        Background threads (verify_access, updater, module-catalog check…)
+        can keep the Python process alive after Tk is torn down, which
+        manifests as 'app won't close / must kill task'. We force-exit at
+        the end to make sure the process actually goes away.
+        """
+        try:
+            if self._tray is not None:
+                self._tray.stop()
+        except Exception:
+            pass
+        try:
+            self.quit()
+        except Exception:
+            pass
         try:
             self.destroy()
+        except Exception:
+            pass
+        import os
+        try:
+            os._exit(0)
         except Exception:
             pass
 

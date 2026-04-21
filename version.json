@@ -1,7 +1,7 @@
 {
-  "version": "2.0.2",
-  "release_date": "2026-04-19",
-  "changelog": "v2.0.2: Server Updater (4-layer remote monitoring — Steam builds, Oxide/uMod, MetaMod+SourceMod+CSSharp, per-plugin GitHub), admin-only 'Other Tools' section with downloadable modules, role-based access (admin/premium/user), Windows autostart + start-minimized toggles, first-launch wizard %APPDATA% default, refreshed Google Apps Script integration.",
+  "version": "1.7.2",
+  "release_date": "2026-04-20",
+  "changelog": "v1.7.2: N-09 Report a bug (GitHub Issue prefill z About panelu, bez tokenu), N-13 Novinky panel (GitHub Releases feed), F-07 close behavior volba (minimize/quit) + tray notifikace při prvním skrytí, F-12 ikona používá assets/web_favicon.ico (no-op generate), F-13 updater dialog fix (update_idletasks + deferred grab_set, header pill s orange bg), E-05 Windows 11 Dark Gaming vstupní pole (input_border/input_focus + focus ring 2px), skrytí 'Účet' tabu v Settings pro nepřihlášené, kompletní skrytí locked admin/premium položek ze sidebaru, rebuild sidebar při změně auth stavu.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

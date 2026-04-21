@@ -165,10 +165,13 @@ class TrayIcon:
 
     def _show_window(self):
         """Must be called from main thread via after()."""
-        self._app.deiconify()
-        self._app.lift()
-        self._app.focus_force()
-        self._app.state("normal")
+        if hasattr(self._app, "show_with_fade"):
+            self._app.show_with_fade()
+        else:
+            self._app.deiconify()
+            self._app.lift()
+            self._app.focus_force()
+            self._app.state("normal")
 
     def _show_and_navigate(self, nav_id: str):
         self._show_window()

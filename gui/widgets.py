@@ -57,6 +57,11 @@ _THEME_FALLBACKS = {
     "outline": "#3a3a4a",
     "divider": "#1a1a24",
     "input_bg": "#1a1a24",
+    "input_border": "#3a3a4a",
+    "input_focus": "#f0a500",
+    "glow_primary": "#ffb91f",
+    "glow_accent": "#ff8a1f",
+    "nav_active_glow": "#ff6a00",
     "nav_hover": "#1a1a22",
     "nav_active_bg": "#0078D4",
     "nav_active_text": "#ffffff",
@@ -300,14 +305,15 @@ def make_entry(
     Placeholder is supported where customtkinter exposes ``placeholder_text``
     (>=5.x). On older versions the placeholder is silently dropped.
     """
-    border_focus = _accent_color(theme, on_focus_accent)
     input_bg = _theme_get(theme, "input_bg")
+    input_border = _theme_get(theme, "input_border") or _theme_get(theme, "border")
+    input_focus = _theme_get(theme, "input_focus") or _accent_color(theme, on_focus_accent)
     entry_kwargs = dict(
         textvariable=var,
         width=width,
         corner_radius=int(theme.get("radius_entry", 8)) if theme else 8,
-        border_width=0,
-        border_color=input_bg,
+        border_width=1,
+        border_color=input_border,
         fg_color=input_bg,
         text_color=_theme_get(theme, "text"),
     )
@@ -331,13 +337,13 @@ def make_entry(
 
     def _on_focus_in(_e=None):
         try:
-            entry.configure(border_width=1, border_color=border_focus)
+            entry.configure(border_width=2, border_color=input_focus)
         except Exception:
             pass
 
     def _on_focus_out(_e=None):
         try:
-            entry.configure(border_width=0, border_color=input_bg)
+            entry.configure(border_width=1, border_color=input_border)
         except Exception:
             pass
 
@@ -433,7 +439,7 @@ def make_dropdown(
         values=list(values),
         width=width,
         corner_radius=int(theme.get("radius_entry", 8)) if theme else 8,
-        fg_color=_theme_get(theme, "card_bg"),
+        fg_color=_theme_get(theme, "input_bg"),
         button_color=_theme_get(theme, "primary"),
         button_hover_color=_theme_get(theme, "primary_hover"),
         dropdown_fg_color=_theme_get(theme, "card_bg"),

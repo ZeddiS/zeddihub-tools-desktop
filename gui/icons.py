@@ -154,6 +154,10 @@ CHARS: dict[str, str] = {
     "screwdriver-wrench":   "\uf7d9",
     "temperature-half":     "\uf2c9",
     "gauge":                "\uf624",
+    "gauge-high":           "\uf625",
+    "gauge-simple":         "\uf629",
+    "clock-rotate-left":    "\uf1da",
+    "chart-simple":         "\ue473",
     "bolt":                 "\uf0e7",
     # Communication
     "comment":              "\uf075",

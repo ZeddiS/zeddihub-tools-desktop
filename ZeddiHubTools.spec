@@ -15,6 +15,7 @@ a = Analysis(
     datas=[
         ('assets', 'assets'),
         ('locale', 'locale'),
+        ('webhosting/data/admin_apps.json', '.'),
     ],
     hiddenimports=[
         'customtkinter',

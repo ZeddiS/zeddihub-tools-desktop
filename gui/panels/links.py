@@ -64,15 +64,74 @@ class LinksPanel(ctk.CTkFrame):
         tab = ctk.CTkTabview(self, fg_color=t["sidebar_bg"])
         tab.pack(fill="both", expand=True, padx=16, pady=16)
 
-        tab.add("Rychlé odkazy")
-        tab.add("DNS Správa")
-        tab.add("📁 File Uploader")
-        tab.add("ℹ Credits")
+        TAB_LINKS   = "🔗 Rychlé odkazy"
+        TAB_DNS     = "🌐 DNS Správa"
+        TAB_UPLOAD  = "📁 File Uploader"
+        TAB_NEWS    = "📰 Novinky"
+        TAB_MODULES = "📦 Stahování modulů"
+        TAB_CREDITS = "ℹ Credits"
 
-        self._build_links(tab.tab("Rychlé odkazy"))
-        self._build_dns(tab.tab("DNS Správa"))
-        self._build_uploader(tab.tab("📁 File Uploader"))
-        self._build_credits(tab.tab("ℹ Credits"))
+        tab.add(TAB_LINKS)
+        tab.add(TAB_DNS)
+        tab.add(TAB_UPLOAD)
+        tab.add(TAB_NEWS)
+        tab.add(TAB_MODULES)
+        tab.add(TAB_CREDITS)
+
+        self._build_links(tab.tab(TAB_LINKS))
+        self._build_dns(tab.tab(TAB_DNS))
+        self._build_uploader(tab.tab(TAB_UPLOAD))
+        self._build_news(tab.tab(TAB_NEWS))
+        self._build_modules(tab.tab(TAB_MODULES))
+        self._build_credits(tab.tab(TAB_CREDITS))
+
+    def _build_news(self, tab):
+        """Embed the News panel (N-13) directly inside a tab."""
+        t = self.theme
+        try:
+            from .news import NewsPanel
+            panel = NewsPanel(tab, theme=t, nav_callback=self._nav_callback)
+            panel.pack(fill="both", expand=True)
+        except Exception as e:
+            _label(tab, f"Chyba načtení Novinek: {e}", 11, color=t.get("error", "#ef4444")
+                   ).pack(padx=16, pady=16, anchor="w")
+
+    def _build_modules(self, tab):
+        """Redirect to the Tools Download panel via nav callback."""
+        t = self.theme
+        main = ctk.CTkFrame(tab, fg_color="transparent")
+        main.pack(fill="both", expand=True, padx=12, pady=12)
+
+        _label(main, "Stahování modulů", 18, bold=True, color=t["primary"]
+               ).pack(anchor="w")
+        _label(main,
+               "Stažitelné moduly a rozšíření aplikace — spravované z admin panelu.\n"
+               "Dostupné pouze pro uživatele s oprávněním admin.",
+               11, color=t["text_dim"], justify="left"
+               ).pack(anchor="w", pady=(0, 16))
+
+        card = ctk.CTkFrame(main, fg_color=t["card_bg"],
+                            corner_radius=int(t.get("radius_card", 14)))
+        card.pack(fill="x", pady=6)
+
+        _label(card, " Otevřít Stahování modulů", 14, bold=True, color=t["text"],
+               image=icons.icon("cloud-arrow-down", 16, t["primary"]), compound="left"
+               ).pack(padx=16, pady=(16, 4), anchor="w")
+        _label(card,
+               "Klikněte pro přechod na panel se seznamem dostupných modulů.",
+               11, color=t["text_dim"]
+               ).pack(padx=16, pady=(0, 8), anchor="w")
+
+        def _go():
+            if callable(self._nav_callback):
+                self._nav_callback("tools_download")
+
+        ctk.CTkButton(card, text=" Přejít na Stahování modulů",
+                      image=icons.icon("arrow-right", 14, "#ffffff"), compound="left",
+                      fg_color=t["primary"], hover_color=t["primary_hover"],
+                      font=ctk.CTkFont("Segoe UI", 13, "bold"), height=42,
+                      command=_go
+                      ).pack(padx=16, pady=(0, 16), fill="x")
 
     def _build_links(self, tab):
         t = self.theme

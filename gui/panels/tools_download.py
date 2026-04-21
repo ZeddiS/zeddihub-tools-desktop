@@ -1,12 +1,12 @@
 """
-ZeddiHub Tools — Tools download panel (admin only).
+ZeddiHub Tools — Stažitelné nástroje panel.
 
-Lists available external tools from webhosting admin_apps.json,
-offers install/uninstall/launch. Installed tools are registered via
-gui.external_tools and shown in sidebar under "Ostatní nástroje".
+Lists catalog from admin_apps.json with search, filter chips, large FA
+icons per card and a progress/pause/cancel UI during installation.
 """
 
 import threading
+import tkinter as tk
 import customtkinter as ctk
 
 try:
@@ -17,43 +17,155 @@ except ImportError:
     icons = None
 
 
+def _fmt_bytes(n: float) -> str:
+    if n < 1024: return f"{int(n)} B"
+    if n < 1024 ** 2: return f"{n / 1024:.1f} KB"
+    if n < 1024 ** 3: return f"{n / (1024 ** 2):.1f} MB"
+    return f"{n / (1024 ** 3):.2f} GB"
+
+
+def _fmt_speed(bps: float) -> str:
+    if bps <= 0: return "— KB/s"
+    if bps < 1024: return f"{bps:.0f} B/s"
+    if bps < 1024 ** 2: return f"{bps / 1024:.1f} KB/s"
+    return f"{bps / (1024 ** 2):.2f} MB/s"
+
+
+def _ver_tuple(v) -> tuple:
+    s = str(v or "0").lstrip("vV ")
+    parts = []
+    for chunk in s.split("."):
+        digits = "".join(c for c in chunk if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts) if parts else (0,)
+
+
+def _installed_version(slug: str) -> str:
+    if not external_tools: return ""
+    entry = external_tools.load_registry().get("installed", {}).get(slug)
+    return (entry or {}).get("version", "") if entry else ""
+
+
 class ToolsDownloadPanel(ctk.CTkFrame):
-    def __init__(self, parent, theme: dict, on_refresh_sidebar=None, **kwargs):
+    def __init__(self, parent, theme: dict, on_refresh_sidebar=None,
+                 on_open_module=None, **kwargs):
         super().__init__(parent, fg_color=theme["content_bg"], **kwargs)
         self.theme = theme
         self._on_refresh_sidebar = on_refresh_sidebar
-        self._catalog = []
+        self._on_open_module = on_open_module
+        self._catalog: list = []
+        self._query: str = ""
+        self._filter: str = "all"    # all | installed | available
+        self._install_tasks: dict = {}   # slug -> InstallTask
+        self._cards: dict = {}           # slug -> dict of widgets
         self._build()
         self._load_catalog_async()
 
+    # ── tokens ────────────────────────────────────────────────────────────
+    def _tk(self, key, fallback):
+        return self.theme.get(key, fallback)
+
+    # ── layout ────────────────────────────────────────────────────────────
     def _build(self):
         th = self.theme
+        text = th.get("text", "#fff")
+        text_dim = th.get("text_dim", "#888")
+        card_bg = th.get("card_bg", "#1a1a26")
+        primary = th.get("primary", "#f0a500")
+
+        # Header
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=24, pady=(20, 10))
+        header.pack(fill="x", padx=24, pady=(20, 6))
 
-        ctk.CTkLabel(header, text="Stáhnout nástroje",
+        ctk.CTkLabel(header, text="Stažitelné nástroje",
                      font=ctk.CTkFont("Segoe UI", 22, "bold"),
-                     text_color=th.get("text", "#fff")).pack(anchor="w")
+                     text_color=text).pack(anchor="w")
         ctk.CTkLabel(header,
-                     text="Admin moduly — po instalaci se přidají do sekce Ostatní nástroje.",
+                     text="Rozšiřující moduly — po instalaci se otevřou přímo v aplikaci.",
                      font=ctk.CTkFont("Segoe UI", 11),
-                     text_color=th.get("text_dim", "#888")).pack(anchor="w")
+                     text_color=text_dim).pack(anchor="w")
 
-        row = ctk.CTkFrame(header, fg_color="transparent")
-        row.pack(anchor="w", pady=(10, 0))
-        ctk.CTkButton(row, text="Obnovit katalog",
-                      fg_color=th.get("secondary", "#333"),
-                      hover_color=th.get("primary", "#f0a500"),
-                      font=ctk.CTkFont("Segoe UI", 11),
-                      command=self._load_catalog_async, height=32, width=140).pack(side="left")
+        # Search + filter bar
+        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar.pack(fill="x", padx=24, pady=(12, 2))
 
-        self._status = ctk.CTkLabel(header, text="", font=ctk.CTkFont("Segoe UI", 10),
-                                    text_color=th.get("text_dim", "#888"))
-        self._status.pack(anchor="w", pady=(6, 0))
+        self._search_entry = ctk.CTkEntry(
+            bar, placeholder_text="🔍  Hledat modul podle názvu nebo popisu…",
+            fg_color=card_bg, border_width=1, border_color=th.get("border", "#2a2a36"),
+            text_color=text, height=36, corner_radius=10,
+            font=ctk.CTkFont("Segoe UI", 11),
+        )
+        self._search_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self._search_entry.bind("<KeyRelease>", self._on_search)
 
+        ctk.CTkButton(
+            bar, text="⟳",
+            fg_color=card_bg, hover_color=primary, text_color=text,
+            font=ctk.CTkFont("Segoe UI", 14),
+            width=36, height=36, corner_radius=10,
+            command=self._load_catalog_async,
+        ).pack(side="left")
+
+        # Filter chips
+        chips = ctk.CTkFrame(self, fg_color="transparent")
+        chips.pack(fill="x", padx=24, pady=(6, 0))
+        self._chip_btns: dict = {}
+        for key, label in [("all", "Vše"), ("installed", "Nainstalované"), ("available", "Dostupné")]:
+            btn = ctk.CTkButton(
+                chips, text=label,
+                fg_color=card_bg, hover_color=primary, text_color=text,
+                font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                height=28, width=110, corner_radius=14, border_width=0,
+                command=lambda k=key: self._set_filter(k),
+            )
+            btn.pack(side="left", padx=(0, 8))
+            self._chip_btns[key] = btn
+
+        # Status strip
+        self._status = ctk.CTkLabel(self, text="",
+                                    font=ctk.CTkFont("Segoe UI", 10),
+                                    text_color=text_dim)
+        self._status.pack(anchor="w", padx=24, pady=(6, 0))
+
+        # Scrollable list
         self._list_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self._list_frame.pack(fill="both", expand=True, padx=24, pady=(4, 20))
+        self._list_frame.pack(fill="both", expand=True, padx=16, pady=(6, 16))
 
+        self._update_chip_styles()
+
+    # ── filters / search ──────────────────────────────────────────────────
+    def _on_search(self, _evt=None):
+        self._query = self._search_entry.get().strip().lower()
+        self._render_list()
+        self._scroll_to_top()
+
+    def _set_filter(self, key: str):
+        self._filter = key
+        self._update_chip_styles()
+        self._render_list()
+        self._scroll_to_top()
+
+    def _scroll_to_top(self):
+        # CTkScrollableFrame keeps its old yview after re-rendering a shorter
+        # list — if the user had scrolled down in "Vše" the filtered result
+        # appears empty because the viewport is past the content. Reset it.
+        try:
+            self._list_frame._parent_canvas.yview_moveto(0.0)
+        except Exception:
+            pass
+
+    def _update_chip_styles(self):
+        th = self.theme
+        primary = th.get("primary", "#f0a500")
+        card_bg = th.get("card_bg", "#1a1a26")
+        text = th.get("text", "#fff")
+        for key, btn in self._chip_btns.items():
+            if key == self._filter:
+                btn.configure(fg_color=primary, text_color="#000", hover_color=primary)
+            else:
+                btn.configure(fg_color=card_bg, text_color=text, hover_color=th.get("primary_hover", primary))
+
+    # ── catalog fetch ─────────────────────────────────────────────────────
     def _set_status(self, text: str):
         try:
             self.after(0, self._status.configure, {"text": text})
@@ -61,110 +173,443 @@ class ToolsDownloadPanel(ctk.CTkFrame):
             pass
 
     def _load_catalog_async(self):
-        self._set_status("⏳ Načítání katalogu...")
+        self._set_status("⏳ Načítání katalogu…")
 
         def _run():
             try:
                 tools = external_tools.fetch_catalog()
                 self._catalog = tools
                 self.after(0, self._render_list)
-                self.after(0, lambda: self._status.configure(
-                    text=f"✓ {len(tools)} nástrojů v katalogu"))
+                n = len(tools)
+                upd = sum(1 for t in tools
+                          if self._has_update(t.get("slug", ""), t.get("version")))
+                if n and upd:
+                    msg = f"✓ {n} nástrojů v katalogu  ·  🔔 {upd} aktualizace"
+                elif n:
+                    msg = f"✓ {n} nástrojů v katalogu  ·  vše aktuální"
+                else:
+                    msg = "Katalog je prázdný — momentálně žádné moduly nejsou k dispozici."
+                self.after(0, lambda m=msg: self._status.configure(text=m))
             except Exception as e:
-                self.after(0, lambda: self._status.configure(
-                    text=f"! Nelze načíst katalog: {e}"))
+                msg = str(e) or e.__class__.__name__
+                self._catalog = []
+                self.after(0, self._render_list)
+                self.after(0, lambda m=msg: self._status.configure(
+                    text=f"! Nelze načíst katalog: {m}"))
 
         threading.Thread(target=_run, daemon=True).start()
+
+    # ── list rendering ────────────────────────────────────────────────────
+    def _filtered(self) -> list:
+        q = self._query
+        # Admin-only entries (require_admin=true in catalog) are hidden from
+        # non-admin users entirely.
+        try:
+            from ..auth import is_admin as _is_admin
+            admin = bool(_is_admin())
+        except Exception:
+            admin = False
+        out = []
+        for tool in self._catalog:
+            slug = tool.get("slug", "")
+            if tool.get("require_admin") and not admin:
+                continue
+            installed = external_tools.is_installed(slug)
+            available = bool(tool.get("available", True))
+            if self._filter == "installed" and not installed:
+                continue
+            if self._filter == "available" and (installed or not available):
+                continue
+            if q:
+                blob = f"{tool.get('name', '')} {tool.get('description', '')} {slug}".lower()
+                if q not in blob:
+                    continue
+            out.append(tool)
+        return out
 
     def _render_list(self):
         for child in self._list_frame.winfo_children():
             child.destroy()
+        self._cards.clear()
 
         th = self.theme
-        if not self._catalog:
-            ctk.CTkLabel(self._list_frame, text="Žádné nástroje v katalogu.",
+        tools = self._filtered()
+        if not tools:
+            msg = "Žádné nástroje neodpovídají filtru." if self._catalog else "Žádné nástroje v katalogu."
+            ctk.CTkLabel(self._list_frame, text=msg,
                          font=ctk.CTkFont("Segoe UI", 12),
                          text_color=th.get("text_dim", "#888")).pack(pady=30)
             return
 
-        for tool in self._catalog:
-            self._render_card(tool)
+        # Split: pending updates first (only in 'all' and 'installed' filters)
+        updatable, normal = [], []
+        for tool in tools:
+            slug = tool.get("slug", "")
+            if self._has_update(slug, tool.get("version")):
+                updatable.append(tool)
+            else:
+                normal.append(tool)
+
+        if updatable:
+            self._render_section_header(
+                f"🔔  Aktualizace dostupné ({len(updatable)})",
+                th.get("primary", "#f0a500"),
+            )
+            for tool in updatable:
+                self._render_card(tool)
+
+        if normal:
+            if updatable:
+                self._render_section_header("Všechny nástroje",
+                                            th.get("text_dim", "#888"))
+            for tool in normal:
+                self._render_card(tool)
+
+    def _render_section_header(self, text: str, color: str):
+        lbl = ctk.CTkLabel(
+            self._list_frame, text=text,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+            text_color=color, anchor="w",
+        )
+        lbl.pack(fill="x", padx=14, pady=(10, 2))
+
+    def _has_update(self, slug: str, catalog_ver: str) -> bool:
+        if not external_tools or not external_tools.is_installed(slug):
+            return False
+        return _ver_tuple(catalog_ver) > _ver_tuple(_installed_version(slug))
 
     def _render_card(self, tool: dict):
         th = self.theme
-        card = ctk.CTkFrame(self._list_frame,
-                            fg_color=th.get("card_bg", "#1a1a26"),
-                            corner_radius=14)
-        card.pack(fill="x", pady=6)
+        card_bg = th.get("card_bg", "#1a1a26")
+        tile_bg = th.get("secondary", "#0f0f18")
+        text = th.get("text", "#fff")
+        text_dim = th.get("text_dim", "#888")
+        primary = th.get("primary", "#f0a500")
+        border = th.get("border", "#2a2a36")
 
         slug = tool.get("slug", "")
         installed = external_tools.is_installed(slug)
 
-        row = ctk.CTkFrame(card, fg_color="transparent")
-        row.pack(fill="x", padx=16, pady=12)
+        # Single CTkFrame root per card — everything else is tk.Frame to
+        # avoid CTk's per-widget canvas redraw during scroll (flicker).
+        card = ctk.CTkFrame(self._list_frame, fg_color=card_bg,
+                            corner_radius=14, border_width=1, border_color=border,
+                            height=124)
+        card.pack(fill="x", padx=8, pady=6)
+        card.pack_propagate(False)
 
-        info = ctk.CTkFrame(row, fg_color="transparent")
-        info.pack(side="left", fill="x", expand=True)
+        row = tk.Frame(card, bg=card_bg, bd=0, highlightthickness=0)
+        row.pack(fill="both", expand=True, padx=14, pady=14)
 
+        # Icon tile (tk.Frame with static bg — no CTk redraw)
+        tile = tk.Frame(row, bg=tile_bg, width=72, height=72,
+                        bd=0, highlightthickness=0)
+        tile.pack(side="left")
+        tile.pack_propagate(False)
+        icon_name = tool.get("icon", "wrench")
+        icon_img = icons.icon(icon_name, 36, primary) if icons else None
+        lbl = ctk.CTkLabel(tile, text="" if icon_img else "•",
+                           image=icon_img, fg_color=tile_bg,
+                           font=ctk.CTkFont("Segoe UI", 26, "bold"),
+                           text_color=primary)
+        lbl.place(relx=0.5, rely=0.5, anchor="center")
+
+        info = tk.Frame(row, bg=card_bg, bd=0, highlightthickness=0)
+        info.pack(side="left", fill="both", expand=True, padx=(14, 10))
         ctk.CTkLabel(info, text=tool.get("name", slug),
-                     font=ctk.CTkFont("Segoe UI", 14, "bold"),
-                     text_color=th.get("text", "#fff")).pack(anchor="w")
+                     fg_color=card_bg,
+                     font=ctk.CTkFont("Segoe UI", 17, "bold"),
+                     text_color=text).pack(anchor="w")
         if tool.get("description"):
             ctk.CTkLabel(info, text=tool.get("description"),
+                         fg_color=card_bg,
                          font=ctk.CTkFont("Segoe UI", 11),
-                         text_color=th.get("text_dim", "#888"),
-                         wraplength=600, justify="left").pack(anchor="w", pady=(2, 0))
-        ctk.CTkLabel(info, text=f"v{tool.get('version', '1.0.0')}",
-                     font=ctk.CTkFont("Segoe UI", 9),
-                     text_color=th.get("text_dim", "#888")).pack(anchor="w", pady=(2, 0))
+                         text_color=text_dim,
+                         wraplength=500, justify="left").pack(anchor="w", pady=(2, 0))
 
-        actions = ctk.CTkFrame(row, fg_color="transparent")
-        actions.pack(side="right")
+        meta = tk.Frame(info, bg=card_bg, bd=0, highlightthickness=0)
+        meta.pack(anchor="w", pady=(4, 0))
+        ctk.CTkLabel(meta, text=f"v{tool.get('version', '1.0.0')}",
+                     fg_color=card_bg,
+                     font=ctk.CTkFont("Segoe UI", 9),
+                     text_color=text_dim).pack(side="left")
+        if installed:
+            ctk.CTkLabel(meta, text="  •  ", fg_color=card_bg,
+                         font=ctk.CTkFont("Segoe UI", 9),
+                         text_color=text_dim).pack(side="left")
+            ctk.CTkLabel(meta, text="Nainstalováno", fg_color=card_bg,
+                         font=ctk.CTkFont("Segoe UI", 9, "bold"),
+                         text_color=th.get("success", "#22c55e")).pack(side="left")
+        # Gold ADMIN pill — only admin accounts see this card at all
+        # (non-admins are filtered out in _filtered()).
+        if tool.get("require_admin"):
+            ctk.CTkLabel(meta, text="  ", fg_color=card_bg,
+                         font=ctk.CTkFont("Segoe UI", 9)).pack(side="left")
+            ctk.CTkLabel(
+                meta, text="ADMIN",
+                font=ctk.CTkFont("Segoe UI", 8, "bold"),
+                text_color="#0a0a0a", fg_color="#f5a623",
+                corner_radius=8, width=52, height=16,
+            ).pack(side="left")
+
+        actions = tk.Frame(row, bg=card_bg, width=340,
+                           bd=0, highlightthickness=0)
+        actions.pack(side="right", fill="y")
+        actions.pack_propagate(False)
+
+        self._cards[slug] = {
+            "card": card, "actions": actions, "tool": tool, "card_bg": card_bg,
+        }
+        self._render_card_actions(slug)
+
+    def _render_card_actions(self, slug: str):
+        rec = self._cards.get(slug)
+        if not rec:
+            return
+        actions = rec["actions"]
+        for w in actions.winfo_children():
+            w.destroy()
+
+        tool = rec["tool"]
+        th = self.theme
+        primary = th.get("primary", "#f0a500")
+        hover = th.get("primary_hover", "#d4900a")
+        danger = "#8b2020"
+
+        task = self._install_tasks.get(slug)
+        installed = external_tools.is_installed(slug)
+        available = bool(tool.get("available", True))
+
+        active_states = {
+            "preparing", "downloading", "paused", "verifying",
+            "extracting", "registering", "removing", "cleaning", "idle",
+        }
+        if task is not None and task.state in active_states:
+            self._build_progress_ui(actions, slug, task)
+            return
+
+        if not installed and not available:
+            # "Brzy k dispozici" badge
+            card_bg = self._cards.get(slug, {}).get("card_bg", th.get("card_bg", "#1a1a26"))
+            badge = tk.Frame(actions, bg=card_bg, bd=0, highlightthickness=0)
+            badge.pack(side="right", pady=12, padx=4)
+            pill = tk.Frame(badge, bg=th.get("secondary", "#2a2a36"),
+                            bd=0, highlightthickness=0)
+            pill.pack()
+            ctk.CTkLabel(
+                pill, text="  🕒  Brzy k dispozici  ",
+                fg_color=th.get("secondary", "#2a2a36"),
+                text_color=th.get("text_dim", "#888"),
+                font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            ).pack(padx=6, pady=4)
+            return
 
         if installed:
-            ctk.CTkButton(actions, text="Spustit",
-                          fg_color=th.get("primary", "#f0a500"),
-                          hover_color=th.get("primary_hover", "#d4900a"),
-                          text_color="#000", width=90, height=30,
-                          font=ctk.CTkFont("Segoe UI", 11, "bold"),
-                          command=lambda s=slug: external_tools.launch_tool(s)
-                          ).pack(side="left", padx=(0, 6))
-            ctk.CTkButton(actions, text="Odinstalovat",
-                          fg_color="#8b2020", hover_color="#6b1818",
-                          text_color="#fff", width=110, height=30,
-                          font=ctk.CTkFont("Segoe UI", 11),
-                          command=lambda s=slug: self._uninstall(s)
-                          ).pack(side="left")
+            has_update = self._has_update(slug, tool.get("version"))
+            if has_update:
+                # Update replaces "Otevřít" as the primary action
+                ctk.CTkButton(
+                    actions, text=f"Aktualizovat → v{tool.get('version', '?')}",
+                    fg_color=primary, hover_color=hover, text_color="#000",
+                    width=200, height=34, corner_radius=10,
+                    font=ctk.CTkFont("Segoe UI", 11, "bold"),
+                    image=(icons.icon("arrows-rotate", 12, "#000") if icons else None),
+                    compound="left",
+                    command=lambda t=tool: self._install(t),
+                ).pack(side="right")
+            else:
+                ctk.CTkButton(
+                    actions, text="Otevřít",
+                    fg_color=primary, hover_color=hover, text_color="#000",
+                    width=100, height=34, corner_radius=10,
+                    font=ctk.CTkFont("Segoe UI", 11, "bold"),
+                    command=lambda s=slug: self._open_module(s),
+                ).pack(side="right")
+            ctk.CTkButton(
+                actions, text="Odinstalovat",
+                fg_color="transparent", hover_color=danger,
+                text_color=th.get("text_dim", "#888"),
+                border_width=1, border_color=th.get("border", "#2a2a36"),
+                width=110, height=34, corner_radius=10,
+                font=ctk.CTkFont("Segoe UI", 10),
+                command=lambda s=slug: self._uninstall(s),
+            ).pack(side="right", padx=(0, 6))
         else:
-            btn = ctk.CTkButton(actions, text="Instalovat",
-                                fg_color=th.get("primary", "#f0a500"),
-                                hover_color=th.get("primary_hover", "#d4900a"),
-                                text_color="#000", width=110, height=30,
-                                font=ctk.CTkFont("Segoe UI", 11, "bold"))
-            btn.configure(command=lambda t=tool, b=btn: self._install(t, b))
-            btn.pack(side="left")
+            ctk.CTkButton(
+                actions, text="Instalovat",
+                fg_color=primary, hover_color=hover, text_color="#000",
+                width=140, height=38, corner_radius=10,
+                font=ctk.CTkFont("Segoe UI", 11, "bold"),
+                image=(icons.icon("download", 14, "#000") if icons else None),
+                compound="left",
+                command=lambda t=tool: self._install(t),
+            ).pack(side="right", pady=10)
 
-    def _install(self, tool: dict, btn):
-        btn.configure(state="disabled", text="⏳ 0%")
+    def _build_progress_ui(self, parent, slug: str, task):
+        th = self.theme
+        text = th.get("text", "#fff")
+        text_dim = th.get("text_dim", "#888")
+        primary = th.get("primary", "#f0a500")
+        card_bg = th.get("card_bg", "#1a1a26")
 
-        def _progress(done, total):
-            pct = int(done * 100 / total) if total else 0
-            try:
-                self.after(0, btn.configure, {"text": f"⏳ {pct}%"})
-            except Exception:
-                pass
+        wrap = tk.Frame(parent, bg=card_bg, bd=0, highlightthickness=0)
+        wrap.pack(fill="both", expand=True)
+
+        top_row = tk.Frame(wrap, bg=card_bg, bd=0, highlightthickness=0)
+        top_row.pack(fill="x", pady=(4, 0))
+
+        pb = ctk.CTkProgressBar(top_row, height=10, corner_radius=6,
+                                progress_color=primary, fg_color=card_bg)
+        pb.set(0.0)
+        pb.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        pause_btn = ctk.CTkButton(
+            top_row, text="",
+            image=(icons.icon("pause", 12, text) if icons else None),
+            fg_color=card_bg, hover_color=primary, text_color=text,
+            width=28, height=28, corner_radius=8,
+        )
+        pause_btn.pack(side="left", padx=(0, 4))
+
+        cancel_btn = ctk.CTkButton(
+            top_row, text="",
+            image=(icons.icon("xmark", 12, text) if icons else None),
+            fg_color=card_bg, hover_color="#8b2020", text_color=text,
+            width=28, height=28, corner_radius=8,
+            command=lambda s=slug: self._cancel_install(s),
+        )
+        cancel_btn.pack(side="left")
+
+        pct_lbl = ctk.CTkLabel(wrap, text="0 %", fg_color=card_bg,
+                               font=ctk.CTkFont("Segoe UI", 11, "bold"),
+                               text_color=text)
+        pct_lbl.pack(anchor="w", pady=(6, 0))
+
+        info_lbl = ctk.CTkLabel(wrap, text="Připojování…", fg_color=card_bg,
+                                font=ctk.CTkFont("Segoe UI", 9),
+                                text_color=text_dim)
+        info_lbl.pack(anchor="w")
+
+        rec = self._cards.get(slug, {})
+        rec["pb"] = pb
+        rec["pct_lbl"] = pct_lbl
+        rec["info_lbl"] = info_lbl
+        rec["pause_btn"] = pause_btn
+        rec["cancel_btn"] = cancel_btn
+
+        def _toggle_pause():
+            t = self._install_tasks.get(slug)
+            if not t or not hasattr(t, "paused"): return
+            if t.paused:
+                t.resume()
+                pause_btn.configure(image=(icons.icon("pause", 12, text) if icons else None))
+            else:
+                t.pause()
+                pause_btn.configure(image=(icons.icon("play", 12, primary) if icons else None))
+
+        pause_btn.configure(command=_toggle_pause)
+
+        # UninstallTask has no pause/cancel — hide those controls
+        if not hasattr(task, "pause"):
+            pause_btn.pack_forget()
+            cancel_btn.pack_forget()
+
+    # ── actions ───────────────────────────────────────────────────────────
+    def _install(self, tool: dict):
+        slug = tool.get("slug")
+        if not slug or slug in self._install_tasks:
+            return
+
+        def _progress(done, total, speed, state):
+            self.after(0, self._update_progress_ui, slug, done, total, speed, state)
 
         def _done(ok, msg):
-            self.after(0, lambda: self._status.configure(text=msg))
-            self.after(0, self._render_list)
-            if ok and self._on_refresh_sidebar:
-                self.after(0, self._on_refresh_sidebar)
+            def _apply():
+                self._install_tasks.pop(slug, None)
+                self._status.configure(text=msg)
+                if ok and self._on_refresh_sidebar:
+                    self._on_refresh_sidebar()
+                self._render_card_actions(slug)
+            self.after(0, _apply)
 
-        external_tools.install_tool(tool, progress_cb=_progress, done_cb=_done)
+        task = external_tools.install_tool(tool, progress_cb=_progress, done_cb=_done)
+        self._install_tasks[slug] = task
+        self._render_card_actions(slug)
+
+    def _cancel_install(self, slug: str):
+        task = self._install_tasks.get(slug)
+        if task:
+            task.cancel()
+
+    def _update_progress_ui(self, slug, done, total, speed, state):
+        rec = self._cards.get(slug)
+        if not rec or "pb" not in rec:
+            return
+        pb = rec["pb"]
+        pct_lbl = rec["pct_lbl"]
+        info_lbl = rec["info_lbl"]
+
+        pct = (done / total) if total else 0.0
+        pb.set(max(0.0, min(1.0, pct)))
+        pct_str = f"{int(pct * 100)} %" if total else "— %"
+
+        if state == "preparing":
+            pct_lbl.configure(text=pct_str)
+            info_lbl.configure(text="Příprava instalace…")
+        elif state == "downloading":
+            pct_lbl.configure(text=pct_str)
+            size_part = f"{_fmt_bytes(done)} / {_fmt_bytes(total)}" if total else _fmt_bytes(done)
+            info_lbl.configure(text=f"{_fmt_speed(speed)} · {size_part}")
+        elif state == "paused":
+            pct_lbl.configure(text=pct_str)
+            info_lbl.configure(text="⏸  Pozastaveno")
+        elif state == "verifying":
+            pct_lbl.configure(text=pct_str)
+            info_lbl.configure(text="Ověřování integrity…")
+        elif state == "extracting":
+            pb.set(1.0)
+            pct_lbl.configure(text="100 %")
+            info_lbl.configure(text="Rozbalování souborů…")
+        elif state == "registering":
+            pct_lbl.configure(text=pct_str)
+            info_lbl.configure(text="Registrace modulu…")
+        elif state == "removing":
+            pct_lbl.configure(text=pct_str)
+            info_lbl.configure(text="Odstraňování souborů…")
+        elif state == "cleaning":
+            pct_lbl.configure(text=pct_str)
+            info_lbl.configure(text="Čištění registru…")
+        elif state == "cancelled":
+            info_lbl.configure(text="Zrušeno")
+        elif state == "error":
+            info_lbl.configure(text="Chyba")
+
+    def _open_module(self, slug: str):
+        if self._on_open_module:
+            try:
+                self._on_open_module(slug)
+                return
+            except Exception as e:
+                self._status.configure(text=f"! Chyba otevření: {e}")
+        else:
+            self._status.configure(text="! Otevření modulu není propojeno s hlavním oknem.")
 
     def _uninstall(self, slug: str):
-        if external_tools.uninstall_tool(slug):
-            self._status.configure(text=f"✓ Odinstalováno: {slug}")
-            self._render_list()
-            if self._on_refresh_sidebar:
-                self._on_refresh_sidebar()
+        if slug in self._install_tasks:
+            return
+
+        def _progress(done, total, speed, state):
+            self.after(0, self._update_progress_ui, slug, done, total, speed, state)
+
+        def _done(ok, msg):
+            def _apply():
+                self._install_tasks.pop(slug, None)
+                self._status.configure(text=f"✓ {msg}" if ok else f"! {msg}")
+                if self._on_refresh_sidebar:
+                    self._on_refresh_sidebar()
+                self._render_list()
+            self.after(0, _apply)
+
+        task = external_tools.uninstall_tool_async(slug, progress_cb=_progress, done_cb=_done)
+        self._install_tasks[slug] = task
+        self._render_card_actions(slug)
