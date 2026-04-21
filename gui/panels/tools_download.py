@@ -362,6 +362,30 @@ class ToolsDownloadPanel(ctk.CTkFrame):
         }
         self._render_card_actions(slug)
 
+        # Clicking anywhere on the card (outside the action buttons) opens a
+        # detail overlay. CTkButtons intercept their own clicks, so the
+        # Install/Open/Uninstall buttons remain functional.
+        def _open_detail(_e=None, t=tool):
+            self._show_detail_overlay(t)
+        for w in (card, row, tile, info, meta):
+            try:
+                w.bind("<Button-1>", _open_detail)
+                w.configure(cursor="hand2")
+            except Exception:
+                pass
+        # Also catch the rendered text labels inside the info/meta areas.
+        for child in list(info.winfo_children()) + list(meta.winfo_children()):
+            try:
+                child.bind("<Button-1>", _open_detail)
+                child.configure(cursor="hand2")
+            except Exception:
+                pass
+        try:
+            lbl.bind("<Button-1>", _open_detail)
+            lbl.configure(cursor="hand2")
+        except Exception:
+            pass
+
     def _render_card_actions(self, slug: str):
         rec = self._cards.get(slug)
         if not rec:
@@ -379,6 +403,12 @@ class ToolsDownloadPanel(ctk.CTkFrame):
         task = self._install_tasks.get(slug)
         installed = external_tools.is_installed(slug)
         available = bool(tool.get("available", True))
+
+        # Persistent error state (card render after _done failure + panel
+        # re-render). Survives sidebar/auth refresh inside the same session.
+        if rec.get("error_msg") and task is None:
+            self._render_error_ui(slug)
+            return
 
         active_states = {
             "preparing", "downloading", "paused", "verifying",
@@ -451,6 +481,10 @@ class ToolsDownloadPanel(ctk.CTkFrame):
         text_dim = th.get("text_dim", "#888")
         primary = th.get("primary", "#f0a500")
         card_bg = th.get("card_bg", "#1a1a26")
+        # Track bar in a neutral border-ish tone so the orange fill only
+        # appears when bytes actually start flowing.
+        bar_track = th.get("border", "#2a2a36")
+        connecting_color = th.get("text_dim", "#888")
 
         wrap = tk.Frame(parent, bg=card_bg, bd=0, highlightthickness=0)
         wrap.pack(fill="both", expand=True)
@@ -458,8 +492,9 @@ class ToolsDownloadPanel(ctk.CTkFrame):
         top_row = tk.Frame(wrap, bg=card_bg, bd=0, highlightthickness=0)
         top_row.pack(fill="x", pady=(4, 0))
 
+        # Start in "connecting" look: gray track, gray fill, zero progress.
         pb = ctk.CTkProgressBar(top_row, height=10, corner_radius=6,
-                                progress_color=primary, fg_color=card_bg)
+                                progress_color=connecting_color, fg_color=bar_track)
         pb.set(0.0)
         pb.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
@@ -520,6 +555,12 @@ class ToolsDownloadPanel(ctk.CTkFrame):
         if not slug or slug in self._install_tasks:
             return
 
+        # Clear any previous error state for this slug
+        rec = self._cards.get(slug)
+        if rec is not None:
+            rec.pop("error_msg", None)
+            rec.pop("error_tool", None)
+
         def _progress(done, total, speed, state):
             self.after(0, self._update_progress_ui, slug, done, total, speed, state)
 
@@ -527,13 +568,92 @@ class ToolsDownloadPanel(ctk.CTkFrame):
             def _apply():
                 self._install_tasks.pop(slug, None)
                 self._status.configure(text=msg)
-                if ok and self._on_refresh_sidebar:
+                if not ok:
+                    # Keep an error UI on the card (red bar + retry button)
+                    # instead of silently reverting to "Instalovat".
+                    r = self._cards.get(slug)
+                    if r is not None:
+                        r["error_msg"] = str(msg or "Chyba při instalaci")
+                        r["error_tool"] = tool
+                    self._render_error_ui(slug)
+                    return
+                if self._on_refresh_sidebar:
                     self._on_refresh_sidebar()
                 self._render_card_actions(slug)
             self.after(0, _apply)
 
         task = external_tools.install_tool(tool, progress_cb=_progress, done_cb=_done)
         self._install_tasks[slug] = task
+        self._render_card_actions(slug)
+
+    def _render_error_ui(self, slug: str):
+        """Red progress bar + retry button. Shown when install fails."""
+        rec = self._cards.get(slug)
+        if not rec:
+            return
+        actions = rec["actions"]
+        for w in actions.winfo_children():
+            w.destroy()
+
+        th = self.theme
+        text = th.get("text", "#fff")
+        text_dim = th.get("text_dim", "#888")
+        primary = th.get("primary", "#f0a500")
+        card_bg = th.get("card_bg", "#1a1a26")
+        bar_track = th.get("border", "#2a2a36")
+        error_color = "#e24a4a"
+
+        err_msg = rec.get("error_msg", "Chyba při instalaci")
+        tool = rec.get("error_tool", rec.get("tool", {}))
+
+        wrap = tk.Frame(actions, bg=card_bg, bd=0, highlightthickness=0)
+        wrap.pack(fill="both", expand=True)
+
+        top_row = tk.Frame(wrap, bg=card_bg, bd=0, highlightthickness=0)
+        top_row.pack(fill="x", pady=(4, 0))
+
+        pb = ctk.CTkProgressBar(top_row, height=10, corner_radius=6,
+                                progress_color=error_color, fg_color=bar_track)
+        pb.set(1.0)
+        pb.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        retry_btn = ctk.CTkButton(
+            top_row, text="Opakovat",
+            image=(icons.icon("arrows-rotate", 12, "#000") if icons else None),
+            compound="left",
+            fg_color=primary, hover_color=th.get("primary_hover", "#d4900a"),
+            text_color="#000",
+            width=110, height=28, corner_radius=8,
+            font=ctk.CTkFont("Segoe UI", 10, "bold"),
+            command=lambda t=tool: self._install(t),
+        )
+        retry_btn.pack(side="left", padx=(0, 4))
+
+        dismiss_btn = ctk.CTkButton(
+            top_row, text="",
+            image=(icons.icon("xmark", 12, text) if icons else None),
+            fg_color=card_bg, hover_color="#8b2020", text_color=text,
+            width=28, height=28, corner_radius=8,
+            command=lambda s=slug: self._dismiss_error(s),
+        )
+        dismiss_btn.pack(side="left")
+
+        err_title = ctk.CTkLabel(wrap, text="Chyba stahování",
+                                 fg_color=card_bg,
+                                 font=ctk.CTkFont("Segoe UI", 11, "bold"),
+                                 text_color=error_color)
+        err_title.pack(anchor="w", pady=(6, 0))
+        err_body = ctk.CTkLabel(wrap, text=err_msg, fg_color=card_bg,
+                                font=ctk.CTkFont("Segoe UI", 9),
+                                text_color=text_dim, wraplength=320,
+                                justify="left")
+        err_body.pack(anchor="w")
+
+    def _dismiss_error(self, slug: str):
+        rec = self._cards.get(slug)
+        if rec is not None:
+            rec.pop("error_msg", None)
+            rec.pop("error_tool", None)
         self._render_card_actions(slug)
 
     def _cancel_install(self, slug: str):
@@ -553,9 +673,28 @@ class ToolsDownloadPanel(ctk.CTkFrame):
         pb.set(max(0.0, min(1.0, pct)))
         pct_str = f"{int(pct * 100)} %" if total else "— %"
 
+        th = self.theme
+        primary = th.get("primary", "#f0a500")
+        text_dim = th.get("text_dim", "#888")
+        error_color = "#e24a4a"
+
+        # Track fill color:
+        #   gray while connecting/preparing/verifying/registering/cleaning,
+        #   orange once bytes actually flow (downloading/extracting/paused),
+        #   red on error.
+        if state == "error":
+            try: pb.configure(progress_color=error_color)
+            except Exception: pass
+        elif state in ("downloading", "extracting", "paused"):
+            try: pb.configure(progress_color=primary)
+            except Exception: pass
+        else:
+            try: pb.configure(progress_color=text_dim)
+            except Exception: pass
+
         if state == "preparing":
             pct_lbl.configure(text=pct_str)
-            info_lbl.configure(text="Příprava instalace…")
+            info_lbl.configure(text="Připojování…")
         elif state == "downloading":
             pct_lbl.configure(text=pct_str)
             size_part = f"{_fmt_bytes(done)} / {_fmt_bytes(total)}" if total else _fmt_bytes(done)
@@ -613,3 +752,203 @@ class ToolsDownloadPanel(ctk.CTkFrame):
         task = external_tools.uninstall_tool_async(slug, progress_cb=_progress, done_cb=_done)
         self._install_tasks[slug] = task
         self._render_card_actions(slug)
+
+    # ── detail overlay ─────────────────────────────────────────────────────
+    def _show_detail_overlay(self, tool: dict):
+        """In-window modal that shows the tool name, description, screenshot.
+        The panel content remains rendered underneath (backdrop dims it)."""
+        # Close any existing overlay first
+        self._close_detail_overlay()
+
+        th = self.theme
+        text = th.get("text", "#fff")
+        text_dim = th.get("text_dim", "#888")
+        card_bg = th.get("card_bg", "#1a1a26")
+        border = th.get("border", "#2a2a36")
+        primary = th.get("primary", "#f0a500")
+        hover = th.get("primary_hover", "#d4900a")
+        danger = "#8b2020"
+
+        # Centered modal placed directly on the panel — NO full backdrop,
+        # so the catalog behind remains visible around the modal edges.
+        modal = ctk.CTkFrame(self, fg_color=card_bg,
+                             corner_radius=16, border_width=1,
+                             border_color=border)
+        modal.place(relx=0.5, rely=0.5, anchor="center",
+                    relwidth=0.72, relheight=0.82)
+        try:
+            modal.lift()
+        except Exception:
+            pass
+
+        # Close X
+        close_btn = ctk.CTkButton(
+            modal, text="",
+            image=(icons.icon("xmark", 16, text) if icons else None),
+            fg_color="transparent", hover_color=danger, text_color=text,
+            width=36, height=36, corner_radius=10,
+            command=self._close_detail_overlay,
+        )
+        close_btn.place(relx=1.0, rely=0.0, anchor="ne", x=-10, y=10)
+
+        # Header row: icon + name/version
+        header = ctk.CTkFrame(modal, fg_color="transparent")
+        header.pack(fill="x", padx=28, pady=(28, 10))
+
+        icon_name = tool.get("icon", "wrench")
+        icon_img = icons.icon(icon_name, 44, primary) if icons else None
+        ctk.CTkLabel(header, text="", image=icon_img,
+                     fg_color="transparent").pack(side="left")
+
+        title_col = ctk.CTkFrame(header, fg_color="transparent")
+        title_col.pack(side="left", fill="x", expand=True, padx=(16, 0))
+        ctk.CTkLabel(title_col, text=tool.get("name", tool.get("slug", "")),
+                     font=ctk.CTkFont("Segoe UI", 22, "bold"),
+                     text_color=text, anchor="w").pack(anchor="w")
+        ver_line = f"v{tool.get('version', '1.0.0')}"
+        if tool.get("author"):
+            ver_line += f"  ·  {tool.get('author')}"
+        ctk.CTkLabel(title_col, text=ver_line,
+                     font=ctk.CTkFont("Segoe UI", 11),
+                     text_color=text_dim, anchor="w").pack(anchor="w", pady=(4, 0))
+
+        # Body — description + screenshot
+        body = ctk.CTkFrame(modal, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=28, pady=(6, 10))
+
+        desc_text = tool.get("long_description") or tool.get("description") or "Bez popisu."
+        desc = ctk.CTkLabel(body, text=desc_text,
+                            font=ctk.CTkFont("Segoe UI", 12),
+                            text_color=text, wraplength=640,
+                            justify="left", anchor="nw")
+        desc.pack(fill="x", anchor="w")
+
+        # Screenshot placeholder — lazy-fetch from screenshot_url
+        shot_url = tool.get("screenshot_url") or tool.get("screenshot")
+        shot_wrap = ctk.CTkFrame(body, fg_color=th.get("secondary", "#0f0f18"),
+                                 corner_radius=12, border_width=1,
+                                 border_color=border, height=300)
+        shot_wrap.pack(fill="both", expand=True, pady=(16, 4))
+        shot_wrap.pack_propagate(False)
+
+        shot_lbl = ctk.CTkLabel(
+            shot_wrap,
+            text=("Ukázka se načítá…" if shot_url else "Bez ukázky"),
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=text_dim,
+        )
+        shot_lbl.pack(expand=True)
+
+        if shot_url:
+            self._load_screenshot_async(shot_url, shot_lbl, shot_wrap)
+
+        # Action bar
+        actions = ctk.CTkFrame(modal, fg_color="transparent")
+        actions.pack(fill="x", padx=28, pady=(6, 22))
+
+        slug = tool.get("slug")
+        installed = external_tools.is_installed(slug) if external_tools else False
+        available = bool(tool.get("available", True))
+
+        def _primary_and_close(cmd):
+            self._close_detail_overlay()
+            cmd()
+
+        if installed:
+            has_update = self._has_update(slug, tool.get("version"))
+            if has_update:
+                ctk.CTkButton(
+                    actions, text=f"Aktualizovat → v{tool.get('version', '?')}",
+                    fg_color=primary, hover_color=hover, text_color="#000",
+                    width=220, height=38, corner_radius=10,
+                    font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                    image=(icons.icon("arrows-rotate", 14, "#000") if icons else None),
+                    compound="left",
+                    command=lambda t=tool: _primary_and_close(lambda: self._install(t)),
+                ).pack(side="right")
+            else:
+                ctk.CTkButton(
+                    actions, text="Otevřít",
+                    fg_color=primary, hover_color=hover, text_color="#000",
+                    width=140, height=38, corner_radius=10,
+                    font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                    command=lambda s=slug: _primary_and_close(lambda: self._open_module(s)),
+                ).pack(side="right")
+        elif available:
+            ctk.CTkButton(
+                actions, text="Instalovat",
+                fg_color=primary, hover_color=hover, text_color="#000",
+                width=160, height=40, corner_radius=10,
+                font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                image=(icons.icon("download", 14, "#000") if icons else None),
+                compound="left",
+                command=lambda t=tool: _primary_and_close(lambda: self._install(t)),
+            ).pack(side="right")
+        else:
+            ctk.CTkLabel(
+                actions, text="  🕒  Brzy k dispozici  ",
+                fg_color=th.get("secondary", "#2a2a36"),
+                text_color=text_dim,
+                font=ctk.CTkFont("Segoe UI", 11, "bold"),
+                corner_radius=10, height=32,
+            ).pack(side="right")
+
+        # ESC to close
+        try:
+            self.winfo_toplevel().bind("<Escape>", lambda _e: self._close_detail_overlay(), add="+")
+        except Exception:
+            pass
+
+        self._detail_overlay = modal
+
+    def _close_detail_overlay(self):
+        ov = getattr(self, "_detail_overlay", None)
+        if ov is not None:
+            try:
+                ov.destroy()
+            except Exception:
+                pass
+            self._detail_overlay = None
+
+    def _load_screenshot_async(self, url: str, lbl, wrap):
+        """Download a screenshot in a background thread and render it."""
+        def _worker():
+            import io
+            import urllib.request
+            try:
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": "ZeddiHubTools/1.7"}
+                )
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    data = r.read()
+            except Exception as e:
+                self.after(0, lambda: lbl.configure(text=f"Nelze načíst ukázku: {e}"))
+                return
+            try:
+                from PIL import Image
+                img = Image.open(io.BytesIO(data))
+                img.load()
+            except Exception as e:
+                self.after(0, lambda: lbl.configure(text=f"Neplatný obrázek: {e}"))
+                return
+
+            def _apply():
+                try:
+                    # Scale to fit the wrap while keeping aspect
+                    wrap.update_idletasks()
+                    w = max(420, wrap.winfo_width() - 24)
+                    h = max(220, wrap.winfo_height() - 24)
+                    iw, ih = img.size
+                    scale = min(w / iw, h / ih, 1.0)
+                    nw, nh = max(1, int(iw * scale)), max(1, int(ih * scale))
+                    disp = img.resize((nw, nh), Image.LANCZOS)
+                    photo = ctk.CTkImage(
+                        light_image=disp, dark_image=disp, size=(nw, nh)
+                    )
+                    lbl.configure(text="", image=photo)
+                    lbl._photo_ref = photo  # keep reference
+                except Exception as ex:
+                    lbl.configure(text=f"Chyba zobrazení: {ex}")
+            self.after(0, _apply)
+
+        threading.Thread(target=_worker, daemon=True).start()

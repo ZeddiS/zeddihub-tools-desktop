@@ -462,6 +462,16 @@ class SpeedTestApp(ctk.CTk):
 
         self._build()
         self.after(20, self._reveal)
+        # Pre-fetch connection metadata so Public IP / ISP / City populate
+        # before the user runs their first test.
+        threading.Thread(target=self._bg_prefetch_meta, daemon=True).start()
+
+    def _bg_prefetch_meta(self):
+        meta = _fetch_meta()
+        try:
+            self.after(0, self._on_meta, meta)
+        except Exception:
+            pass
 
     def _reveal(self):
         try:
@@ -526,12 +536,29 @@ class SpeedTestApp(ctk.CTk):
         for m in (self._m_ping, self._m_jitter, self._m_dl, self._m_ul):
             m.pack(side="left", padx=12)
 
-        # Info line
-        self._info_label = ctk.CTkLabel(
-            gauge_wrap, text="", font=ctk.CTkFont("Segoe UI", 10),
-            text_color=TEXT_DIM,
-        )
-        self._info_label.pack(pady=(0, 6))
+        # Extended results card — Public IP, ISP, Server, Location
+        info_card = ctk.CTkFrame(gauge_wrap, fg_color=CARD,
+                                  corner_radius=10, border_width=1,
+                                  border_color=BORDER)
+        info_card.pack(fill="x", padx=40, pady=(4, 6))
+        info_card.grid_columnconfigure(1, weight=1)
+        self._info_fields = {}
+        for r, (key, lbl) in enumerate([
+            ("ip",     "Veřejná IP"),
+            ("isp",    "Poskytovatel"),
+            ("server", "Testovací server"),
+            ("city",   "Lokalita"),
+        ]):
+            ctk.CTkLabel(info_card, text=lbl,
+                         font=ctk.CTkFont("Segoe UI", 9),
+                         text_color=TEXT_DIM, anchor="w").grid(
+                row=r, column=0, sticky="w", padx=(12, 10), pady=(6 if r == 0 else 2, 6 if r == 3 else 2))
+            val = ctk.CTkLabel(info_card, text="—",
+                               font=ctk.CTkFont("Segoe UI", 10, "bold"),
+                               text_color=TEXT, anchor="e")
+            val.grid(row=r, column=1, sticky="e",
+                     padx=(0, 12), pady=(6 if r == 0 else 2, 6 if r == 3 else 2))
+            self._info_fields[key] = val
 
         # Start button
         self._start_btn = ctk.CTkButton(
@@ -545,13 +572,15 @@ class SpeedTestApp(ctk.CTk):
 
     def _metric(self, parent, label, value, unit, color):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
+        # Small top label keeps the metric color (PING=green, DL=orange, …)
         ctk.CTkLabel(frame, text=label,
                      font=ctk.CTkFont("Segoe UI", 8, "bold"),
-                     text_color=TEXT_DIM).pack()
+                     text_color=color).pack()
+        # Numeric value is always white for legibility on the dark BG.
         val = ctk.CTkLabel(
             frame, text=f"{value} {unit}",
             font=ctk.CTkFont("Segoe UI", 14, "bold"),
-            text_color=color,
+            text_color=TEXT,
         )
         val.pack()
         frame._val = val
@@ -572,7 +601,8 @@ class SpeedTestApp(ctk.CTk):
         self._start_btn.configure(text="Probíhá…", state="disabled")
         for m in (self._m_ping, self._m_jitter, self._m_dl, self._m_ul):
             self._set_metric(m, None)
-        self._info_label.configure(text="")
+        for v in self._info_fields.values():
+            v.configure(text="—")
 
         self._runner = SpeedTestRunner(
             on_phase=lambda n, u, g: self.after(0, self._on_phase, n, u, g),
@@ -591,11 +621,9 @@ class SpeedTestApp(ctk.CTk):
                               unit=unit, auto_max=gmax)
 
     def _on_meta(self, meta: dict):
-        parts = []
-        if meta.get("ip", "-") != "-":  parts.append(meta["ip"])
-        if meta.get("isp", "-") != "-": parts.append(meta["isp"])
-        if meta.get("server", "-") != "-": parts.append(meta["server"])
-        self._info_label.configure(text="  ·  ".join(parts))
+        for key, lbl in self._info_fields.items():
+            v = meta.get(key, "-") or "-"
+            lbl.configure(text=v if v != "-" else "—")
 
     def _on_done(self, result: dict):
         self._runner = None
@@ -615,52 +643,72 @@ class SpeedTestApp(ctk.CTk):
         if self._history_win is not None and self._history_win.winfo_exists():
             self._render_history()
 
-    # ── History window ────────────────────────────────────────────────────
+    # ── History drawer (in-window, right side overlay) ────────────────────
     def _toggle_history(self):
+        # If drawer exists → hide it (speedtest stays visible, unchanged)
         if self._history_win is not None and self._history_win.winfo_exists():
             try:
+                self._history_win.place_forget()
                 self._history_win.destroy()
             except Exception:
                 pass
             self._history_win = None
             return
 
-        win = ctk.CTkToplevel(self)
-        win.title("Historie měření")
-        win.geometry("380x540")
-        win.configure(fg_color=BG)
-        win.transient(self)
+        # Build drawer as a child of self (CTk root) so it overlays the
+        # gauge area. Use .place() for true overlay on top of siblings.
+        drawer = ctk.CTkFrame(self, fg_color=CARD, corner_radius=0,
+                              border_width=0)
+        # Right 60 % of window (≈ 300 px on a 500 px window) slides in.
+        drawer.place(relx=0.40, rely=0.0, relwidth=0.60, relheight=1.0)
+        # Left separator (1-px "border")
+        ctk.CTkFrame(drawer, fg_color=BORDER, width=1).place(
+            relx=0, rely=0, relheight=1.0)
 
-        header = ctk.CTkFrame(win, fg_color=BG)
-        header.pack(fill="x", padx=16, pady=(16, 4))
+        header = ctk.CTkFrame(drawer, fg_color=CARD)
+        header.pack(fill="x", padx=14, pady=(14, 4))
         ctk.CTkLabel(header, text="Historie měření",
-                     font=ctk.CTkFont("Segoe UI", 14, "bold"),
+                     font=ctk.CTkFont("Segoe UI", 13, "bold"),
                      text_color=TEXT).pack(side="left")
-        ctk.CTkLabel(header, text=f"{len(self._history)} testů",
-                     font=ctk.CTkFont("Segoe UI", 10),
-                     text_color=TEXT_DIM).pack(side="right")
+        # Close X in the corner
+        ctk.CTkButton(
+            header, text="✕",
+            fg_color="transparent", hover_color=BG, text_color=TEXT_DIM,
+            font=ctk.CTkFont("Segoe UI", 14, "bold"),
+            width=28, height=28, corner_radius=6,
+            command=self._toggle_history,
+        ).pack(side="right")
 
-        actions = ctk.CTkFrame(win, fg_color=BG)
-        actions.pack(fill="x", padx=16, pady=(0, 8))
+        meta = ctk.CTkFrame(drawer, fg_color=CARD)
+        meta.pack(fill="x", padx=14, pady=(0, 4))
+        ctk.CTkLabel(meta, text=f"{len(self._history)} testů",
+                     font=ctk.CTkFont("Segoe UI", 10),
+                     text_color=TEXT_DIM).pack(side="left")
+
+        actions = ctk.CTkFrame(drawer, fg_color=CARD)
+        actions.pack(fill="x", padx=14, pady=(0, 8))
         ctk.CTkButton(
             actions, text="Vymazat",
-            fg_color=CARD, hover_color=RED, text_color=TEXT,
+            fg_color=BG, hover_color=RED, text_color=TEXT,
             font=ctk.CTkFont("Segoe UI", 10),
             height=28, width=80, corner_radius=6,
             command=self._clear_history,
         ).pack(side="left")
         ctk.CTkButton(
             actions, text="Export JSON",
-            fg_color=CARD, hover_color=ORANGE, text_color=TEXT,
+            fg_color=BG, hover_color=ORANGE, text_color=TEXT,
             font=ctk.CTkFont("Segoe UI", 10),
             height=28, width=110, corner_radius=6,
             command=self._export_history,
         ).pack(side="left", padx=(6, 0))
 
-        self._history_scroll = ctk.CTkScrollableFrame(win, fg_color=BG)
-        self._history_scroll.pack(fill="both", expand=True, padx=10, pady=(4, 12))
+        self._history_scroll = ctk.CTkScrollableFrame(drawer, fg_color=CARD)
+        self._history_scroll.pack(fill="both", expand=True, padx=8, pady=(4, 12))
 
-        self._history_win = win
+        # Always on top of siblings inside this window
+        drawer.lift()
+
+        self._history_win = drawer
         self._render_history()
 
     def _render_history(self):

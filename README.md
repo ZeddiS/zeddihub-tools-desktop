@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.7.2-orange?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-v1.7.3-orange?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-blue?style=flat-square&logo=windows&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/language-EN%20%2F%20CZ-green?style=flat-square" alt="Language">
   <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="License">
@@ -102,7 +102,8 @@ If an update is available, it downloads and installs automatically — no browse
 
 | Version | Highlights |
 |---------|------------|
-| **v1.7.2** | N-09 Report a bug (GitHub Issue prefill), N-13 Novinky panel (Releases feed), F-07 close-behavior toggle + tray notification, F-12 web_favicon.ico unification, F-13 updater dialog fix + clickable pill, E-05 entry focus-ring, Account tab hidden for guests, admin/premium items fully hidden for non-admins, sidebar auth rebuild |
+| **v1.7.3** | Speedtest: white numerics + extended results (IP/ISP/Server/Location) + history as right drawer; Downloadable tools: gray→orange→red progress bar, "Retry" button on error, click-anywhere catalog tile → in-window detail overlay with screenshot; Sidebar: "Edit order" drag-and-drop for external tools, Serverové nástroje pill always PREMIUM, full-row clickability |
+| v1.7.2 | N-09 Report a bug (GitHub Issue prefill), N-13 Novinky panel (Releases feed), F-07 close-behavior toggle + tray notification, F-12 web_favicon.ico unification, F-13 updater dialog fix + clickable pill, E-05 entry focus-ring, Account tab hidden for guests, admin/premium items fully hidden for non-admins, sidebar auth rebuild |
 | v2.0.2 | Server Updater (4-layer remote monitoring), admin-only *Other Tools* with downloadable modules, role-based access (admin/premium/user), Windows autostart + start-minimized toggles, first-launch wizard `%APPDATA%` preset |
 | v2.0.1 | yt-dlp frozen-build fix, single-instance lock, Auto Clicker overhaul (fixed XY / jitter / presets / live counter), Claude-app-style UI refresh, Web Uploader module, bcrypt migration |
 | v2.0.0 | Release Manager redesign, unified bilingual release notes, build-icon regeneration, Win11 Dark Gaming theme |

@@ -1038,11 +1038,13 @@ class MainWindow(ctk.CTk):
                     # now visible because the user authenticated.
                     show_pill = bool(requires_auth) and is_authenticated()
                     if show_pill:
-                        admin_flag = False
-                        try:
-                            admin_flag = bool(is_admin())
-                        except Exception:
-                            admin_flag = False
+                        # Server tools are premium features (regardless of whether
+                        # the current user is admin). Pill is always "PREMIUM".
+                        pill_text = "PREMIUM"
+                        pill_bg = "#22c55e"
+                        _cmd = lambda nid=nav_id, auth=requires_auth: self._on_nav_click(nid, auth)
+                        # Row frame — hover state is propagated to the button so
+                        # the entire row (including the pill area) feels active.
                         row = ctk.CTkFrame(children_frame, fg_color="transparent")
                         row.pack(fill="x", padx=10, pady=1)
                         btn = ctk.CTkButton(
@@ -1058,19 +1060,28 @@ class MainWindow(ctk.CTk):
                             font=ctk.CTkFont("Segoe UI", 11),
                             height=34,
                             corner_radius=8,
-                            command=lambda nid=nav_id, auth=requires_auth: self._on_nav_click(nid, auth)
+                            command=_cmd,
                         )
                         btn.pack(side="left", fill="x", expand=True)
-                        pill_text = "ADMIN" if admin_flag else "PREMIUM"
-                        pill_bg = "#f5a623" if admin_flag else "#22c55e"
-                        ctk.CTkLabel(
+                        pill = ctk.CTkLabel(
                             row, text=pill_text,
                             font=ctk.CTkFont("Segoe UI", 8, "bold"),
                             text_color="#0a0a0a",
                             fg_color=pill_bg,
                             corner_radius=10,
                             width=56, height=18,
-                        ).pack(side="right", padx=(0, 6))
+                            cursor="hand2",
+                        )
+                        pill.pack(side="right", padx=(0, 6))
+                        # The pill is a CTkLabel sibling of the button and would
+                        # otherwise create a dead hit-area. Forward clicks to the
+                        # button so the whole row row is clickable.
+                        def _pill_click(event, fn=_cmd):
+                            fn()
+                        pill.bind("<Button-1>", _pill_click)
+                        # Also forward clicks from the transparent row gap.
+                        row.bind("<Button-1>", _pill_click)
+                        row.configure(cursor="hand2")
                         self._nav_buttons[nav_id] = btn
                     else:
                         btn = ctk.CTkButton(
@@ -1148,47 +1159,163 @@ class MainWindow(ctk.CTk):
         btn.pack(fill="x", padx=10, pady=1)
         self._nav_buttons["tools_download"] = btn
 
+        # Resolved installed-tool order (user-saved order, missing slugs appended)
+        installed = external_tools.list_installed()
+        saved_order = list(settings.get("external_tools_order", []) or [])
+        installed_by_slug = {e.get("slug"): e for e in installed}
+        ordered: list = []
+        for s in saved_order:
+            if s in installed_by_slug:
+                ordered.append(installed_by_slug[s])
+        for e in installed:
+            if e.get("slug") not in {o.get("slug") for o in ordered}:
+                ordered.append(e)
+
+        # "Edit order" row — a small compact toggle above the installed list,
+        # visible only if there is more than one installed tool.
+        reorder_mode = bool(getattr(self, "_reorder_external_tools", False))
+        if len(ordered) >= 2:
+            edit_row = ctk.CTkFrame(children_frame, fg_color="transparent")
+            edit_row.pack(fill="x", padx=10, pady=(4, 2))
+            edit_label = "✓ Hotovo" if reorder_mode else "↕ Upravit pořadí"
+            edit_color = th.get("primary", "#f0a500") if reorder_mode else nav_dim
+            ctk.CTkButton(
+                edit_row, text=edit_label,
+                fg_color="transparent", hover_color=nav_hover,
+                text_color=edit_color, border_width=0, anchor="w",
+                font=ctk.CTkFont("Segoe UI", 10),
+                height=22, corner_radius=6,
+                command=lambda: self._toggle_external_tools_reorder()
+            ).pack(fill="x")
+
         # Installed tools
-        for entry in external_tools.list_installed():
+        for entry in ordered:
             slug = entry.get("slug")
             icon_name = entry.get("icon", "wrench")
             has_update = slug in getattr(self, "_updatable_slugs", {})
             label_text = f"   {entry.get('name', slug)}"
-            if has_update:
-                # Append orange bell suffix (FontAwesome bell rendered via PIL
-                # is a single-color image, so we use a unicode bell to keep the
-                # color orange inline with the label text). CTk buttons only
-                # accept one `image`, so the right-side bell is a sibling label
-                # placed after the button via a small container frame.
-                label_text = f"   {entry.get('name', slug)}"
             row = ctk.CTkFrame(children_frame, fg_color="transparent")
             row.pack(fill="x", padx=10, pady=1)
-            ebtn = ctk.CTkButton(
-                row,
-                image=icons.icon(icon_name, 14, nav_text),
-                text=label_text,
-                compound="left", fg_color="transparent",
-                hover_color=nav_hover, text_color=nav_text,
-                border_width=0, anchor="w",
-                font=ctk.CTkFont("Segoe UI", 11), height=34, corner_radius=8,
-                command=lambda s=slug: self._open_installed_module(s)
-            )
-            ebtn.pack(side="left", fill="x", expand=True)
-            if has_update:
-                bell_lbl = ctk.CTkLabel(
+
+            if reorder_mode:
+                # Drag handle + label only — no "open module" action while
+                # reordering (clicks are repurposed for drag).
+                handle_img = icons.icon("grip-lines", 12, nav_dim) if icons else None
+                ebtn = ctk.CTkButton(
                     row,
-                    image=icons.icon("bell", 13, "#f0a500"),
-                    text="",
-                    fg_color="transparent",
+                    image=handle_img,
+                    text=label_text,
+                    compound="left",
+                    fg_color=th.get("card_bg", "#1a1a26"),
+                    hover_color=th.get("card_bg", "#1a1a26"),
+                    text_color=nav_text,
+                    border_width=1, border_color=th.get("border", "#2a2a36"),
+                    anchor="w",
+                    font=ctk.CTkFont("Segoe UI", 11), height=34, corner_radius=8,
                 )
-                bell_lbl.pack(side="right", padx=(0, 8))
-                # Bell click → navigate to updates page
-                bell_lbl.bind("<Button-1>", lambda _e: self._navigate("tools_download"))
+                ebtn.pack(side="left", fill="x", expand=True)
                 try:
-                    bell_lbl.configure(cursor="hand2")
+                    ebtn.configure(cursor="fleur")
                 except Exception:
                     pass
+                self._bind_drag_reorder(ebtn, slug, children_frame)
+            else:
+                ebtn = ctk.CTkButton(
+                    row,
+                    image=icons.icon(icon_name, 14, nav_text),
+                    text=label_text,
+                    compound="left", fg_color="transparent",
+                    hover_color=nav_hover, text_color=nav_text,
+                    border_width=0, anchor="w",
+                    font=ctk.CTkFont("Segoe UI", 11), height=34, corner_radius=8,
+                    command=lambda s=slug: self._open_installed_module(s)
+                )
+                ebtn.pack(side="left", fill="x", expand=True)
+                if has_update:
+                    bell_lbl = ctk.CTkLabel(
+                        row,
+                        image=icons.icon("bell", 13, "#f0a500"),
+                        text="",
+                        fg_color="transparent",
+                    )
+                    bell_lbl.pack(side="right", padx=(0, 8))
+                    bell_lbl.bind("<Button-1>", lambda _e: self._navigate("tools_download"))
+                    try:
+                        bell_lbl.configure(cursor="hand2")
+                    except Exception:
+                        pass
             self._nav_buttons[f"mod:{slug}"] = ebtn
+
+    def _toggle_external_tools_reorder(self):
+        """Flip the reorder mode and rebuild the sidebar."""
+        self._reorder_external_tools = not bool(
+            getattr(self, "_reorder_external_tools", False)
+        )
+        # Force the section to stay expanded while reordering
+        try:
+            settings = load_settings()
+            secs = settings.setdefault("sidebar_sections", {})
+            secs["sec_external_tools"] = True
+            save_settings(settings)
+        except Exception:
+            pass
+        self.refresh_external_tools_sidebar()
+
+    def _bind_drag_reorder(self, widget, slug: str, container):
+        """Attach press/motion/release bindings for drag-to-reorder."""
+        state = {"start_y": 0, "moved": False}
+
+        def _on_press(event):
+            state["start_y"] = event.y_root
+            state["moved"] = False
+            try:
+                widget.configure(border_color=self._get_current_theme().get("primary", "#f0a500"))
+            except Exception:
+                pass
+
+        def _on_motion(event):
+            dy = event.y_root - state["start_y"]
+            if abs(dy) < 18:  # half a row
+                return
+            # Threshold crossed — shift this slug up or down one position
+            self._shift_external_tool_order(slug, -1 if dy < 0 else +1)
+            state["start_y"] = event.y_root
+            state["moved"] = True
+
+        def _on_release(_event):
+            try:
+                widget.configure(border_color=self._get_current_theme().get("border", "#2a2a36"))
+            except Exception:
+                pass
+
+        widget.bind("<ButtonPress-1>", _on_press, add="+")
+        widget.bind("<B1-Motion>", _on_motion, add="+")
+        widget.bind("<ButtonRelease-1>", _on_release, add="+")
+
+    def _shift_external_tool_order(self, slug: str, delta: int):
+        """Move slug by `delta` positions in the saved order and rebuild."""
+        try:
+            settings = load_settings()
+            installed = [e.get("slug") for e in external_tools.list_installed()]
+            saved = list(settings.get("external_tools_order", []) or [])
+            # Build full ordering (saved first, then remaining installed)
+            full = [s for s in saved if s in installed]
+            for s in installed:
+                if s not in full:
+                    full.append(s)
+            if slug not in full:
+                return
+            idx = full.index(slug)
+            new_idx = max(0, min(len(full) - 1, idx + delta))
+            if new_idx == idx:
+                return
+            full.pop(idx)
+            full.insert(new_idx, slug)
+            settings["external_tools_order"] = full
+            save_settings(settings)
+            self.refresh_external_tools_sidebar()
+        except Exception:
+            pass
 
     def _open_installed_module(self, slug: str):
         """Navigate to a dynamic panel backed by an installed module."""

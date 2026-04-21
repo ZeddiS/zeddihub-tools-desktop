@@ -2,7 +2,7 @@
   "slug": "speedtest",
   "name": "SpeedTest",
   "description": "Test rychlosti připojení — ping, jitter, stahování, odesílání.",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "icon": "gauge-high",
   "kind": "panel",
   "panel_module": "panel",

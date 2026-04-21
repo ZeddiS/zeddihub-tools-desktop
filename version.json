@@ -1,7 +1,7 @@
 {
-  "version": "1.7.2",
-  "release_date": "2026-04-20",
-  "changelog": "v1.7.2: N-09 Report a bug (GitHub Issue prefill z About panelu, bez tokenu), N-13 Novinky panel (GitHub Releases feed), F-07 close behavior volba (minimize/quit) + tray notifikace při prvním skrytí, F-12 ikona používá assets/web_favicon.ico (no-op generate), F-13 updater dialog fix (update_idletasks + deferred grab_set, header pill s orange bg), E-05 Windows 11 Dark Gaming vstupní pole (input_border/input_focus + focus ring 2px), skrytí 'Účet' tabu v Settings pro nepřihlášené, kompletní skrytí locked admin/premium položek ze sidebaru, rebuild sidebar při změně auth stavu.",
+  "version": "1.7.3",
+  "release_date": "2026-04-21",
+  "changelog": "v1.7.3: Speedtest — bílé numerické hodnoty, rozšířené výsledky (IP/ISP/Server/Lokalita), historie jako pravý drawer v okně. Stažitelné nástroje — progress bar šedý→oranžový→červený podle stavu, 'Opakovat' tlačítko při chybě, kliknutí kamkoliv na kartu otevře detail overlay se screenshotem. Sidebar — 'Upravit pořadí' drag-and-drop pro moduly v 'Ostatní nástroje', pill 'Serverové nástroje' vždy PREMIUM místo ADMIN, plně klikatelná buňka.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }
