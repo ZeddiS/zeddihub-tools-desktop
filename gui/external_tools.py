@@ -92,7 +92,9 @@ def _bundled_catalog() -> list:
     panel never appears empty in production."""
     here = Path(__file__).resolve().parent.parent
     candidates = [
-        here / "webhosting" / "data" / "admin_apps.json",
+        # Dev checkout: sibling website repo (preferred in source runs).
+        here.parent / "zeddihub-tools-website" / "tools" / "data" / "admin_apps.json",
+        # Frozen build: admin_apps.json is flattened next to the .exe.
         here / "admin_apps.json",
     ]
     # PyInstaller onefile: _MEIPASS

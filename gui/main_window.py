@@ -18,7 +18,7 @@ except ImportError:
     PIL_OK = False
 
 from .themes import get_theme, GAME_THEMES
-from .auth import is_authenticated, load_credentials, verify_access, save_credentials, clear_credentials, logout, get_current_user, is_admin
+from .auth import is_authenticated, load_credentials, verify_access, save_credentials, clear_credentials, logout, get_current_user, is_admin, resume_session, register as auth_register
 from . import external_tools
 from .updater import check_for_update, download_update, apply_update, open_release_page, CURRENT_VERSION
 from .locale import t, get_lang, set_lang, init as locale_init, load_settings, save_settings
@@ -368,47 +368,162 @@ class AuthDialog(ctk.CTkFrame):
         ).pack(side="left")
 
     def _build_register_tab(self, tab, th):
-        # Info card (subtle card_bg block)
-        info_frame = make_card(tab, th, padding=20)
-        info_frame.pack(fill="x", pady=(12, 12))
+        # --- Form vars --------------------------------------------------
+        self._reg_user_var = ctk.StringVar(value="")
+        self._reg_email_var = ctk.StringVar(value="")
+        self._reg_pass_var = ctk.StringVar(value="")
+        self._reg_pass2_var = ctk.StringVar(value="")
 
-        make_section_title(info_frame, t("register"), th).pack(
-            anchor="w", padx=20, pady=(20, 8)
-        )
+        muted = th.get("text_muted", th["text_dim"])
 
+        # Username
         ctk.CTkLabel(
-            info_frame,
-            text="Registrace není momentálně dostupná.\n\n"
-                 "Pro přístup kontaktujte administrátora\n"
-                 "na Discordu nebo webu ZeddiS.xyz.",
-            font=ctk.CTkFont("Segoe UI", 12),
-            text_color=th.get("text_muted", th["text_dim"]),
-            justify="left",
-        ).pack(anchor="w", padx=20, pady=(0, 16))
+            tab, text=t("username"),
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=muted, anchor="w",
+        ).pack(fill="x", pady=(12, 4), anchor="w")
+        self._reg_user_entry = make_entry(
+            tab, self._reg_user_var, th,
+            placeholder="3–24 znaků, A–Z 0–9 . _ -",
+            height=38,
+        )
+        self._reg_user_entry.pack(fill="x", pady=(0, 10))
 
-        make_divider(info_frame, th).pack(fill="x", padx=20, pady=(0, 14))
+        # Email
+        ctk.CTkLabel(
+            tab, text="Email",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=muted, anchor="w",
+        ).pack(fill="x", pady=(0, 4), anchor="w")
+        make_entry(
+            tab, self._reg_email_var, th,
+            placeholder="tvuj@email.cz",
+            height=38,
+        ).pack(fill="x", pady=(0, 10))
+
+        # Password
+        ctk.CTkLabel(
+            tab, text=t("password") + " (min. 8 znaků)",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=muted, anchor="w",
+        ).pack(fill="x", pady=(0, 4), anchor="w")
+        make_entry(
+            tab, self._reg_pass_var, th,
+            placeholder="nové heslo",
+            height=38, show="*",
+        ).pack(fill="x", pady=(0, 10))
+
+        # Password confirm
+        ctk.CTkLabel(
+            tab, text="Heslo znovu",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=muted, anchor="w",
+        ).pack(fill="x", pady=(0, 4), anchor="w")
+        pass2 = make_entry(
+            tab, self._reg_pass2_var, th,
+            placeholder="potvrzení hesla",
+            height=38, show="*",
+        )
+        pass2.pack(fill="x", pady=(0, 8))
+        pass2.bind("<Return>", lambda _e: self._register())
+
+        make_divider(tab, th).pack(fill="x", pady=(4, 10))
+
+        # Status line (reuses register-specific var)
+        self.reg_status_var = ctk.StringVar(value="")
+        ctk.CTkLabel(
+            tab, textvariable=self.reg_status_var,
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=th["warning"], anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        # Action row
+        row = ctk.CTkFrame(tab, fg_color="transparent")
+        row.pack(fill="x", pady=(4, 0))
 
         make_button(
-            info_frame, " Otevřít Discord → dsc.gg/zeddihub",
-            lambda: webbrowser.open("https://dsc.gg/zeddihub"), th,
-            variant="secondary",
-            height=38,
-            icon=icons.icon("discord", 16, "#7289da"),
+            row, " Vytvořit účet", self._register, th,
+            variant="primary", accent="primary",
+            height=42, width=200,
+            icon=icons.icon("user-plus", 16, "#ffffff"),
             compound="left",
-            font=ctk.CTkFont("Segoe UI", 12),
-            anchor="w",
-        ).pack(fill="x", padx=20, pady=(0, 8))
+            font=ctk.CTkFont("Segoe UI", 13, "bold"),
+        ).pack(side="left", fill="x", expand=True, padx=(0, 8))
 
         make_button(
-            info_frame, " ZeddiS.xyz",
-            lambda: webbrowser.open("https://zeddis.xyz"), th,
-            variant="secondary",
-            height=38,
-            icon=icons.icon("globe", 16, "#cccccc"),
-            compound="left",
+            row, t("cancel"), self._safe_close, th,
+            variant="ghost",
+            height=42, width=100,
             font=ctk.CTkFont("Segoe UI", 12),
-            anchor="w",
-        ).pack(fill="x", padx=20, pady=(0, 20))
+        ).pack(side="left")
+
+        # Footer: "Už máš účet? Přihlásit se"
+        footer = ctk.CTkFrame(tab, fg_color="transparent")
+        footer.pack(fill="x", pady=(14, 0))
+        ctk.CTkLabel(
+            footer, text="Už máš účet?",
+            font=ctk.CTkFont("Segoe UI", 11),
+            text_color=muted,
+        ).pack(side="left")
+        link = ctk.CTkLabel(
+            footer, text=" " + t("login_btn"),
+            font=ctk.CTkFont("Segoe UI", 11, "underline"),
+            text_color=th["primary"],
+            cursor="hand2",
+        )
+        link.pack(side="left")
+        link.bind("<Button-1>", lambda _e: self._tab.set(t("login_btn")))
+
+    def _register(self):
+        u = (self._reg_user_var.get() or "").strip()
+        em = (self._reg_email_var.get() or "").strip()
+        p1 = self._reg_pass_var.get() or ""
+        p2 = self._reg_pass2_var.get() or ""
+
+        if not u or not em or not p1:
+            self.reg_status_var.set("Vyplňte všechna pole.")
+            return
+        if p1 != p2:
+            self.reg_status_var.set("Hesla se neshodují.")
+            return
+        if len(p1) < 8:
+            self.reg_status_var.set("Heslo musí mít alespoň 8 znaků.")
+            return
+
+        self.reg_status_var.set("Vytvářím účet...")
+
+        def on_done(ok: bool, msg: str):
+            if ok:
+                # Registration also logs the user in — persist session and
+                # close the overlay the same way /login does.
+                self.result = True
+                from . import telemetry as _telem
+                _telem.on_login(u)
+                parent = self._parent
+                cb = self._on_success
+                self._safe_close()
+                if cb and parent is not None:
+                    try:
+                        parent.after(0, cb)
+                    except Exception:
+                        try:
+                            cb()
+                        except Exception:
+                            pass
+            else:
+                try:
+                    self.reg_status_var.set(f"✗ {msg}")
+                except Exception:
+                    pass
+
+        def _dispatch(s, m):
+            try:
+                if self.winfo_exists():
+                    self.after(0, on_done, s, m)
+            except Exception:
+                pass
+
+        auth_register(u, em, p1, callback=_dispatch)
 
     def _login(self):
         user = self._user_entry.get().strip()
@@ -500,11 +615,9 @@ class MainWindow(ctk.CTk):
         # Check for updates in background (callback safely scheduled on main thread)
         check_for_update(callback=lambda r: self.after(0, self._on_update_check, r))
 
-        # Try auto-login from saved credentials
-        saved = load_credentials()
-        if saved:
-            verify_access(saved[0], saved[1],
-                          callback=lambda s, m: self.after(100, self._update_auth_ui) if s else None)
+        # Try auto-login from saved session (token → /me; falls back to
+        # saved password → /login if token expired; then legacy auth.json).
+        resume_session(callback=lambda s, m: self.after(100, self._update_auth_ui) if s else None)
 
         # Telemetry: launch event (fire after a short delay so UI is ready)
         self.after(2000, lambda: telemetry.on_launch(get_current_user()))

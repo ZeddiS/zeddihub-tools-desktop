@@ -52,6 +52,7 @@ CHARS: dict[str, str] = {
     # User / Auth
     "user":                 "\uf007",
     "users":                "\uf0c0",
+    "user-plus":            "\uf234",
     "user-gear":            "\uf4fe",
     "lock":                 "\uf023",
     "lock-open":            "\uf3c1",

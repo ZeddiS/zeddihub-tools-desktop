@@ -33,7 +33,8 @@ assets/banner.png
 assets/logo.png
 assets/web_favicon.ico
 
-# --- Serverova cast (NEJDE na GitHub; hesla, data) ---
+# --- Serverova cast (od v1.7.4 v samostatnem repu zeddihub-tools-website) ---
+# Drzime v .gitignore pro pripad, ze nekdo obnovi junction jmenem webhosting.
 webhosting/
 
 # --- Google Apps Script (neni app source) ---
@@ -57,3 +58,8 @@ CLAUDE.md
 .env.local
 *.token
 .gh_token
+
+# ZeddiHub Builder
+_launch_builder.bat
+.zeddibuild.local.json
+_build_tmp.spec

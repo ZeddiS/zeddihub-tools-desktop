@@ -1,7 +1,7 @@
 {
-  "version": "1.7.3",
+  "version": "1.7.4",
   "release_date": "2026-04-21",
-  "changelog": "v1.7.3: Speedtest — bílé numerické hodnoty, rozšířené výsledky (IP/ISP/Server/Lokalita), historie jako pravý drawer v okně. Stažitelné nástroje — progress bar šedý→oranžový→červený podle stavu, 'Opakovat' tlačítko při chybě, kliknutí kamkoliv na kartu otevře detail overlay se screenshotem. Sidebar — 'Upravit pořadí' drag-and-drop pro moduly v 'Ostatní nástroje', pill 'Serverové nástroje' vždy PREMIUM místo ADMIN, plně klikatelná buňka.",
+  "changelog": "v1.7.4: Sjednocené přihlášení s mobilní aplikací — nový REST backend /api/auth/* (SQLite + Bearer tokeny, argon2id hashe, per-device session 180 dní). Desktop nově umí plnou registraci přímo z přihlašovacího dialogu (username + email + heslo). Auto-login používá uložený token (/me), fallback na staré /tools/data/auth.json pouze při offline stavu. Web části přesunuty do samostatného repa zeddihub-tools-website (api/, tools/, games/); desktop přistupuje přes directory junction.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

@@ -15,7 +15,10 @@ a = Analysis(
     datas=[
         ('assets', 'assets'),
         ('locale', 'locale'),
-        ('webhosting/data/admin_apps.json', '.'),
+        # Modul catalog — lives in the standalone website repo. Sibling dir
+        # check-out is required for a build. Runtime always prefers the live
+        # URL via gui/external_tools.py; this is only a cold-start fallback.
+        ('../zeddihub-tools-website/tools/data/admin_apps.json', '.'),
     ],
     hiddenimports=[
         'customtkinter',

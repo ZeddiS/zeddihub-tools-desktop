@@ -5,12 +5,12 @@ Any module that needs to know the current version MUST import APP_VERSION from h
 When bumping the version, only this file needs to change — updater.py and telemetry.py
 pull their constants from this module.
 
-NOTE: version.json at the repo root and webhosting/data/version.json are kept as
-fallbacks for offline clients and the legacy updater path. They are rewritten by the
-release helper bat (zeddihub.bat) at tag time.
+NOTE: version.json at the repo root and zeddihub-tools-website/tools/data/version.json
+(v1.7.4+: separate repo) are kept as fallbacks for offline clients and the legacy
+updater path. They are rewritten by the release helper bat (zeddihub.bat) at tag time.
 """
 
-APP_VERSION = "1.7.3"
+APP_VERSION = "1.7.4"
 APP_NAME = "ZeddiHub Tools Desktop"
 GITHUB_OWNER = "ZeddiS"
 GITHUB_REPO = "zeddihub-tools-desktop"

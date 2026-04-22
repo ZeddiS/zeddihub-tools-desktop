@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.7.3-orange?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-v1.7.4-orange?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-blue?style=flat-square&logo=windows&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/language-EN%20%2F%20CZ-green?style=flat-square" alt="Language">
   <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="License">
@@ -102,7 +102,8 @@ If an update is available, it downloads and installs automatically — no browse
 
 | Version | Highlights |
 |---------|------------|
-| **v1.7.3** | Speedtest: white numerics + extended results (IP/ISP/Server/Location) + history as right drawer; Downloadable tools: gray→orange→red progress bar, "Retry" button on error, click-anywhere catalog tile → in-window detail overlay with screenshot; Sidebar: "Edit order" drag-and-drop for external tools, Serverové nástroje pill always PREMIUM, full-row clickability |
+| **v1.7.4** | Shared auth with mobile app: new REST backend `/api/auth/*` (SQLite + Bearer tokens, argon2id, 180-day per-device sessions); full in-app registration dialog (username + email + password); token-based auto-login via `/me`, legacy `auth.json` kept as offline fallback; all web content relocated to standalone `zeddihub-tools-website` repo (`api/`, `tools/`, `games/`) with desktop accessing it via Windows directory junction |
+| v1.7.3 | Speedtest: white numerics + extended results (IP/ISP/Server/Location) + history as right drawer; Downloadable tools: gray→orange→red progress bar, "Retry" button on error, click-anywhere catalog tile → in-window detail overlay with screenshot; Sidebar: "Edit order" drag-and-drop for external tools, Serverové nástroje pill always PREMIUM, full-row clickability |
 | v1.7.2 | N-09 Report a bug (GitHub Issue prefill), N-13 Novinky panel (Releases feed), F-07 close-behavior toggle + tray notification, F-12 web_favicon.ico unification, F-13 updater dialog fix + clickable pill, E-05 entry focus-ring, Account tab hidden for guests, admin/premium items fully hidden for non-admins, sidebar auth rebuild |
 | v2.0.2 | Server Updater (4-layer remote monitoring), admin-only *Other Tools* with downloadable modules, role-based access (admin/premium/user), Windows autostart + start-minimized toggles, first-launch wizard `%APPDATA%` preset |
 | v2.0.1 | yt-dlp frozen-build fix, single-instance lock, Auto Clicker overhaul (fixed XY / jitter / presets / live counter), Claude-app-style UI refresh, Web Uploader module, bcrypt migration |
@@ -151,15 +152,18 @@ python -m PyInstaller --onefile --windowed --name "ZeddiHub.Tools" ^
 <details>
 <summary>Webhosting / Admin panel setup</summary>
 
-Upload the contents of `webhosting/` to your hosting:
+Since **v1.7.4** all web content lives in the separate [`zeddihub-tools-website`](../zeddihub-tools-website/) repo:
 
-- `admin/` → your domain (e.g. `zeddihub.eu/admin/`)
-- `data/` → where the app reads JSON files (e.g. `files.zeddihub.eu/tools/`)
+- `api/auth/` + `api/wifi-map/` — REST API shared with the Android app
+- `tools/admin/` — PHP admin panel
+- `tools/data/` — static JSON feeds (servers, tray tools, recommended, admin_apps)
 
-Edit `DATA_DIR` in `admin/index.php` to match your server path.  
-**Change the admin password** in `data/auth.json` before going live.
+Upload to hosting:
 
-Requires PHP 7.4+ and write permissions on the `data/` directory.
+- `api/` → `public_html/api/`
+- `tools/` → `public_html/tools/` (legacy URL kept for older clients)
+
+Requires PHP 7.3+ with PDO SQLite. See the website repo's `README.md` for deploy/secret details.
 
 </details>
 

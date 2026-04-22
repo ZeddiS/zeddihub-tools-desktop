@@ -1,0 +1,70 @@
+{
+  "$schema": "https://zeddihub.cz/zeddibuild.schema.json",
+  "name": "ZeddiHubTools",
+  "display_name": "ZeddiHub Tools Desktop",
+  "version": "1.7.4",
+  "description": "Desktop nástroje pro adminy CS2/CS:GO/Rust serverů — crosshair/viewmodel/autoexec editor, RCON klient, server watchdog, PC utility a sjednocené přihlášení s mobilní aplikací přes REST API.",
+  "author": "ZeddiHub (ZeddiS)",
+  "entry_point": "app.py",
+  "output_name": "ZeddiHubTools",
+  "icon": "assets/web_favicon.ico",
+  "build": {
+    "onefile": true,
+    "console": false,
+    "upx": true,
+    "strip": false,
+    "clean": true
+  },
+  "data_files": [
+    { "src": "assets/web_favicon.ico", "dest": "assets" },
+    { "src": "assets/logo.png", "dest": "assets" },
+    { "src": "assets/logo2.png", "dest": "assets" },
+    { "src": "assets/logo_transparent.png", "dest": "assets" },
+    { "src": "assets/fonts/fa-solid-900.ttf", "dest": "assets/fonts" },
+    { "src": "assets/fonts/fa-brands-400.ttf", "dest": "assets/fonts" },
+    { "src": "locale/cs.json", "dest": "locale" },
+    { "src": "locale/en.json", "dest": "locale" }
+  ],
+  "hidden_imports": [
+    "customtkinter",
+    "PIL",
+    "PIL.Image",
+    "PIL.ImageDraw",
+    "PIL.ImageFont",
+    "PIL._tkinter_finder",
+    "cryptography",
+    "cryptography.fernet",
+    "cryptography.hazmat.bindings._rust",
+    "pystray",
+    "pystray._win32",
+    "psutil",
+    "pynput",
+    "pynput.keyboard",
+    "pynput.mouse",
+    "pyautogui"
+  ],
+  "excludes": [
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "scipy",
+    "pytest",
+    "IPython",
+    "jupyter",
+    "notebook",
+    "sphinx",
+    "PyQt5",
+    "PyQt6",
+    "PySide2",
+    "PySide6",
+    "torch",
+    "tensorflow",
+    "sklearn"
+  ],
+  "requirements": "requirements.txt",
+  "python_min": "3.11",
+  "post_build": {
+    "open_folder": true,
+    "run_app": false
+  }
+}
