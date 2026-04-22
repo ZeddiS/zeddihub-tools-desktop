@@ -1,4 +1,4 @@
-# ZeddiHub Tools Desktop v1.6.0
+# ZeddiHub Tools Desktop v1.7.7
 # GUI Dependencies
 customtkinter>=5.2.0
 Pillow>=10.0.0
@@ -11,8 +11,13 @@ requests>=2.31.0
 
 # PC Tools (N-01)
 pyautogui>=0.9.54       # Autoclicker — simulace kliknutí myši
-pynput>=1.7.6           # Autoclicker — globální hotkey (funguje i při minimalizaci do tray)
+pynput>=1.7.6           # Autoclicker, Makra (v1.7.6) — globální hotkey + listener/playback
 # yt-dlp se stahuje na vyžádání (N-01) — není v requirements, instaluje se přes UI
+
+# Aplikace panel (v1.7.7) — embedded Edge WebView2 renderer
+# Optional: pokud není k dispozici, odkazy s "webview" módem se otevřou v systémovém prohlížeči.
+# Vyžaduje Windows + Edge WebView2 runtime (panel umí runtime nainstalovat na kliknutí).
+pywebview>=4.4.1
 
 # Standard library (included with Python):
 # tkinter, json, os, sys, socket, struct, re, time, shutil, threading, urllib

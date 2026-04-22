@@ -1902,10 +1902,10 @@ class MainWindow(ctk.CTk):
         elif nav_id == "macros_soon":
             from .panels.macros import MacrosPanel
             panel = MacrosPanel(container, theme=_th())
-        # v1.7.5: apps catalog placeholder — real system lands in v1.7.7
+        # v1.7.7: full apps catalog (fulltext, admin-managed filters, embedded WebView2)
         elif nav_id == "apps_catalog":
-            from .panels.apps_placeholder import AppsPlaceholderPanel
-            panel = AppsPlaceholderPanel(container, theme=_th())
+            from .panels.apps import AppsPanel
+            panel = AppsPanel(container, theme=_th())
         elif nav_id == "settings":
             from .panels.settings import SettingsPanel
             panel = SettingsPanel(container, theme=_th(),
