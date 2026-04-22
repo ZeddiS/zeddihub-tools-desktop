@@ -1,7 +1,7 @@
 {
-  "version": "1.7.4",
-  "release_date": "2026-04-21",
-  "changelog": "v1.7.4: Sjednocené přihlášení s mobilní aplikací — nový REST backend /api/auth/* (SQLite + Bearer tokeny, argon2id hashe, per-device session 180 dní). Desktop nově umí plnou registraci přímo z přihlašovacího dialogu (username + email + heslo). Auto-login používá uložený token (/me), fallback na staré /tools/data/auth.json pouze při offline stavu. Web části přesunuty do samostatného repa zeddihub-tools-website (api/, tools/, games/); desktop přistupuje přes directory junction.",
+  "version": "1.7.5",
+  "release_date": "2026-04-22",
+  "changelog": "v1.7.5: Přihlášení přesunuto z levého dolního rohu do hlavičky (klikatelný pill) — uvolněné místo v sidebaru. Utility sekce rozdělena do čtyř podsekcí: Systém / Časovače / Makra / Procesy. Nové časovače: Stopky (počítání nahoru + kola), Odpočet (countdown s 5 akcemi při doběhnutí) a Časovač (budík na konkrétní čas nebo za X hodin). Nový samostatný panel Procesy s řazením, filtrováním a možností ukončení. Placeholder panely pro nadcházející Makra (v1.7.6) a Aplikace (v1.7.7). Drobná rozšíření icon sady (stopwatch, hourglass-half, grid, rotate-left atd.).",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

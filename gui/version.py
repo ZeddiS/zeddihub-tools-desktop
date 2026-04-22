@@ -10,7 +10,7 @@ NOTE: version.json at the repo root and zeddihub-tools-website/tools/data/versio
 updater path. They are rewritten by the release helper bat (zeddihub.bat) at tag time.
 """
 
-APP_VERSION = "1.7.4"
+APP_VERSION = "1.7.5"
 APP_NAME = "ZeddiHub Tools Desktop"
 GITHUB_OWNER = "ZeddiS"
 GITHUB_REPO = "zeddihub-tools-desktop"

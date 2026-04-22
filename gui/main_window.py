@@ -44,12 +44,24 @@ HEADER_H = 64
 # items: [(nav_id, label, fa_icon, requires_auth), ...]
 NAV_SECTIONS = [
     ("home",     None,    "house",        None,   None, False),
-    ("sec_pc_tools", "nav_pc_tools_section", "laptop", None, [
+    # v1.7.5: Utility rozděleny do 4 samostatných sekcí podle UX zpětné vazby
+    ("sec_system", "nav_system_section", "laptop", None, [
         ("pc_sysinfo",     "nav_pc_sysinfo",     "laptop",               False),
         ("pc_nettools",    "nav_pc_nettools",    "tower-broadcast",      False),
         ("pc_utility",     "nav_pc_utility",     "screwdriver-wrench",   False),
         ("pc_gameopt",     "nav_pc_gameopt",     "gamepad",              False),
         ("pc_advanced",    "nav_pc_advanced",    "shield-halved",        False),
+    ], None),
+    ("sec_timers", "nav_timers_section", "stopwatch", None, [
+        ("timers_stopky",   "nav_stopky",    "stopwatch",   False),
+        ("timers_odpocet",  "nav_odpocet",   "hourglass-half", False),
+        ("timers_casovac",  "nav_casovac",   "bell",        False),
+    ], None),
+    ("sec_macros", "nav_macros_section", "wand-magic-sparkles", None, [
+        ("macros_soon",   "nav_macros_soon",   "hourglass-half", False),
+    ], None),
+    ("sec_processes", "nav_processes_section", "list-check", None, [
+        ("processes_list",   "nav_processes_list",  "list",  False),
     ], None),
     ("sec_cs2",  "CS2",   "crosshairs",   "cs2",  [
         ("cs2_player",  "player_tools",  "user",     False),
@@ -91,6 +103,11 @@ NAV_GAME_MAP = {
     "news": "default",
     "pc_sysinfo": "default", "pc_nettools": "default",
     "pc_utility": "default", "pc_gameopt": "default", "pc_advanced": "default",
+    # v1.7.5
+    "timers_stopky": "default", "timers_odpocet": "default", "timers_casovac": "default",
+    "macros_soon": "default",
+    "processes_list": "default",
+    "apps_catalog": "default",
 }
 
 # nav_ids that show NO game badge in header
@@ -98,7 +115,10 @@ NO_BADGE_IDS = {"home", "pc_tools", "translator", "game_tools", "links",
                 "settings", "watchdog", "uploader", "about", "news",
                 "sensitivity", "edpi", "ping_tester", "tools_download",
                 "pc_sysinfo", "pc_nettools", "pc_utility",
-                "pc_gameopt", "pc_advanced"}
+                "pc_gameopt", "pc_advanced",
+                # v1.7.5
+                "timers_stopky", "timers_odpocet", "timers_casovac",
+                "macros_soon", "processes_list", "apps_catalog"}
 
 
 def _fade_in_toplevel(win, duration_ms: int = 160):
@@ -866,12 +886,24 @@ class MainWindow(ctk.CTk):
                                             text_color=th["text_muted"])
         self._version_label.pack(side="right", padx=(4, 0))
 
-        self._auth_label = ctk.CTkLabel(right,
-                                         image=icons.icon("lock-open", 13, th["text_dim"]),
-                                         text=" " + t("not_logged_in"),
-                                         compound="left",
-                                         font=ctk.CTkFont("Segoe UI", 10),
-                                         text_color=th["text_dim"])
+        # v1.7.5: Auth badge in header is now clickable — replaces former
+        # sidebar-bottom login pill. Click → opens Login/Register dialog when
+        # logged out, or a small logout menu when logged in.
+        self._auth_label = ctk.CTkButton(
+            right,
+            image=icons.icon("lock-open", 13, th["text_dim"]),
+            text=" " + t("not_logged_in"),
+            compound="left",
+            font=ctk.CTkFont("Segoe UI", 10),
+            text_color=th["text_dim"],
+            fg_color="transparent",
+            hover_color=th.get("card_hover", th["secondary"]),
+            border_width=0,
+            height=30,
+            corner_radius=10,
+            cursor="hand2",
+            command=self._on_header_auth_click,
+        )
         self._auth_label.pack(side="right", padx=10)
 
         # F-13: Update badge — created with a hidden pill shape that becomes
@@ -965,20 +997,7 @@ class MainWindow(ctk.CTk):
         )
         self._lang_btn.pack(fill="x", padx=10, pady=(4, 6), side="bottom")
 
-        self._auth_btn = ctk.CTkButton(
-            self._sidebar,
-            image=icons.icon("right-to-bracket", 15, nav_dim),
-            text=" " + t("login"),
-            compound="left",
-            fg_color="transparent", hover_color=nav_hover,
-            text_color=nav_text, anchor="w",
-            font=ctk.CTkFont("Segoe UI", 11),
-            height=36,
-            corner_radius=8,
-            border_width=0,
-            command=self._show_auth_dialog
-        )
-        self._auth_btn.pack(fill="x", padx=10, pady=1, side="bottom")
+        # v1.7.5: Auth pill removed from sidebar — moved to header.
 
         self._settings_btn = ctk.CTkButton(
             self._sidebar,
@@ -1009,6 +1028,24 @@ class MainWindow(ctk.CTk):
             command=lambda: self._navigate("links")
         )
         self._links_btn.pack(fill="x", padx=10, pady=1, side="bottom")
+
+        # v1.7.5: "Aplikace" button above "Odkazy" — catalog of external
+        # apps/webs/downloads. Panel arrives in v1.7.7; for now the button
+        # navigates to a placeholder that explains the feature is coming.
+        self._apps_btn = ctk.CTkButton(
+            self._sidebar,
+            image=icons.icon("grid", 15, nav_dim),
+            text="  " + t("apps_catalog"),
+            compound="left",
+            fg_color="transparent", hover_color=nav_hover,
+            text_color=nav_text, anchor="w",
+            font=ctk.CTkFont("Segoe UI", 11),
+            height=36,
+            corner_radius=8,
+            border_width=0,
+            command=lambda: self._navigate("apps_catalog")
+        )
+        self._apps_btn.pack(fill="x", padx=10, pady=1, side="bottom")
 
     def _rebuild_nav_items(self):
         """Destroy and re-render sidebar nav items — used on auth state change
@@ -1790,7 +1827,7 @@ class MainWindow(ctk.CTk):
             sbtn.configure(text_color=th.get("text_muted", th["text_dim"]), hover_color=nav_hover)
 
         # Update bottom sidebar buttons
-        for attr in ("_settings_btn", "_links_btn", "_auth_btn", "_lang_btn"):
+        for attr in ("_settings_btn", "_links_btn", "_apps_btn", "_lang_btn"):
             w = getattr(self, attr, None)
             if w:
                 w.configure(hover_color=nav_hover)
@@ -1847,6 +1884,28 @@ class MainWindow(ctk.CTk):
             cls = _pc_map.get(nav_id)
             if cls is not None:
                 panel = cls(container, theme=_th())
+        # v1.7.5: new timer panels
+        elif nav_id == "timers_stopky":
+            from .panels.timers import StopkyPanel
+            panel = StopkyPanel(container, theme=_th())
+        elif nav_id == "timers_odpocet":
+            from .panels.timers import OdpocetPanel
+            panel = OdpocetPanel(container, theme=_th())
+        elif nav_id == "timers_casovac":
+            from .panels.timers import CasovacPanel
+            panel = CasovacPanel(container, theme=_th())
+        # v1.7.5: processes split from PCToolsPanel
+        elif nav_id == "processes_list":
+            from .panels.processes import ProcessesPanel
+            panel = ProcessesPanel(container, theme=_th())
+        # v1.7.5: macros placeholder — real system lands in v1.7.6
+        elif nav_id == "macros_soon":
+            from .panels.macros_placeholder import MacrosPlaceholderPanel
+            panel = MacrosPlaceholderPanel(container, theme=_th())
+        # v1.7.5: apps catalog placeholder — real system lands in v1.7.7
+        elif nav_id == "apps_catalog":
+            from .panels.apps_placeholder import AppsPlaceholderPanel
+            panel = AppsPlaceholderPanel(container, theme=_th())
         elif nav_id == "settings":
             from .panels.settings import SettingsPanel
             panel = SettingsPanel(container, theme=_th(),
@@ -2020,6 +2079,18 @@ class MainWindow(ctk.CTk):
             return
         self._open_auth_dialog()
 
+    def _on_header_auth_click(self):
+        """v1.7.5: Header auth pill click handler.
+
+        - Logged out: open Login/Register dialog (same as former sidebar pill).
+        - Logged in: navigate to Settings > Account (consistent with sidebar behavior).
+        """
+        if is_authenticated():
+            self._navigate("settings")
+            self.after(50, self._focus_settings_account_tab)
+            return
+        self._open_auth_dialog()
+
     def _focus_settings_account_tab(self):
         """Flip SettingsPanel to its 'Účet' tab if it exposes a hook."""
         try:
@@ -2065,16 +2136,10 @@ class MainWindow(ctk.CTk):
             self._auth_label.configure(
                 image=icons.icon("user", 13, "#4ade80"),
                 text=f" {user}", text_color="#4ade80")
-            self._auth_btn.configure(
-                image=icons.icon("check", 15, "#4ade80"),
-                text=f"  {t('logged_in_as', user=user)}", text_color="#4ade80")
         else:
             self._auth_label.configure(
-                image=icons.icon("lock-open", 13, "#666666"),
-                text=" " + t("not_logged_in"), text_color="#666666")
-            self._auth_btn.configure(
-                image=icons.icon("right-to-bracket", 15, "#888888"),
-                text=" " + t("login"), text_color="#888888")
+                image=icons.icon("lock-open", 13, "#888888"),
+                text=" " + t("not_logged_in"), text_color="#888888")
 
         # N-11: propagate auth state change to HomePanel login card if it is visible
         try:
