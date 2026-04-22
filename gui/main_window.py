@@ -1898,10 +1898,10 @@ class MainWindow(ctk.CTk):
         elif nav_id == "processes_list":
             from .panels.processes import ProcessesPanel
             panel = ProcessesPanel(container, theme=_th())
-        # v1.7.5: macros placeholder — real system lands in v1.7.6
+        # v1.7.6: full macro system (recorder + step builder + hotkey manager)
         elif nav_id == "macros_soon":
-            from .panels.macros_placeholder import MacrosPlaceholderPanel
-            panel = MacrosPlaceholderPanel(container, theme=_th())
+            from .panels.macros import MacrosPanel
+            panel = MacrosPanel(container, theme=_th())
         # v1.7.5: apps catalog placeholder — real system lands in v1.7.7
         elif nav_id == "apps_catalog":
             from .panels.apps_placeholder import AppsPlaceholderPanel
