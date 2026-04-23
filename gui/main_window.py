@@ -44,25 +44,10 @@ HEADER_H = 64
 # items: [(nav_id, label, fa_icon, requires_auth), ...]
 NAV_SECTIONS = [
     ("home",     None,    "house",        None,   None, False),
-    # v1.7.5: Utility rozděleny do 4 samostatných sekcí podle UX zpětné vazby
-    ("sec_system", "nav_system_section", "laptop", None, [
-        ("pc_sysinfo",     "nav_pc_sysinfo",     "laptop",               False),
-        ("pc_nettools",    "nav_pc_nettools",    "tower-broadcast",      False),
-        ("pc_utility",     "nav_pc_utility",     "screwdriver-wrench",   False),
-        ("pc_gameopt",     "nav_pc_gameopt",     "gamepad",              False),
-        ("pc_advanced",    "nav_pc_advanced",    "shield-halved",        False),
-    ], None),
-    ("sec_timers", "nav_timers_section", "stopwatch", None, [
-        ("timers_stopky",   "nav_stopky",    "stopwatch",   False),
-        ("timers_odpocet",  "nav_odpocet",   "hourglass-half", False),
-        ("timers_casovac",  "nav_casovac",   "bell",        False),
-    ], None),
-    ("sec_macros", "nav_macros_section", "wand-magic-sparkles", None, [
-        ("macros_soon",   "nav_macros_soon",   "hourglass-half", False),
-    ], None),
-    ("sec_processes", "nav_processes_section", "list-check", None, [
-        ("processes_list",   "nav_processes_list",  "list",  False),
-    ], None),
+    # v1.7.8: 4 Utility sekce zase sjednoceny do JEDNÉ položky — uvnitř je
+    # CTkTabview s taby Systém / Časovače / Makra / Procesy (stejný pattern
+    # jako CS2 hráčské nástroje), dle UX zpětné vazby.
+    ("utility_hub", "nav_utility_hub", "screwdriver-wrench", None, None, False),
     ("sec_cs2",  "CS2",   "crosshairs",   "cs2",  [
         ("cs2_player",  "player_tools",  "user",     False),
         ("cs2_server",  "server_tools",  "server",   True),
@@ -101,9 +86,11 @@ NAV_GAME_MAP = {
     "uploader": "default", "about": "default",
     "tools_download": "default",
     "news": "default",
+    # v1.7.8: konsolidovaná Utility (tabs uvnitř jednoho panelu)
+    "utility_hub": "default",
+    # Back-compat: pokud kdekoliv ještě zůstanou staré nav_id, ať mají téma.
     "pc_sysinfo": "default", "pc_nettools": "default",
     "pc_utility": "default", "pc_gameopt": "default", "pc_advanced": "default",
-    # v1.7.5
     "timers_stopky": "default", "timers_odpocet": "default", "timers_casovac": "default",
     "macros_soon": "default",
     "processes_list": "default",
@@ -114,9 +101,11 @@ NAV_GAME_MAP = {
 NO_BADGE_IDS = {"home", "pc_tools", "translator", "game_tools", "links",
                 "settings", "watchdog", "uploader", "about", "news",
                 "sensitivity", "edpi", "ping_tester", "tools_download",
+                # v1.7.8: konsolidovaná Utility (tabs uvnitř jednoho panelu)
+                "utility_hub",
+                # Back-compat — staré nav_id pro případné staré odkazy.
                 "pc_sysinfo", "pc_nettools", "pc_utility",
                 "pc_gameopt", "pc_advanced",
-                # v1.7.5
                 "timers_stopky", "timers_odpocet", "timers_casovac",
                 "macros_soon", "processes_list", "apps_catalog"}
 
@@ -359,12 +348,13 @@ class AuthDialog(ctk.CTkFrame):
         # Divider
         make_divider(tab, th).pack(fill="x", pady=(0, 14))
 
-        # Status
+        # Status — v1.7.8: vícelinkové, wraplength, jasně viditelné.
         self.status_var = ctk.StringVar(value="")
         ctk.CTkLabel(
             tab, textvariable=self.status_var,
-            font=ctk.CTkFont("Segoe UI", 10),
+            font=ctk.CTkFont("Segoe UI", 11),
             text_color=th["warning"], anchor="w",
+            justify="left", wraplength=380,
         ).pack(fill="x", pady=(0, 10))
 
         # Button row
@@ -1100,13 +1090,18 @@ class MainWindow(ctk.CTk):
             first_rendered = True
 
             if children is None:
-                # Top-level nav button (home, pc_tools, watchdog)
+                # Top-level nav button (home, utility_hub, …).
                 nav_id = sec_id
-                display_label = {
-                    "home":       t("home"),
-                    "pc_tools":   t("pc_tools"),
-                    "game_tools": t("game_tools"),
-                }.get(nav_id, nav_id)
+                # Use the per-entry label key when provided — otherwise fall
+                # back to legacy hard-coded display labels for back-compat.
+                if label:
+                    display_label = t(label) if "_" in label else label
+                else:
+                    display_label = {
+                        "home":       t("home"),
+                        "pc_tools":   t("pc_tools"),
+                        "game_tools": t("game_tools"),
+                    }.get(nav_id, nav_id)
                 btn = ctk.CTkButton(
                     self._nav_scroll,
                     image=icons.icon(icon, 16, nav_dim),
@@ -1869,6 +1864,11 @@ class MainWindow(ctk.CTk):
         if nav_id == "home":
             from .panels.home import HomePanel
             panel = HomePanel(container, theme=_th(), nav_callback=self._navigate)
+        # v1.7.8: konsolidovaný Utility hub (tabs uvnitř jednoho panelu) —
+        # nahrazuje 4 samostatné sekce z v1.7.5 (Systém/Časovače/Makra/Procesy).
+        elif nav_id == "utility_hub":
+            from .panels.utility_hub import UtilityHubPanel
+            panel = UtilityHubPanel(container, theme=_th())
         elif nav_id == "pc_tools":
             from .panels.pc_tools import PCToolsPanel
             panel = PCToolsPanel(container, theme=_th())

@@ -1,7 +1,7 @@
 {
-  "version": "1.7.7",
-  "release_date": "2026-04-22",
-  "changelog": "v1.7.7: Nový panel Aplikace (gui/panels/apps/) — katalog užitečných webů a nástrojů s fulltextovým vyhledáváním a dynamickými filtry spravovanými přes admin panel. Embedded Edge WebView2 renderer (pywebview) s auto-install bootstrapperem runtime přímo z UI; pokud WebView2 není dostupný, odkazy se korektně otevřou v systémovém prohlížeči. Tři režimy otevírání položek: webview / external / download. Per-item ikona, popis, tagy, screenshot, kategorie. 6h disk cache quick_links.json v data_dir s okamžitým seed render + refresh ze serveru. Admin panel (zeddihub-tools-website) dostal editor quick_links.json a podporu filter_groups pro kategorie/tagy.",
+  "version": "1.7.8",
+  "release_date": "2026-04-23",
+  "changelog": "v1.7.8: Konsolidovaná Utility — Časovače, Makra a Procesy zpět do jedné Utility položky v sidebaru (4 taby uvnitř: Systém, Časovače, Makra, Procesy) podle stejného UX patternu jako CS2 hráčské nástroje. Sidebar je tím přehlednější a kratší. Přihlašovací dialog nyní zobrazuje konkrétnější chybové hlášky (včetně HTTP kódu a error-key u neznámých stavů + síťového důvodu při výpadku) — snazší diagnostika bez otevírání logů. Back-compat: staré nav_id (pc_sysinfo, timers_stopky, macros_soon, …) stále fungují v case někde v kódu přetrvávají.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

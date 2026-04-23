@@ -75,12 +75,22 @@ _ERROR_CS: Dict[str, str] = {
 
 
 def _humanize_api_error(err: ApiError) -> str:
-    """Convert an ApiError into a short Czech message for the UI."""
+    """Convert an ApiError into a short Czech message for the UI.
+
+    v1.7.8: Pokud server vrátí neznámý error-key, přidáme ho do závorky, aby
+    šlo diagnostikovat problém bez otevírání logů (user sám vidí „server_error
+    (http_error/502)" atp.)."""
     msg = _ERROR_CS.get(err.error)
     if msg:
         return msg
     if err.message:
-        return err.message
+        suffix = f" ({err.error}"
+        if err.status:
+            suffix += f"/{err.status}"
+        suffix += ")"
+        return err.message + suffix
+    if err.status:
+        return f"Chyba: {err.error} (HTTP {err.status})"
     return f"Chyba: {err.error}"
 
 
@@ -361,14 +371,18 @@ def verify_access(
         except ApiError as e:
             # Real credential error — do NOT fall back, user needs to fix input.
             return False, _humanize_api_error(e)
-        except NetworkError:
+        except NetworkError as ne:
             # 2) Legacy fallback only when the REST endpoint is unreachable.
             ok, msg = _verify_legacy_json(username, password)
             if ok:
                 return True, msg + " (offline fallback)"
             if _auth_verified:
                 return True, "Offline režim – použita cached autentizace."
-            return False, "Nelze se připojit k serveru a údaje nejsou v cache."
+            # v1.7.8: ukázat konkrétní síťovou chybu, ne jen generické "Nelze se
+            # připojit k serveru" — uživatel ví, co je potřeba opravit (DNS,
+            # SSL, firewall, VPN).
+            detail = str(ne) or "neznámý důvod"
+            return False, f"Nelze se připojit k serveru ({detail}) a údaje nejsou v cache."
 
     return _dispatch(_work, callback)
 
