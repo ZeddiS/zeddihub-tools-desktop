@@ -1,7 +1,7 @@
 {
-  "version": "1.7.8",
+  "version": "1.7.9",
   "release_date": "2026-04-23",
-  "changelog": "v1.7.8: Konsolidovaná Utility — Časovače, Makra a Procesy zpět do jedné Utility položky v sidebaru (4 taby uvnitř: Systém, Časovače, Makra, Procesy) podle stejného UX patternu jako CS2 hráčské nástroje. Sidebar je tím přehlednější a kratší. Přihlašovací dialog nyní zobrazuje konkrétnější chybové hlášky (včetně HTTP kódu a error-key u neznámých stavů + síťového důvodu při výpadku) — snazší diagnostika bez otevírání logů. Back-compat: staré nav_id (pc_sysinfo, timers_stopky, macros_soon, …) stále fungují v case někde v kódu přetrvávají.",
+  "changelog": "v1.7.9: Velký výkonnostní balíček. Panel pool (LRU cache, max 6 panelů) — místo destroy()+rebuild při každé navigaci se panely jen schovají/zobrazí, takže přepínání je o řád rychlejší a obnovení z tray už nestahuje data znovu. HTTP cache s TTL — recommended.json (30 min), GitHub stats + releases (1 h), katalog Aplikace (6 h) — opakované otevření HomePanelu/AppsPanelu nedotahuje znova. Tray restore na stejný panel = no-op (žádný theme rebuild ani sidebar restyle). AppsPanel search má 250 ms debounce — psaní query už nelaguje. Auth state se propaguje i do cached HomePanelu, takže po loginu/logoutu vidíš správný stav i když jsi byl mezitím jinde. Cache se invaliduje při změně příznaku light/dark a jazyka (jinak by widgety měly staré barvy/texty).",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }

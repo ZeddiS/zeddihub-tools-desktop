@@ -2,7 +2,7 @@
   "$schema": "https://zeddihub.cz/zeddibuild.schema.json",
   "name": "ZeddiHubTools",
   "display_name": "ZeddiHub Tools Desktop",
-  "version": "1.7.8",
+  "version": "1.7.9",
   "description": "Desktop nástroje pro adminy CS2/CS:GO/Rust serverů — crosshair/viewmodel/autoexec editor, RCON klient, server watchdog, PC utility a sjednocené přihlášení s mobilní aplikací přes REST API.",
   "author": "ZeddiHub (ZeddiS)",
   "entry_point": "app.py",

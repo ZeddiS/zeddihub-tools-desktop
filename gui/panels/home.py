@@ -615,16 +615,19 @@ class HomePanel(ctk.CTkFrame):
         threading.Thread(target=self._fetch_recommended, daemon=True).start()
 
     def _fetch_recommended(self):
+        # v1.7.9: process-wide HTTP cache s 30 min TTL — pokud uživatel
+        # přepne na jiný panel a vrátí se, recommended.json se nestahuje znovu.
         try:
-            req = urllib.request.Request(
+            from ..http_cache import fetch_json
+            items = fetch_json(
                 RECOMMENDED_URL,
-                headers={"User-Agent": "ZeddiHubTools/1.0.0"}
+                ttl=1800,
+                timeout=5,
+                headers={"User-Agent": "ZeddiHubTools/1.0.0"},
             )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                items = json.loads(resp.read().decode())
-            if not items or not isinstance(items, list):
-                items = FALLBACK_RECOMMENDED
         except Exception:
+            items = None
+        if not items or not isinstance(items, list):
             items = FALLBACK_RECOMMENDED
 
         self.after(0, self._render_recommended, items)
@@ -715,35 +718,32 @@ class HomePanel(ctk.CTkFrame):
         threading.Thread(target=self._gh_fetch_worker, daemon=True).start()
 
     def _gh_fetch_worker(self):
-        """Načte GitHub statistiky + Releases v pozadí. Fire-and-forget s fallbackem."""
+        """Načte GitHub statistiky + Releases v pozadí. Fire-and-forget.
+
+        v1.7.9: oba dotazy procházejí přes HTTP cache (1 h TTL) — opakované
+        otevření HomePanelu (po minimalizaci, přepnutí, …) už znova nestahuje
+        z GitHubu. GitHub API navíc rate-limituje, takže cache je nutnost.
+        """
+        from ..http_cache import fetch_json
         headers = {"Accept": "application/vnd.github.v3+json",
                    "User-Agent": "ZeddiHub-Tools"}
         stats = {"issues": "?", "stars": "?", "forks": "?", "downloads": "?"}
         releases: list = []
-        try:
-            # Repo info
-            req = urllib.request.Request(self.GITHUB_REPO_API, headers=headers)
-            with urllib.request.urlopen(req, timeout=6) as resp:
-                info = json.loads(resp.read().decode("utf-8", errors="replace"))
-                stats["stars"] = str(info.get("stargazers_count", 0))
-                stats["forks"] = str(info.get("forks_count", 0))
-                stats["issues"] = str(info.get("open_issues_count", 0))
-        except Exception:
-            pass
 
-        try:
-            # Releases — downloads = suma asset.download_count
-            req = urllib.request.Request(self.GITHUB_RELS_API, headers=headers)
-            with urllib.request.urlopen(req, timeout=6) as resp:
-                rels = json.loads(resp.read().decode("utf-8", errors="replace"))
-                total_dl = 0
-                for r in rels:
-                    for a in r.get("assets", []):
-                        total_dl += int(a.get("download_count", 0) or 0)
-                stats["downloads"] = str(total_dl)
-                releases = rels[:5]
-        except Exception:
-            pass
+        info = fetch_json(self.GITHUB_REPO_API, ttl=3600, timeout=6, headers=headers)
+        if isinstance(info, dict):
+            stats["stars"]  = str(info.get("stargazers_count", 0))
+            stats["forks"]  = str(info.get("forks_count", 0))
+            stats["issues"] = str(info.get("open_issues_count", 0))
+
+        rels = fetch_json(self.GITHUB_RELS_API, ttl=3600, timeout=6, headers=headers)
+        if isinstance(rels, list):
+            total_dl = 0
+            for r in rels:
+                for a in r.get("assets", []):
+                    total_dl += int(a.get("download_count", 0) or 0)
+            stats["downloads"] = str(total_dl)
+            releases = rels[:5]
 
         # UI update na main threadu (thread safety dle CLAUDE.md §3.5)
         try:

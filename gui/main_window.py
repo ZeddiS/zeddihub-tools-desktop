@@ -609,6 +609,19 @@ class MainWindow(ctk.CTk):
         self._current_game: str = "default"
         self._current_nav_id: str = "home"
         self._locked_navs: set = set()
+        # v1.7.9: Panel pool / LRU cache.
+        # Místo destroy() + rebuild při každé navigaci si držíme posledních
+        # `_PANEL_CACHE_MAX` panelů naživu (jen `pack_forget`/`pack`). Restore
+        # z tray pak nezpůsobí znovunačtení dat (HTTP, A2S, file IO) a
+        # přepínání panelů je o řád rychlejší.
+        # Cache se invaliduje při změně appearance mode / jazyka — viz
+        # `_clear_panel_cache()`.
+        self._panel_cache: dict[str, ctk.CTkFrame] = {}
+        self._panel_cache_order: list[str] = []  # MRU: konec = nejnovější
+        self._PANEL_CACHE_MAX = 6
+        # Volitelné nav_id, které NIKDY nedáváme do cache (např. ad-hoc
+        # error pages z mod loaderu). Plnohodnotné panely se cachují.
+        self._panel_cache_skip: set = set()
         # Module-update tracking (filled by background thread)
         self._updatable_slugs: dict[str, str] = {}  # slug -> newest_version
         self._module_update_toast = None
@@ -1693,6 +1706,18 @@ class MainWindow(ctk.CTk):
                 pass
             return
 
+        # v1.7.9: pokud je stejný nav_id už zobrazen (např. tray klik na
+        # aktivní panel), sidebar/header neměníme a panel je už spakovaný.
+        # Šetří kompletní theme rebuild + sidebar restyle + telemetry.
+        if (nav_id == self._current_nav_id
+                and self._current_panel is not None
+                and nav_id in self._panel_cache):
+            try:
+                if self._current_panel.winfo_ismapped():
+                    return
+            except Exception:
+                pass
+
         self._current_nav_id = nav_id
 
         # Determine game for this nav_id
@@ -1847,17 +1872,105 @@ class MainWindow(ctk.CTk):
         except Exception:
             pass
 
-    def _show_panel(self, nav_id: str):
-        if self._current_panel:
-            self._current_panel.destroy()
-            self._current_panel = None
+    # ─── Panel pool / LRU cache helpers (v1.7.9) ───────────────────────────
+    def _evict_panel_cache(self, max_keep: Optional[int] = None) -> None:
+        """Destroy oldest cached panels until at most `max_keep` remain.
 
+        Called automatically po každé `_show_panel` aby pool nepřerostl.
+        Hodnota `None` znamená použít `_PANEL_CACHE_MAX`.
+        """
+        target = self._PANEL_CACHE_MAX if max_keep is None else max(0, max_keep)
+        while len(self._panel_cache_order) > target:
+            old_id = self._panel_cache_order.pop(0)
+            old_panel = self._panel_cache.pop(old_id, None)
+            if old_panel is None:
+                continue
+            try:
+                # Volitelný hook pro panel: úklid bg vláken / timerů.
+                if hasattr(old_panel, "on_panel_evicted"):
+                    try:
+                        old_panel.on_panel_evicted()
+                    except Exception:
+                        pass
+                old_panel.destroy()
+            except Exception:
+                pass
+
+    def _clear_panel_cache(self) -> None:
+        """Zničí všechny cache panely. Volá se při změně tématu / jazyka,
+        protože widgety si při konstrukci uloží barvy a překlady — invalidace
+        je nutná, aby se panel přerendroval s novými hodnotami."""
+        for nav_id, p in list(self._panel_cache.items()):
+            try:
+                if hasattr(p, "on_panel_evicted"):
+                    try:
+                        p.on_panel_evicted()
+                    except Exception:
+                        pass
+                p.destroy()
+            except Exception:
+                pass
+        self._panel_cache.clear()
+        self._panel_cache_order.clear()
+        self._current_panel = None
+
+    def _show_panel(self, nav_id: str):
         mode = ctk.get_appearance_mode().lower()
         th   = get_theme(self._current_game, mode)
         container = self._content_container
 
         def _th(game="default"):
             return get_theme(game, mode)
+
+        # ── Cache hit: pouze re-pack, nic se nedestruuje ───────────────────
+        cached = self._panel_cache.get(nav_id)
+        if cached is not None:
+            try:
+                if not cached.winfo_exists():
+                    raise RuntimeError("cached panel widget destroyed externally")
+            except Exception:
+                # Stale entry — vyhoď a spadni do tvorby nového panelu níže.
+                self._panel_cache.pop(nav_id, None)
+                try:
+                    self._panel_cache_order.remove(nav_id)
+                except ValueError:
+                    pass
+                cached = None
+
+        if cached is not None:
+            # Skryj předchozí panel (pokud to není ten samý — což už by mělo být
+            # v `_navigate` zachycené).
+            if self._current_panel is not None and self._current_panel is not cached:
+                try:
+                    self._current_panel.pack_forget()
+                except Exception:
+                    pass
+            try:
+                cached.pack(fill="both", expand=True)
+            except Exception:
+                pass
+            self._current_panel = cached
+            # Posuň na konec MRU
+            try:
+                self._panel_cache_order.remove(nav_id)
+            except ValueError:
+                pass
+            self._panel_cache_order.append(nav_id)
+            # Volitelný hook: panel se může chtít refreshnout po znovuzobrazení
+            if hasattr(cached, "on_panel_shown"):
+                try:
+                    cached.on_panel_shown()
+                except Exception:
+                    pass
+            telemetry.on_panel_open(nav_id, get_current_user())
+            return
+
+        # ── Cache miss: starý panel jen schovej (nedestruuj — drží se v cache) ──
+        if self._current_panel is not None:
+            try:
+                self._current_panel.pack_forget()
+            except Exception:
+                pass
 
         # Lazy imports to avoid circular deps
         panel = None
@@ -1988,6 +2101,8 @@ class MainWindow(ctk.CTk):
                     text_color=_th().get("text", "#fff"),
                     justify="left", wraplength=520,
                 ).pack(padx=24, pady=24, anchor="w")
+                # Error placeholder — necachuj, nebo zkusíme načíst znovu příště
+                self._panel_cache_skip.add(nav_id)
         if panel:
             # Force a layout pass BEFORE pack so children resolve their
             # themed colors; then pack as the final atomic render.
@@ -1998,6 +2113,11 @@ class MainWindow(ctk.CTk):
                 pass
             panel.pack(fill="both", expand=True)
             self._current_panel = panel
+            # v1.7.9: vlož do cache (kromě skip listu) a evict-uj přebytek
+            if nav_id not in self._panel_cache_skip:
+                self._panel_cache[nav_id] = panel
+                self._panel_cache_order.append(nav_id)
+                self._evict_panel_cache()
             telemetry.on_panel_open(nav_id, get_current_user())
 
     def _fade_in_panel(self, panel):
@@ -2142,9 +2262,22 @@ class MainWindow(ctk.CTk):
                 text=" " + t("not_logged_in"), text_color="#888888")
 
         # N-11: propagate auth state change to HomePanel login card if it is visible
+        # v1.7.9: také cached panely (Home, Settings) — kdyby uživatel po loginu
+        # přepnul na cached HomePanel, ten by jinak ukazoval starou login kartu.
         try:
             if hasattr(self, "_current_panel") and hasattr(self._current_panel, "_refresh_login_card"):
                 self._current_panel._refresh_login_card()
+        except Exception:
+            pass
+        try:
+            for nav_id, p in self._panel_cache.items():
+                if p is self._current_panel:
+                    continue  # už refreshnut výše
+                if hasattr(p, "_refresh_login_card"):
+                    try:
+                        p._refresh_login_card()
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -2156,6 +2289,9 @@ class MainWindow(ctk.CTk):
         settings["appearance_mode"] = new_mode
         save_settings(settings)
         self._update_mode_btn()
+        # v1.7.9: panely si při konstrukci uloží barvy z theme dictu — invalidace
+        # cache je potřeba aby se pře-renderovaly s novými hodnotami.
+        self._clear_panel_cache()
         # Slight delay lets CTK finish its own recolor, then re-apply our theme
         # and reload the current panel so it picks up the new colors
         self.after(80, self._apply_theme)
@@ -2192,6 +2328,9 @@ class MainWindow(ctk.CTk):
         flag = "🇬🇧" if lang == "en" else "🇨🇿"
         name = "English" if lang == "en" else "Česky"
         self._lang_btn.configure(text=f"{flag} {name}")
+        # v1.7.9: panely si při konstrukci přečetly t() — invalidace cache
+        # zaručí, že další navigace pře-vykreslí texty v novém jazyce.
+        self._clear_panel_cache()
 
     def _start_tray(self):
         try:
@@ -2277,6 +2416,12 @@ class MainWindow(ctk.CTk):
         manifests as 'app won't close / must kill task'. We force-exit at
         the end to make sure the process actually goes away.
         """
+        # v1.7.9: explicitně dej panelům šanci ukončit svá vlákna (Watchdog
+        # monitoring loop, audio playback, …) přes destroy() override.
+        try:
+            self._clear_panel_cache()
+        except Exception:
+            pass
         try:
             if self._tray is not None:
                 self._tray.stop()

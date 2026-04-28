@@ -175,6 +175,15 @@ class TrayIcon:
 
     def _show_and_navigate(self, nav_id: str):
         self._show_window()
+        # v1.7.9: pokud kliknutí v tray vede na panel, který je už zobrazen,
+        # neposílej `_navigate` (řeší to už `_navigate` na straně MainWindow,
+        # ale šetříme tím i 50 ms after-callback).
+        try:
+            current = getattr(self._app, "_current_nav_id", None)
+            if current == nav_id:
+                return
+        except Exception:
+            pass
         self._app.after(50, self._app._navigate, nav_id)
 
     def _do_quit(self):
