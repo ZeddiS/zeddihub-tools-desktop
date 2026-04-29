@@ -653,10 +653,43 @@ class MainWindow(ctk.CTk):
         self.after(500, self._start_tray)
         self.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
 
+        # v1.7.10: belt-and-suspenders fix pro „black rectangles after
+        # restore". Tk emituje <Map> když se withdrawnuté okno objeví zpět
+        # — chytíme to a vynutíme redraw celého aktivního panelu.
+        # `<Visibility>` se občas spouští i během fadeu, kdy redraw potřebujeme.
+        try:
+            self.bind("<Map>", self._on_window_visible, add="+")
+            self.bind("<Visibility>", self._on_window_visible, add="+")
+        except Exception:
+            pass
+
         # N-03: global keyboard shortcuts
         self._fullscreen = False
         self._bound_shortcuts: list = []
         self._apply_shortcut_bindings()
+
+    def _on_window_visible(self, _event=None):
+        """Tk <Map>/<Visibility> handler — force redraw current panel
+        (CTk widgets nemají vlastní logiku pro repaint po Map eventu).
+
+        Debouncováno přes `after_cancel` — během fade-in přijde 5–10 eventů
+        za sebou a redraw ~100 widgetů pokaždé by zbytečně škubalo.
+        """
+        try:
+            if not self.winfo_ismapped():
+                return
+        except Exception:
+            return
+        try:
+            prev = getattr(self, "_redraw_after_id", None)
+            if prev is not None:
+                try:
+                    self.after_cancel(prev)
+                except Exception:
+                    pass
+            self._redraw_after_id = self.after(60, self._force_redraw_current_panel)
+        except Exception:
+            pass
 
     def _apply_shortcut_bindings(self):
         """N-03: wire or re-wire global shortcuts based on user preference."""
@@ -785,6 +818,60 @@ class MainWindow(ctk.CTk):
             self.focus_force()
         except Exception:
             pass
+        # v1.7.10: po withdraw()/deiconify() Tk nezachová drawing state CTk
+        # widgetů — canvasy se vykreslí prázdné = „černé obdélníky".
+        # S panel poolem se panely netvoří znovu, takže refresh canvasu
+        # musíme udělat ručně přes `_draw()` na celém widget tree.
+        # Voláme 2× — jednou hned (než se začne fade), pak po dokončení
+        # fade animace, ať se kresba projeví i pokud bg widget rendrer
+        # potřebuje plnou alpha.
+        self.after(20, self._force_redraw_current_panel)
+        self.after(180, self._force_redraw_current_panel)
+
+    def _force_redraw_current_panel(self) -> None:
+        """Projde widget tree aktuálního panelu a vynutí re-paint všech CTk
+        widgetů. Fix pro „black rectangles after restore from tray" — CTk
+        widgety vykreslují svůj obsah na Canvas přes privátní `_draw()`,
+        která se po withdraw/deiconify automaticky nezavolá.
+
+        Bezpečné volat opakovaně i když panel neexistuje.
+        """
+        panel = self._current_panel
+        if panel is None:
+            return
+        try:
+            if not panel.winfo_exists():
+                return
+        except Exception:
+            return
+        try:
+            panel.update_idletasks()
+        except Exception:
+            pass
+        self._redraw_ctk_tree(panel)
+
+    @staticmethod
+    def _redraw_ctk_tree(widget) -> None:
+        """Rekurzivně volá CTk widget `_draw(no_color_updates=False)` na
+        celém pod-stromu. Non-CTk widgety se přeskočí (Tk je rendruje sám).
+        """
+        try:
+            if hasattr(widget, "_draw"):
+                try:
+                    widget._draw(no_color_updates=False)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            children = widget.winfo_children()
+        except Exception:
+            return
+        for child in children:
+            try:
+                MainWindow._redraw_ctk_tree(child)
+            except Exception:
+                pass
 
     def _setup_window(self):
         self.title("ZeddiHub Tools")
@@ -1770,23 +1857,43 @@ class MainWindow(ctk.CTk):
         else:
             self._game_badge.configure(text="", fg_color="transparent")
 
-        # Update nav button styles
+        # Update nav button styles.
+        # v1.7.10: cur_th + nav_hover + locked colors se počítají JEDNOU mimo
+        # smyčku (předtím 2× per button = 100+ get_theme() volání). Aktivní
+        # button (čerpá svoje per-game téma) je řešený zvlášť, ostatní v O(N)
+        # smyčce s jen `btn.configure(...)` a žádnou theme resolution.
         mode = ctk.get_appearance_mode().lower()
+        cur_th = get_theme(self._current_game, mode)
+        nav_hover = cur_th.get("nav_hover", cur_th["card_bg"])
+        normal_text = cur_th["text"]
+        locked_text = cur_th["text_dark"]
+        normal_fg = "transparent"
+        locked_fg = cur_th["secondary"]
+        # Aktivní button:
+        active_btn = self._nav_buttons.get(nav_id)
+        if active_btn is not None:
+            active_game = NAV_GAME_MAP.get(nav_id, "default")
+            active_th = get_theme(active_game, mode) if active_game != self._current_game else cur_th
+            active_bg = active_th.get("nav_active_bg", active_th["primary"])
+            active_text = active_th.get("nav_active_text", "#ffffff")
+            try:
+                active_btn.configure(fg_color=active_bg, text_color=active_text,
+                                     hover_color=active_bg)
+            except Exception:
+                pass
+        # Ostatní buttony (bez per-game lookupu):
         for nid, btn in self._nav_buttons.items():
-            nid_game = NAV_GAME_MAP.get(nid, "default")
-            btn_th = get_theme(nid_game, mode)
-            cur_th = get_theme(self._current_game, mode)
-            nav_hover = cur_th.get("nav_hover", cur_th["card_bg"])
             if nid == nav_id:
-                active_bg = btn_th.get("nav_active_bg", btn_th["primary"])
-                active_text = btn_th.get("nav_active_text", "#ffffff")
-                btn.configure(fg_color=active_bg, text_color=active_text,
-                              hover_color=active_bg)
-            else:
-                is_locked = nid in self._locked_navs
-                tc = cur_th["text_dark"] if is_locked else cur_th["text"]
-                fg = cur_th["secondary"] if is_locked else "transparent"
-                btn.configure(fg_color=fg, text_color=tc, hover_color=nav_hover)
+                continue
+            is_locked = nid in self._locked_navs
+            try:
+                btn.configure(
+                    fg_color=locked_fg if is_locked else normal_fg,
+                    text_color=locked_text if is_locked else normal_text,
+                    hover_color=nav_hover,
+                )
+            except Exception:
+                pass
 
         # Update settings / links button highlights — pill style
         def_th = get_theme("default", mode)
@@ -1962,6 +2069,10 @@ class MainWindow(ctk.CTk):
                     cached.on_panel_shown()
                 except Exception:
                     pass
+            # v1.7.10: po pack() na cached panelu vynutíme redraw — Tk Map
+            # event sice teoreticky redraw spustí, ale pro vnořené CTk
+            # widgety (zejména po restore z tray) to není 100% spolehlivé.
+            self.after(10, self._force_redraw_current_panel)
             telemetry.on_panel_open(nav_id, get_current_user())
             return
 
