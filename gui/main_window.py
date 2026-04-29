@@ -622,6 +622,11 @@ class MainWindow(ctk.CTk):
         # Volitelné nav_id, které NIKDY nedáváme do cache (např. ad-hoc
         # error pages z mod loaderu). Plnohodnotné panely se cachují.
         self._panel_cache_skip: set = set()
+        # v1.7.11: flag pro „byli jsme withdrawnuti — Tk Canvas state CTk
+        # widgetů přežil ale obsah se nevykreslil". Na příštím Map eventu
+        # zahodíme cache + rebuildujeme aktivní panel. Data se nestáhnou
+        # znovu — HTTP cache (TTL) je drží.
+        self._was_withdrawn: bool = False
         # Module-update tracking (filled by background thread)
         self._updatable_slugs: dict[str, str] = {}  # slug -> newest_version
         self._module_update_toast = None
@@ -669,17 +674,29 @@ class MainWindow(ctk.CTk):
         self._apply_shortcut_bindings()
 
     def _on_window_visible(self, _event=None):
-        """Tk <Map>/<Visibility> handler — force redraw current panel
-        (CTk widgets nemají vlastní logiku pro repaint po Map eventu).
+        """Tk <Map>/<Visibility> handler.
 
-        Debouncováno přes `after_cancel` — během fade-in přijde 5–10 eventů
-        za sebou a redraw ~100 widgetů pokaždé by zbytečně škubalo.
+        v1.7.11: Pokud okno právě prošlo withdraw cyklem (typicky po obnovení
+        z tray), Tk se sice znovu namapuje, ale Canvas state CTk widgetů je
+        zničený — widgety renderují jako černé obdélníky.
+
+        Spolehlivé řešení: zahodit panel cache + rebuild aktivního panelu.
+        Data se nestáhnou znovu — HTTP cache (TTL) je drží.
+        Ostatní cached panely jsou taky zničeny (taky by byly „černé").
         """
         try:
             if not self.winfo_ismapped():
                 return
         except Exception:
             return
+
+        # Hard rebuild po tray restore.
+        if self._was_withdrawn:
+            self._was_withdrawn = False
+            self._rebuild_after_withdraw()
+            return
+
+        # Jinak jen standardní redraw walk (CTk `_draw`) — debounced.
         try:
             prev = getattr(self, "_redraw_after_id", None)
             if prev is not None:
@@ -688,6 +705,43 @@ class MainWindow(ctk.CTk):
                 except Exception:
                     pass
             self._redraw_after_id = self.after(60, self._force_redraw_current_panel)
+        except Exception:
+            pass
+
+    def _rebuild_after_withdraw(self) -> None:
+        """v1.7.11: zahodí celou panel cache a postaví aktivní panel
+        znovu od nuly. HTTP/disk cache zaručí, že žádná síťová operace
+        neproběhne — jen widget tree se rekonstruuje (~150–300 ms).
+
+        Sidebar + header se NEDESTRUJÍ (mají vlastní state) — projdou jen
+        CTk redraw walkem, aby se Canvas widgety překreslily.
+        """
+        nav_id = self._current_nav_id or "home"
+        # Zahoď celou cache (i jiné panely by byly „černé" po next show).
+        try:
+            self._clear_panel_cache()
+        except Exception:
+            pass
+        # Po _clear_panel_cache je _current_panel = None.
+        # Postavíme znovu kompletně přes _show_panel.
+        try:
+            self._show_panel(nav_id)
+        except Exception:
+            pass
+        # Sidebar + header + ostatní static chrome — taky jejich CTk widgety
+        # ztratily Canvas state. Stačí redraw walk (nemají dynamický obsah).
+        try:
+            for root in (
+                getattr(self, "_sidebar", None),
+                getattr(self, "_header", None),
+                getattr(self, "_main", None),
+            ):
+                if root is None:
+                    continue
+                try:
+                    self._redraw_ctk_tree(root)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -852,9 +906,19 @@ class MainWindow(ctk.CTk):
 
     @staticmethod
     def _redraw_ctk_tree(widget) -> None:
-        """Rekurzivně volá CTk widget `_draw(no_color_updates=False)` na
-        celém pod-stromu. Non-CTk widgety se přeskočí (Tk je rendruje sám).
+        """Rekurzivně překreslí CTk widget pod-strom.
+
+        v1.7.11: 3 vrstvy, protože samotné `_draw()` po withdraw cyklu
+        v některých CTk verzích nestačí (Canvas zůstane prázdný):
+
+          1. `_draw(no_color_updates=False)` — primární CTk render hook
+          2. `_set_appearance_mode(<current>)` — rekurzivní recolor + draw
+          3. `configure(fg_color=<self>)` — public path co interně volá _draw
+
+        Většina widgetů zareaguje na první vrstvu; pro ty „upřímně rozbité"
+        je 2. + 3. záchranný popostrk. Non-CTk widgety se přeskočí.
         """
+        # 1. _draw
         try:
             if hasattr(widget, "_draw"):
                 try:
@@ -863,6 +927,31 @@ class MainWindow(ctk.CTk):
                     pass
         except Exception:
             pass
+        # 2. _set_appearance_mode forces a colour refresh + redraw down the tree
+        try:
+            if hasattr(widget, "_set_appearance_mode"):
+                try:
+                    widget._set_appearance_mode(ctk.get_appearance_mode())
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # 3. Public configure path with the widget's *current* fg_color —
+        #    triggers internal redraw via configure() handler.
+        try:
+            cur_fg = None
+            try:
+                cur_fg = widget.cget("fg_color")
+            except Exception:
+                cur_fg = None
+            if cur_fg is not None:
+                try:
+                    widget.configure(fg_color=cur_fg)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         try:
             children = widget.winfo_children()
         except Exception:
@@ -2451,6 +2540,21 @@ class MainWindow(ctk.CTk):
         except Exception:
             pass
 
+    def _do_minimize_to_tray(self) -> None:
+        """v1.7.11: jednotná cesta withdraw → tray. Nastaví withdraw flag
+        a opacity, aby Tray restore + redraw fix dostal konzistentní stav."""
+        try:
+            self.attributes("-alpha", 0.0)
+        except Exception:
+            pass
+        try:
+            self.withdraw()
+        except Exception:
+            pass
+        # Canvas state CTk widgetů se po withdraw ztratí — flagujeme, ať
+        # _on_window_visible spustí rebuild aktivního panelu.
+        self._was_withdrawn = True
+
     def _minimize_to_tray(self):
         """Hide window to tray on first close; show one-time info dialog.
         F-07: respektuje uživatelskou volbu 'close_behavior' (minimize/quit).
@@ -2466,11 +2570,7 @@ class MainWindow(ctk.CTk):
                 save_settings(settings)
                 self._show_tray_notice()
                 return  # notice has its own close/minimize buttons
-            try:
-                self.attributes("-alpha", 0.0)
-            except Exception:
-                pass
-            self.withdraw()
+            self._do_minimize_to_tray()
             # F-07: volitelná tray notifikace
             try:
                 if hasattr(self._tray, "show_notification"):
@@ -2492,7 +2592,7 @@ class MainWindow(ctk.CTk):
         d.configure(fg_color=th["content_bg"])
         d.resizable(False, False)
         d.grab_set()
-        d.protocol("WM_DELETE_WINDOW", lambda: (self.withdraw(), d.destroy()))
+        d.protocol("WM_DELETE_WINDOW", lambda: (self._do_minimize_to_tray(), d.destroy()))
 
         ctk.CTkLabel(d,
                      image=icons.icon("circle-info", 22, th["primary"]),
@@ -2511,7 +2611,7 @@ class MainWindow(ctk.CTk):
         ctk.CTkButton(row, text="Minimalizovat do tray",
                       fg_color=th["primary"], hover_color=th["primary_hover"],
                       font=ctk.CTkFont("Segoe UI", 12), height=36,
-                      command=lambda: (self.withdraw(), d.destroy())
+                      command=lambda: (self._do_minimize_to_tray(), d.destroy())
                       ).pack(side="left", fill="x", expand=True, padx=(0, 6))
         ctk.CTkButton(row, text="Ukončit",
                       fg_color=th["secondary"], hover_color=th["error"],
