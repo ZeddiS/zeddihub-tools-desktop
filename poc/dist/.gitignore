@@ -1,0 +1,3 @@
+# Build artifacts (přiloženy k GitHub release `poc-builds` — nepatří do gitu)
+*.exe
+*.msi

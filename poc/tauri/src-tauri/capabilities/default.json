@@ -10,7 +10,6 @@
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "core:webview:default",
-    "core:webview:allow-eval",
     "shell:allow-open"
   ]
 }

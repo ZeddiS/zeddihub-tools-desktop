@@ -81,20 +81,13 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => {
+                    "open" | "home" | "settings" => {
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
                             let _ = w.set_focus();
-                        }
-                    }
-                    "home" | "settings" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                            let _ = w.eval(&format!(
-                                "document.querySelector('[data-nav={}]').click()",
-                                event.id.as_ref()
-                            ));
+                            // V plné aplikaci by se „home"/„settings" propagovaly
+                            // přes Tauri event bus (`app.emit("navigate", id)`),
+                            // frontend by listen-oval. Pro PoC stačí restore.
                         }
                     }
                     "quit" => {
