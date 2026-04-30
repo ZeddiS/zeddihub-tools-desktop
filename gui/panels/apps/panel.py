@@ -48,9 +48,6 @@ class AppsPanel(ctk.CTkFrame):
         self._active_filters: Dict[str, str] = {}  # group_id → option_id ("" = Všechny)
         self._search_var = ctk.StringVar(value="")
         self._status_var = ctk.StringVar(value="")
-        # v1.7.9: debounce timer ID pro vyhledávací pole — při psaní se grid
-        # rebuilduje až 250 ms po posledním stisku, ne na každý znak.
-        self._search_after_id: Optional[str] = None
 
         self._build()
 
@@ -84,9 +81,7 @@ class AppsPanel(ctk.CTkFrame):
             height=36,
         )
         search_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        # v1.7.9: debounce — bez něj se grid (50+ karet) rebuilduje na každý
-        # stisknutý znak, což je viditelně pomalé při delším query.
-        self._search_var.trace_add("write", lambda *_: self._schedule_search_render())
+        self._search_var.trace_add("write", lambda *_: self._render_grid())
 
         make_button(
             toolbar, "  Obnovit", self._on_refresh_click, th,
@@ -231,22 +226,6 @@ class AppsPanel(ctk.CTkFrame):
         else:
             self._active_filters.pop(group_id, None)
         self._render_grid()
-
-    # ── Search debounce ───────────────────────────────────────────────────
-    def _schedule_search_render(self) -> None:
-        """Posuneme rebuild gridu o 250 ms pokaždé, když se mění query —
-        při rychlém psaní se vyrenderuje jen jednou na konci, ne 8× za vteřinu.
-        """
-        try:
-            if self._search_after_id is not None:
-                self.after_cancel(self._search_after_id)
-        except Exception:
-            pass
-        try:
-            self._search_after_id = self.after(250, self._render_grid)
-        except Exception:
-            # Widget už neexistuje (eviction). Bezpečně ignorovat.
-            self._search_after_id = None
 
     # ── Grid ──────────────────────────────────────────────────────────────
     def _render_grid(self):

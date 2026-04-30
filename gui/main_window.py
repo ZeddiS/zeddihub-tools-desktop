@@ -609,24 +609,6 @@ class MainWindow(ctk.CTk):
         self._current_game: str = "default"
         self._current_nav_id: str = "home"
         self._locked_navs: set = set()
-        # v1.7.9: Panel pool / LRU cache.
-        # Místo destroy() + rebuild při každé navigaci si držíme posledních
-        # `_PANEL_CACHE_MAX` panelů naživu (jen `pack_forget`/`pack`). Restore
-        # z tray pak nezpůsobí znovunačtení dat (HTTP, A2S, file IO) a
-        # přepínání panelů je o řád rychlejší.
-        # Cache se invaliduje při změně appearance mode / jazyka — viz
-        # `_clear_panel_cache()`.
-        self._panel_cache: dict[str, ctk.CTkFrame] = {}
-        self._panel_cache_order: list[str] = []  # MRU: konec = nejnovější
-        self._PANEL_CACHE_MAX = 6
-        # Volitelné nav_id, které NIKDY nedáváme do cache (např. ad-hoc
-        # error pages z mod loaderu). Plnohodnotné panely se cachují.
-        self._panel_cache_skip: set = set()
-        # v1.7.11: flag pro „byli jsme withdrawnuti — Tk Canvas state CTk
-        # widgetů přežil ale obsah se nevykreslil". Na příštím Map eventu
-        # zahodíme cache + rebuildujeme aktivní panel. Data se nestáhnou
-        # znovu — HTTP cache (TTL) je drží.
-        self._was_withdrawn: bool = False
         # Module-update tracking (filled by background thread)
         self._updatable_slugs: dict[str, str] = {}  # slug -> newest_version
         self._module_update_toast = None
@@ -658,92 +640,10 @@ class MainWindow(ctk.CTk):
         self.after(500, self._start_tray)
         self.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
 
-        # v1.7.10: belt-and-suspenders fix pro „black rectangles after
-        # restore". Tk emituje <Map> když se withdrawnuté okno objeví zpět
-        # — chytíme to a vynutíme redraw celého aktivního panelu.
-        # `<Visibility>` se občas spouští i během fadeu, kdy redraw potřebujeme.
-        try:
-            self.bind("<Map>", self._on_window_visible, add="+")
-            self.bind("<Visibility>", self._on_window_visible, add="+")
-        except Exception:
-            pass
-
         # N-03: global keyboard shortcuts
         self._fullscreen = False
         self._bound_shortcuts: list = []
         self._apply_shortcut_bindings()
-
-    def _on_window_visible(self, _event=None):
-        """Tk <Map>/<Visibility> handler.
-
-        v1.7.11: Pokud okno právě prošlo withdraw cyklem (typicky po obnovení
-        z tray), Tk se sice znovu namapuje, ale Canvas state CTk widgetů je
-        zničený — widgety renderují jako černé obdélníky.
-
-        Spolehlivé řešení: zahodit panel cache + rebuild aktivního panelu.
-        Data se nestáhnou znovu — HTTP cache (TTL) je drží.
-        Ostatní cached panely jsou taky zničeny (taky by byly „černé").
-        """
-        try:
-            if not self.winfo_ismapped():
-                return
-        except Exception:
-            return
-
-        # Hard rebuild po tray restore.
-        if self._was_withdrawn:
-            self._was_withdrawn = False
-            self._rebuild_after_withdraw()
-            return
-
-        # Jinak jen standardní redraw walk (CTk `_draw`) — debounced.
-        try:
-            prev = getattr(self, "_redraw_after_id", None)
-            if prev is not None:
-                try:
-                    self.after_cancel(prev)
-                except Exception:
-                    pass
-            self._redraw_after_id = self.after(60, self._force_redraw_current_panel)
-        except Exception:
-            pass
-
-    def _rebuild_after_withdraw(self) -> None:
-        """v1.7.11: zahodí celou panel cache a postaví aktivní panel
-        znovu od nuly. HTTP/disk cache zaručí, že žádná síťová operace
-        neproběhne — jen widget tree se rekonstruuje (~150–300 ms).
-
-        Sidebar + header se NEDESTRUJÍ (mají vlastní state) — projdou jen
-        CTk redraw walkem, aby se Canvas widgety překreslily.
-        """
-        nav_id = self._current_nav_id or "home"
-        # Zahoď celou cache (i jiné panely by byly „černé" po next show).
-        try:
-            self._clear_panel_cache()
-        except Exception:
-            pass
-        # Po _clear_panel_cache je _current_panel = None.
-        # Postavíme znovu kompletně přes _show_panel.
-        try:
-            self._show_panel(nav_id)
-        except Exception:
-            pass
-        # Sidebar + header + ostatní static chrome — taky jejich CTk widgety
-        # ztratily Canvas state. Stačí redraw walk (nemají dynamický obsah).
-        try:
-            for root in (
-                getattr(self, "_sidebar", None),
-                getattr(self, "_header", None),
-                getattr(self, "_main", None),
-            ):
-                if root is None:
-                    continue
-                try:
-                    self._redraw_ctk_tree(root)
-                except Exception:
-                    pass
-        except Exception:
-            pass
 
     def _apply_shortcut_bindings(self):
         """N-03: wire or re-wire global shortcuts based on user preference."""
@@ -872,95 +772,6 @@ class MainWindow(ctk.CTk):
             self.focus_force()
         except Exception:
             pass
-        # v1.7.10: po withdraw()/deiconify() Tk nezachová drawing state CTk
-        # widgetů — canvasy se vykreslí prázdné = „černé obdélníky".
-        # S panel poolem se panely netvoří znovu, takže refresh canvasu
-        # musíme udělat ručně přes `_draw()` na celém widget tree.
-        # Voláme 2× — jednou hned (než se začne fade), pak po dokončení
-        # fade animace, ať se kresba projeví i pokud bg widget rendrer
-        # potřebuje plnou alpha.
-        self.after(20, self._force_redraw_current_panel)
-        self.after(180, self._force_redraw_current_panel)
-
-    def _force_redraw_current_panel(self) -> None:
-        """Projde widget tree aktuálního panelu a vynutí re-paint všech CTk
-        widgetů. Fix pro „black rectangles after restore from tray" — CTk
-        widgety vykreslují svůj obsah na Canvas přes privátní `_draw()`,
-        která se po withdraw/deiconify automaticky nezavolá.
-
-        Bezpečné volat opakovaně i když panel neexistuje.
-        """
-        panel = self._current_panel
-        if panel is None:
-            return
-        try:
-            if not panel.winfo_exists():
-                return
-        except Exception:
-            return
-        try:
-            panel.update_idletasks()
-        except Exception:
-            pass
-        self._redraw_ctk_tree(panel)
-
-    @staticmethod
-    def _redraw_ctk_tree(widget) -> None:
-        """Rekurzivně překreslí CTk widget pod-strom.
-
-        v1.7.11: 3 vrstvy, protože samotné `_draw()` po withdraw cyklu
-        v některých CTk verzích nestačí (Canvas zůstane prázdný):
-
-          1. `_draw(no_color_updates=False)` — primární CTk render hook
-          2. `_set_appearance_mode(<current>)` — rekurzivní recolor + draw
-          3. `configure(fg_color=<self>)` — public path co interně volá _draw
-
-        Většina widgetů zareaguje na první vrstvu; pro ty „upřímně rozbité"
-        je 2. + 3. záchranný popostrk. Non-CTk widgety se přeskočí.
-        """
-        # 1. _draw
-        try:
-            if hasattr(widget, "_draw"):
-                try:
-                    widget._draw(no_color_updates=False)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        # 2. _set_appearance_mode forces a colour refresh + redraw down the tree
-        try:
-            if hasattr(widget, "_set_appearance_mode"):
-                try:
-                    widget._set_appearance_mode(ctk.get_appearance_mode())
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        # 3. Public configure path with the widget's *current* fg_color —
-        #    triggers internal redraw via configure() handler.
-        try:
-            cur_fg = None
-            try:
-                cur_fg = widget.cget("fg_color")
-            except Exception:
-                cur_fg = None
-            if cur_fg is not None:
-                try:
-                    widget.configure(fg_color=cur_fg)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        try:
-            children = widget.winfo_children()
-        except Exception:
-            return
-        for child in children:
-            try:
-                MainWindow._redraw_ctk_tree(child)
-            except Exception:
-                pass
 
     def _setup_window(self):
         self.title("ZeddiHub Tools")
@@ -1882,18 +1693,6 @@ class MainWindow(ctk.CTk):
                 pass
             return
 
-        # v1.7.9: pokud je stejný nav_id už zobrazen (např. tray klik na
-        # aktivní panel), sidebar/header neměníme a panel je už spakovaný.
-        # Šetří kompletní theme rebuild + sidebar restyle + telemetry.
-        if (nav_id == self._current_nav_id
-                and self._current_panel is not None
-                and nav_id in self._panel_cache):
-            try:
-                if self._current_panel.winfo_ismapped():
-                    return
-            except Exception:
-                pass
-
         self._current_nav_id = nav_id
 
         # Determine game for this nav_id
@@ -1946,43 +1745,23 @@ class MainWindow(ctk.CTk):
         else:
             self._game_badge.configure(text="", fg_color="transparent")
 
-        # Update nav button styles.
-        # v1.7.10: cur_th + nav_hover + locked colors se počítají JEDNOU mimo
-        # smyčku (předtím 2× per button = 100+ get_theme() volání). Aktivní
-        # button (čerpá svoje per-game téma) je řešený zvlášť, ostatní v O(N)
-        # smyčce s jen `btn.configure(...)` a žádnou theme resolution.
+        # Update nav button styles
         mode = ctk.get_appearance_mode().lower()
-        cur_th = get_theme(self._current_game, mode)
-        nav_hover = cur_th.get("nav_hover", cur_th["card_bg"])
-        normal_text = cur_th["text"]
-        locked_text = cur_th["text_dark"]
-        normal_fg = "transparent"
-        locked_fg = cur_th["secondary"]
-        # Aktivní button:
-        active_btn = self._nav_buttons.get(nav_id)
-        if active_btn is not None:
-            active_game = NAV_GAME_MAP.get(nav_id, "default")
-            active_th = get_theme(active_game, mode) if active_game != self._current_game else cur_th
-            active_bg = active_th.get("nav_active_bg", active_th["primary"])
-            active_text = active_th.get("nav_active_text", "#ffffff")
-            try:
-                active_btn.configure(fg_color=active_bg, text_color=active_text,
-                                     hover_color=active_bg)
-            except Exception:
-                pass
-        # Ostatní buttony (bez per-game lookupu):
         for nid, btn in self._nav_buttons.items():
+            nid_game = NAV_GAME_MAP.get(nid, "default")
+            btn_th = get_theme(nid_game, mode)
+            cur_th = get_theme(self._current_game, mode)
+            nav_hover = cur_th.get("nav_hover", cur_th["card_bg"])
             if nid == nav_id:
-                continue
-            is_locked = nid in self._locked_navs
-            try:
-                btn.configure(
-                    fg_color=locked_fg if is_locked else normal_fg,
-                    text_color=locked_text if is_locked else normal_text,
-                    hover_color=nav_hover,
-                )
-            except Exception:
-                pass
+                active_bg = btn_th.get("nav_active_bg", btn_th["primary"])
+                active_text = btn_th.get("nav_active_text", "#ffffff")
+                btn.configure(fg_color=active_bg, text_color=active_text,
+                              hover_color=active_bg)
+            else:
+                is_locked = nid in self._locked_navs
+                tc = cur_th["text_dark"] if is_locked else cur_th["text"]
+                fg = cur_th["secondary"] if is_locked else "transparent"
+                btn.configure(fg_color=fg, text_color=tc, hover_color=nav_hover)
 
         # Update settings / links button highlights — pill style
         def_th = get_theme("default", mode)
@@ -2068,109 +1847,17 @@ class MainWindow(ctk.CTk):
         except Exception:
             pass
 
-    # ─── Panel pool / LRU cache helpers (v1.7.9) ───────────────────────────
-    def _evict_panel_cache(self, max_keep: Optional[int] = None) -> None:
-        """Destroy oldest cached panels until at most `max_keep` remain.
-
-        Called automatically po každé `_show_panel` aby pool nepřerostl.
-        Hodnota `None` znamená použít `_PANEL_CACHE_MAX`.
-        """
-        target = self._PANEL_CACHE_MAX if max_keep is None else max(0, max_keep)
-        while len(self._panel_cache_order) > target:
-            old_id = self._panel_cache_order.pop(0)
-            old_panel = self._panel_cache.pop(old_id, None)
-            if old_panel is None:
-                continue
-            try:
-                # Volitelný hook pro panel: úklid bg vláken / timerů.
-                if hasattr(old_panel, "on_panel_evicted"):
-                    try:
-                        old_panel.on_panel_evicted()
-                    except Exception:
-                        pass
-                old_panel.destroy()
-            except Exception:
-                pass
-
-    def _clear_panel_cache(self) -> None:
-        """Zničí všechny cache panely. Volá se při změně tématu / jazyka,
-        protože widgety si při konstrukci uloží barvy a překlady — invalidace
-        je nutná, aby se panel přerendroval s novými hodnotami."""
-        for nav_id, p in list(self._panel_cache.items()):
-            try:
-                if hasattr(p, "on_panel_evicted"):
-                    try:
-                        p.on_panel_evicted()
-                    except Exception:
-                        pass
-                p.destroy()
-            except Exception:
-                pass
-        self._panel_cache.clear()
-        self._panel_cache_order.clear()
-        self._current_panel = None
-
     def _show_panel(self, nav_id: str):
+        if self._current_panel:
+            self._current_panel.destroy()
+            self._current_panel = None
+
         mode = ctk.get_appearance_mode().lower()
         th   = get_theme(self._current_game, mode)
         container = self._content_container
 
         def _th(game="default"):
             return get_theme(game, mode)
-
-        # ── Cache hit: pouze re-pack, nic se nedestruuje ───────────────────
-        cached = self._panel_cache.get(nav_id)
-        if cached is not None:
-            try:
-                if not cached.winfo_exists():
-                    raise RuntimeError("cached panel widget destroyed externally")
-            except Exception:
-                # Stale entry — vyhoď a spadni do tvorby nového panelu níže.
-                self._panel_cache.pop(nav_id, None)
-                try:
-                    self._panel_cache_order.remove(nav_id)
-                except ValueError:
-                    pass
-                cached = None
-
-        if cached is not None:
-            # Skryj předchozí panel (pokud to není ten samý — což už by mělo být
-            # v `_navigate` zachycené).
-            if self._current_panel is not None and self._current_panel is not cached:
-                try:
-                    self._current_panel.pack_forget()
-                except Exception:
-                    pass
-            try:
-                cached.pack(fill="both", expand=True)
-            except Exception:
-                pass
-            self._current_panel = cached
-            # Posuň na konec MRU
-            try:
-                self._panel_cache_order.remove(nav_id)
-            except ValueError:
-                pass
-            self._panel_cache_order.append(nav_id)
-            # Volitelný hook: panel se může chtít refreshnout po znovuzobrazení
-            if hasattr(cached, "on_panel_shown"):
-                try:
-                    cached.on_panel_shown()
-                except Exception:
-                    pass
-            # v1.7.10: po pack() na cached panelu vynutíme redraw — Tk Map
-            # event sice teoreticky redraw spustí, ale pro vnořené CTk
-            # widgety (zejména po restore z tray) to není 100% spolehlivé.
-            self.after(10, self._force_redraw_current_panel)
-            telemetry.on_panel_open(nav_id, get_current_user())
-            return
-
-        # ── Cache miss: starý panel jen schovej (nedestruuj — drží se v cache) ──
-        if self._current_panel is not None:
-            try:
-                self._current_panel.pack_forget()
-            except Exception:
-                pass
 
         # Lazy imports to avoid circular deps
         panel = None
@@ -2301,8 +1988,6 @@ class MainWindow(ctk.CTk):
                     text_color=_th().get("text", "#fff"),
                     justify="left", wraplength=520,
                 ).pack(padx=24, pady=24, anchor="w")
-                # Error placeholder — necachuj, nebo zkusíme načíst znovu příště
-                self._panel_cache_skip.add(nav_id)
         if panel:
             # Force a layout pass BEFORE pack so children resolve their
             # themed colors; then pack as the final atomic render.
@@ -2313,11 +1998,6 @@ class MainWindow(ctk.CTk):
                 pass
             panel.pack(fill="both", expand=True)
             self._current_panel = panel
-            # v1.7.9: vlož do cache (kromě skip listu) a evict-uj přebytek
-            if nav_id not in self._panel_cache_skip:
-                self._panel_cache[nav_id] = panel
-                self._panel_cache_order.append(nav_id)
-                self._evict_panel_cache()
             telemetry.on_panel_open(nav_id, get_current_user())
 
     def _fade_in_panel(self, panel):
@@ -2462,22 +2142,9 @@ class MainWindow(ctk.CTk):
                 text=" " + t("not_logged_in"), text_color="#888888")
 
         # N-11: propagate auth state change to HomePanel login card if it is visible
-        # v1.7.9: také cached panely (Home, Settings) — kdyby uživatel po loginu
-        # přepnul na cached HomePanel, ten by jinak ukazoval starou login kartu.
         try:
             if hasattr(self, "_current_panel") and hasattr(self._current_panel, "_refresh_login_card"):
                 self._current_panel._refresh_login_card()
-        except Exception:
-            pass
-        try:
-            for nav_id, p in self._panel_cache.items():
-                if p is self._current_panel:
-                    continue  # už refreshnut výše
-                if hasattr(p, "_refresh_login_card"):
-                    try:
-                        p._refresh_login_card()
-                    except Exception:
-                        pass
         except Exception:
             pass
 
@@ -2489,9 +2156,6 @@ class MainWindow(ctk.CTk):
         settings["appearance_mode"] = new_mode
         save_settings(settings)
         self._update_mode_btn()
-        # v1.7.9: panely si při konstrukci uloží barvy z theme dictu — invalidace
-        # cache je potřeba aby se pře-renderovaly s novými hodnotami.
-        self._clear_panel_cache()
         # Slight delay lets CTK finish its own recolor, then re-apply our theme
         # and reload the current panel so it picks up the new colors
         self.after(80, self._apply_theme)
@@ -2528,9 +2192,6 @@ class MainWindow(ctk.CTk):
         flag = "🇬🇧" if lang == "en" else "🇨🇿"
         name = "English" if lang == "en" else "Česky"
         self._lang_btn.configure(text=f"{flag} {name}")
-        # v1.7.9: panely si při konstrukci přečetly t() — invalidace cache
-        # zaručí, že další navigace pře-vykreslí texty v novém jazyce.
-        self._clear_panel_cache()
 
     def _start_tray(self):
         try:
@@ -2539,21 +2200,6 @@ class MainWindow(ctk.CTk):
             self._tray.start()
         except Exception:
             pass
-
-    def _do_minimize_to_tray(self) -> None:
-        """v1.7.11: jednotná cesta withdraw → tray. Nastaví withdraw flag
-        a opacity, aby Tray restore + redraw fix dostal konzistentní stav."""
-        try:
-            self.attributes("-alpha", 0.0)
-        except Exception:
-            pass
-        try:
-            self.withdraw()
-        except Exception:
-            pass
-        # Canvas state CTk widgetů se po withdraw ztratí — flagujeme, ať
-        # _on_window_visible spustí rebuild aktivního panelu.
-        self._was_withdrawn = True
 
     def _minimize_to_tray(self):
         """Hide window to tray on first close; show one-time info dialog.
@@ -2570,7 +2216,11 @@ class MainWindow(ctk.CTk):
                 save_settings(settings)
                 self._show_tray_notice()
                 return  # notice has its own close/minimize buttons
-            self._do_minimize_to_tray()
+            try:
+                self.attributes("-alpha", 0.0)
+            except Exception:
+                pass
+            self.withdraw()
             # F-07: volitelná tray notifikace
             try:
                 if hasattr(self._tray, "show_notification"):
@@ -2592,7 +2242,7 @@ class MainWindow(ctk.CTk):
         d.configure(fg_color=th["content_bg"])
         d.resizable(False, False)
         d.grab_set()
-        d.protocol("WM_DELETE_WINDOW", lambda: (self._do_minimize_to_tray(), d.destroy()))
+        d.protocol("WM_DELETE_WINDOW", lambda: (self.withdraw(), d.destroy()))
 
         ctk.CTkLabel(d,
                      image=icons.icon("circle-info", 22, th["primary"]),
@@ -2611,7 +2261,7 @@ class MainWindow(ctk.CTk):
         ctk.CTkButton(row, text="Minimalizovat do tray",
                       fg_color=th["primary"], hover_color=th["primary_hover"],
                       font=ctk.CTkFont("Segoe UI", 12), height=36,
-                      command=lambda: (self._do_minimize_to_tray(), d.destroy())
+                      command=lambda: (self.withdraw(), d.destroy())
                       ).pack(side="left", fill="x", expand=True, padx=(0, 6))
         ctk.CTkButton(row, text="Ukončit",
                       fg_color=th["secondary"], hover_color=th["error"],
@@ -2627,12 +2277,6 @@ class MainWindow(ctk.CTk):
         manifests as 'app won't close / must kill task'. We force-exit at
         the end to make sure the process actually goes away.
         """
-        # v1.7.9: explicitně dej panelům šanci ukončit svá vlákna (Watchdog
-        # monitoring loop, audio playback, …) přes destroy() override.
-        try:
-            self._clear_panel_cache()
-        except Exception:
-            pass
         try:
             if self._tray is not None:
                 self._tray.stop()

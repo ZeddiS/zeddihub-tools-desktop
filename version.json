@@ -1,7 +1,7 @@
 {
-  "version": "1.7.11",
-  "release_date": "2026-04-23",
-  "changelog": "v1.7.11: Druhý hotfix pro black rectangles po obnovení z tray. v1.7.10 fix přes _draw() nestačil — Canvas state CTk widgetů zůstal prázdný i po vynuceném redraw walku. Teď: na první Map event po withdraw se zahodí celá panel cache a aktivní panel se postaví znovu od nuly. Data se nestahují (HTTP cache TTL je drží), jen widget tree se rekonstruuje (~150–300 ms — jednorázová cena za korektní render). Sidebar + header dostanou multi-technique redraw walk (3 vrstvy: _draw + _set_appearance_mode + configure(fg_color)). Tray restore na ten samý panel = zase rychlé.",
+  "version": "1.7.12",
+  "release_date": "2026-04-30",
+  "changelog": "v1.7.12: ROLLBACK na v1.7.8 baseline. v1.7.9 (panel pool), v1.7.10 a v1.7.11 (pokusy fixnout black-rect bug po tray restore) byly stažené — místo aby aplikaci zrychlily, zavedly redraw walks které ji 10× zpomalily a black-rect bug stejně přetrvával. Návrat ke stabilnímu stavu před experimentem. Plánuje se přechod na jiný UI stack (PySide6 nebo Tauri) — viz `poc/` adresář s prototypy obou variant pro porovnání.",
   "mandatory": false,
   "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
 }
