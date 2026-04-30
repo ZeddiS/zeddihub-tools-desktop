@@ -1,0 +1,44 @@
+[package]
+name = "zeddihub-tools"
+version = "2.0.0-alpha.1"
+description = "ZeddiHub Tools — Tauri build (v2 migration)"
+edition = "2021"
+rust-version = "1.70"
+
+[lib]
+name = "zeddihub_tools_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri core + plugins
+tauri          = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell  = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs     = "2"
+
+# Async + HTTP
+tokio   = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+
+# Serde + errors
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+thiserror   = "1"
+
+# Crypto for credential storage (Fernet ekvivalent)
+chacha20poly1305 = "0.10"
+sha2             = "0.10"
+hex              = "0.4"
+
+# Paths
+directories = "5"
+
+# System info (PCSysInfoPanel)
+sysinfo = "0.32"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

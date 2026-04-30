@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens — values are space-separated RGB triplets so Tailwind's
+   <alpha-value> opacity modifier works (`bg-zh-card-bg/80`). */
+:root,
+html.dark {
+  --zh-bg:           12 12 12;       /* #0c0c0c */
+  --zh-sidebar-bg:   20 20 32;       /* #141420 */
+  --zh-header-bg:    15 15 26;       /* #0f0f1a */
+  --zh-content-bg:   10 10 20;       /* #0a0a14 */
+  --zh-card-bg:      26 26 40;       /* #1a1a28 */
+  --zh-card-hover:   34 34 46;       /* #22222e */
+  --zh-border:       42 42 58;       /* #2a2a3a */
+  --zh-primary:      240 165 0;      /* #f0a500 */
+  --zh-primary-hover:217 148 0;      /* #d99400 */
+  --zh-text:         240 240 240;
+  --zh-text-muted:   154 154 166;
+  --zh-accent:       91 156 246;     /* #5b9cf6 */
+  --zh-success:      74 222 128;
+  --zh-warning:      251 191 36;
+  --zh-error:        239 68 68;
+}
+
+html.light {
+  --zh-bg:           245 245 247;
+  --zh-sidebar-bg:   255 255 255;
+  --zh-header-bg:    255 255 255;
+  --zh-content-bg:   250 250 250;
+  --zh-card-bg:      255 255 255;
+  --zh-card-hover:   245 245 245;
+  --zh-border:       229 229 229;
+  --zh-primary:      240 165 0;
+  --zh-primary-hover:217 148 0;
+  --zh-text:         26 26 26;
+  --zh-text-muted:   107 107 107;
+  --zh-accent:       0 102 204;
+  --zh-success:      22 163 74;
+  --zh-warning:      245 158 11;
+  --zh-error:        220 38 38;
+}
+
+/* Scrollbar styling — webkit/blink for WebView2 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--zh-border));
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--zh-card-hover)); }
+
+/* Disable text selection on UI elements (per `select-none` in app.html);
+   inputs / textareas explicitly opt-in. */
+input, textarea, [contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Smooth all theme transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
