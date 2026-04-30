@@ -9,7 +9,7 @@
 <header class="zh-header h-14 bg-zh-header-bg border-b border-zh-border flex items-center px-5 gap-4 select-none">
   <div class="flex items-center gap-3">
     <div class="text-zh-primary font-bold text-lg">ZeddiHub Tools</div>
-    <span class="text-zh-text-muted text-xs">v2.0.0-alpha</span>
+    <span class="text-zh-text-muted text-xs">v2.0.0 alpha</span>
   </div>
 
   <div class="flex-1"></div>

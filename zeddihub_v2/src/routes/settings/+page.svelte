@@ -149,7 +149,7 @@
     <Card class="max-w-xl">
       <h3 class="text-base font-semibold mb-3">{$t("settings_updates")}</h3>
       <p class="text-xs text-zh-text-muted mb-3">
-        Aktuální verze: <span class="text-zh-text">2.0.0-alpha.1</span>
+        Aktuální verze: <span class="text-zh-text">2.0.0-1 (alpha)</span>
       </p>
       <Button variant="secondary">Zkontrolovat aktualizace</Button>
     </Card>

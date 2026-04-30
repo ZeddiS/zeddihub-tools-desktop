@@ -1,6 +1,6 @@
 [package]
 name = "zeddihub-tools"
-version = "2.0.0-alpha.1"
+version = "2.0.0-1"
 description = "ZeddiHub Tools — Tauri build (v2 migration)"
 edition = "2021"
 rust-version = "1.70"
