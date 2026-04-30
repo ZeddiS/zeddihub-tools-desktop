@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZeddiHub Tools — Tauri PoC</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body data-theme="dark">
+    <div id="app">
+      <!-- Header -->
+      <header class="zh-header">
+        <div class="zh-header__brand">ZeddiHub Tools</div>
+        <div class="zh-header__spacer"></div>
+        <div class="zh-header__version">v0.1.0 (Tauri PoC)</div>
+        <button class="zh-header__theme" id="theme-toggle" title="Přepnout dark/light">🌙</button>
+      </header>
+
+      <!-- Body: sidebar + content -->
+      <div class="zh-body">
+        <aside class="zh-sidebar">
+          <button class="zh-nav active" data-nav="home">🏠  Domů</button>
+          <button class="zh-nav" data-nav="settings">⚙  Nastavení</button>
+          <div class="zh-sidebar__spacer"></div>
+          <div class="zh-sidebar__info">PoC — Tauri 2 + Rust</div>
+        </aside>
+
+        <main class="zh-content" id="content">
+          <!-- Panels mount here -->
+        </main>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

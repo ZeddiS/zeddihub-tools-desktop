@@ -1,0 +1,12 @@
+# Tauri build outputs
+src-tauri/target/
+src-tauri/gen/
+
+# Node
+node_modules/
+dist/
+*.log
+
+# IDE
+.vscode/
+.idea/

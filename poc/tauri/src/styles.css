@@ -1,0 +1,243 @@
+/* ZeddiHub Tools — Tauri PoC theme.
+   Dark + Light variant via [data-theme] selector on <body>. */
+
+:root {
+  --primary: #f0a500;
+  --primary-hover: #d99400;
+  --radius: 12px;
+  --gap: 12px;
+}
+
+[data-theme="dark"] {
+  --bg: #0c0c0c;
+  --sidebar-bg: #141420;
+  --header-bg: #0f0f1a;
+  --content-bg: #0a0a14;
+  --card-bg: #1a1a28;
+  --card-hover: #22222e;
+  --border: #2a2a3a;
+  --text: #f0f0f0;
+  --text-muted: #9a9aa6;
+  --accent: #5b9cf6;
+}
+
+[data-theme="light"] {
+  --bg: #f5f5f7;
+  --sidebar-bg: #ffffff;
+  --header-bg: #ffffff;
+  --content-bg: #fafafa;
+  --card-bg: #ffffff;
+  --card-hover: #f5f5f5;
+  --border: #e5e5e5;
+  --text: #1a1a1a;
+  --text-muted: #6b6b6b;
+  --accent: #0066cc;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ───────────────────────────────────────── */
+.zh-header {
+  height: 56px;
+  background: var(--header-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.zh-header__brand {
+  color: var(--primary);
+  font-weight: bold;
+  font-size: 16px;
+}
+.zh-header__spacer { flex: 1; }
+.zh-header__version {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.zh-header__theme {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 120ms;
+}
+.zh-header__theme:hover { background: var(--card-hover); }
+
+/* ── Body ─────────────────────────────────────────── */
+.zh-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.zh-sidebar {
+  width: 240px;
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  gap: 2px;
+  border-right: 1px solid var(--border);
+}
+.zh-nav {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms;
+  font-family: inherit;
+}
+.zh-nav:hover { background: var(--card-hover); }
+.zh-nav.active {
+  background: var(--primary);
+  color: #0a0a0a;
+  font-weight: 600;
+}
+.zh-sidebar__spacer { flex: 1; }
+.zh-sidebar__info {
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 8px 14px 0;
+}
+.zh-content {
+  flex: 1;
+  overflow: auto;
+  background: var(--content-bg);
+  padding: 28px 32px;
+}
+
+/* ── Panels ───────────────────────────────────────── */
+.panel-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0 0 4px;
+}
+.panel-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+.panel-status {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin: 4px 0 16px;
+}
+
+/* ── Cards grid ───────────────────────────────────── */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 18px;
+  cursor: pointer;
+  transition: background 120ms, transform 120ms;
+  position: relative;
+  overflow: hidden;
+}
+.card:hover {
+  background: var(--card-hover);
+  transform: translateY(-1px);
+}
+.card__strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+}
+.card__name {
+  font-weight: bold;
+  font-size: 14px;
+  margin: 12px 0 4px;
+}
+.card__desc {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Form ────────────────────────────────────────── */
+.form-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 0 0 16px;
+}
+.form-section {
+  font-weight: bold;
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+.form-section:not(:first-child) { margin-top: 16px; }
+
+.btn {
+  background: var(--primary);
+  color: #0a0a0a;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  transition: background 120ms;
+}
+.btn:hover { background: var(--primary-hover); }
+
+.input-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 8px 0;
+}
+.input-row label {
+  flex: 0 0 160px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.input-row input {
+  flex: 1;
+  background: var(--card-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.input-row input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
