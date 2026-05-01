@@ -5,6 +5,7 @@
   import Button from "$components/ui/Button.svelte";
   import { t } from "$stores/locale";
   import { auth, isAuthenticated } from "$stores/auth";
+  import { loginDialog } from "$stores/loginDialog";
   import { httpApi } from "$api/http";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
 
@@ -122,7 +123,7 @@
         <p class="text-xs text-zh-text-muted mb-3">
           Přihlaš se pro přístup k server nástrojům a admin sekcím.
         </p>
-        <Button variant="primary" onclick={() => navTo("/settings")} class="!h-8 text-xs w-full">
+        <Button variant="primary" onclick={() => loginDialog.open()} class="!h-8 text-xs w-full">
           {$t("auth_login")}
         </Button>
       {/if}

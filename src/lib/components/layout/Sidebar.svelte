@@ -24,6 +24,7 @@
   import { goto } from "$app/navigation";
   import { t } from "$stores/locale";
   import { isAuthenticated } from "$stores/auth";
+  import { loginDialog } from "$stores/loginDialog";
 
   type NavItem = { id: string; href: string; icon: any; labelKey: string; requiresAuth?: boolean };
   type NavSection = { id: string; labelKey: string; icon: any; items: NavItem[] };
@@ -112,8 +113,8 @@
 
   function navigate(href: string, requiresAuth = false) {
     if (requiresAuth && !$isAuthenticated) {
-      // TODO: open login modal — for now redirect to settings.
-      goto("/settings");
+      // Open login modal; on success, continue to the originally clicked panel.
+      loginDialog.open(() => goto(href));
       return;
     }
     goto(href);

@@ -56,6 +56,12 @@ pub fn run() {
             // net tools
             commands::net_tools::net_dns_lookup,
             commands::net_tools::net_port_check,
+            // settings
+            commands::settings::settings_load,
+            commands::settings::settings_save,
+            commands::settings::settings_data_dir,
+            commands::settings::settings_factory_reset,
+            commands::settings::settings_mark_first_launch_done,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri app failed to start");

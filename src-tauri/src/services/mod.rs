@@ -4,3 +4,4 @@ pub mod crypto;
 pub mod auth;
 pub mod tray;
 pub mod net_tools;
+pub mod settings;

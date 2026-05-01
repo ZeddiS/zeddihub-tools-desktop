@@ -916,14 +916,14 @@ Update tuto tabulku po dokončení každého panelu.
 |---|---|---|---|
 | Foundation (theme/locale/auth/layout) | ✅ ported | 2.0.0-1 | 1 |
 | HomePanel | ✅ ported | 2.0.0-1 | 1 |
-| SettingsPanel — basic | 🟡 scaffold | 2.0.0-1 | 1 |
-| SettingsPanel — full features | ⏳ planned | | 3 |
+| SettingsPanel — basic | ✅ ported | 2.0.0-1 | 1 |
+| SettingsPanel — full features | ✅ ported | 2.0.0-3 | 3 |
 | AppsPanel | ✅ ported | 2.0.0-2 | 2 |
 | AboutPanel | ✅ ported | 2.0.0-2 | 2 |
 | NewsPanel | ✅ ported | 2.0.0-2 | 2 |
 | LinksPanel | ✅ ported | 2.0.0-2 | 2 |
-| LoginDialog (overlay) | ⏳ planned | | 3 |
-| First-launch wizard | ⏳ planned | | 10 |
+| LoginDialog (overlay) | ✅ ported | 2.0.0-3 | 3 |
+| First-launch wizard | ✅ ported | 2.0.0-3 | 3 |
 | CS2 PlayerPanel | ⏳ planned | | 4 |
 | CS2 ServerPanel | ⏳ planned | | 5 |
 | CS2 KeybindPanel | ⏳ planned | | 5 |

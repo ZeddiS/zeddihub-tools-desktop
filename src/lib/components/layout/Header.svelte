@@ -3,7 +3,16 @@
   import { theme, toggleTheme } from "$stores/theme";
   import { lang, t, toggleLang } from "$stores/locale";
   import { auth, isAuthenticated } from "$stores/auth";
+  import { loginDialog } from "$stores/loginDialog";
   import { goto } from "$app/navigation";
+
+  function onAuthClick() {
+    if ($isAuthenticated) {
+      goto("/settings");
+    } else {
+      loginDialog.open();
+    }
+  }
 </script>
 
 <header class="zh-header h-14 bg-zh-header-bg border-b border-zh-border flex items-center px-5 gap-4 select-none">
@@ -19,7 +28,7 @@
     class="px-3 h-9 rounded-button text-xs flex items-center gap-2 hover:bg-zh-card-hover transition"
     class:text-zh-success={$isAuthenticated}
     class:text-zh-text-muted={!$isAuthenticated}
-    onclick={() => goto("/settings")}
+    onclick={onAuthClick}
   >
     {#if $isAuthenticated}
       <User size={14} />
