@@ -18,6 +18,17 @@ legacy/build/
 legacy/__pycache__/
 legacy/**/__pycache__/
 legacy/**/*.pyc
+legacy/**/*.exe
+legacy/**/*.spec
+legacy/modules/**/dist/
+!legacy/ZeddiHubTools.spec
+
+# --- PoC build outputs (artefakty na GitHub release, ne v gitu) ---
+poc/**/dist/
+poc/**/*.exe
+poc/**/*.msi
+poc/**/*.spec
+poc/**/build/
 
 # --- Stará v2 podsložka (residual, file lock; smazat manuálně) ---
 zeddihub_v2/
