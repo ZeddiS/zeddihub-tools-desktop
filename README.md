@@ -1,212 +1,148 @@
-<p align="center">
-  <img src="assets/logo_transparent.png" alt="ZeddiHub Tools" width="380">
-</p>
+# ZeddiHub Tools (v2)
 
-<p align="center">
-  <strong>Desktop tools for CS2, CS:GO and Rust server administrators</strong>
-</p>
+Desktop nástroje pro adminy CS2 / CS:GO / Rust serverů.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-v1.7.12-orange?style=flat-square" alt="Version">
-  <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-blue?style=flat-square&logo=windows&logoColor=white" alt="Platform">
-  <img src="https://img.shields.io/badge/language-EN%20%2F%20CZ-green?style=flat-square" alt="Language">
-  <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="License">
-</p>
+> **Status:** Migrační větev — Tauri 2 + SvelteKit + Rust. Aktuální verze
+> 2.0.0-alpha (Phase 1 hotová: Home + Settings + foundation). Plná
+> feature-parity s předchozí Python/customtkinter verzí (v1.7.12)
+> v plánu pro v2.0.0 final. Detail: [`MIGRATION.md`](MIGRATION.md) +
+> [`CLAUDE.md`](CLAUDE.md).
+>
+> Předchozí Python verze žije v [`legacy/`](legacy/) — buildable, ale
+> není aktivně vyvíjená.
 
-<p align="center">
-  <a href="https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest">
-    <img src="https://img.shields.io/github/downloads/ZeddiS/zeddihub-tools-desktop/total?style=flat-square&color=orange&label=downloads" alt="Downloads">
-  </a>
-</p>
+## Stack
 
-<p align="center">
-  <a href="https://zeddihub.eu/tools/" style="font-size:18px">
-    <strong>🌐 zeddihub.eu/tools/</strong>
-  </a>
-</p>
+| Vrstva | Technologie |
+|---|---|
+| Backend | Rust 1.95 + Tokio async runtime |
+| App framework | Tauri 2 |
+| Frontend | SvelteKit 2 (Svelte 5 runes) + TypeScript |
+| Styling | Tailwind CSS 3 + CSS variables (theme tokens) |
+| Ikony | lucide-svelte (tree-shakeable, žádný TTF download) |
+| HTTP klient | reqwest (rustls-tls, async) |
+| Crypto | chacha20poly1305 (Fernet ekvivalent pro auth.enc) |
+| Sys info | sysinfo crate |
 
-<p align="center">
-  <a href="https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest">
-    <strong>⬇ Download latest release</strong>
-  </a>
-  &nbsp;&middot;&nbsp;
-  <a href="https://zeddihub.eu">zeddihub.eu</a>
-  &nbsp;&middot;&nbsp;
-  <a href="https://dsc.gg/zeddihub">Discord</a>
-</p>
+## Adresářová struktura
 
----
+```
+zeddihub_tools_desktop/
+├── package.json                   # SvelteKit + Tauri deps
+├── svelte.config.js
+├── vite.config.ts
+├── tailwind.config.js
+├── tsconfig.json
+├── postcss.config.js
+│
+├── src/                           # Frontend (SvelteKit + TS)
+│   ├── app.html, app.css
+│   ├── routes/                    # File-based routing
+│   │   ├── +layout.svelte         # Header + Sidebar shell
+│   │   ├── +page.svelte           # Home
+│   │   ├── settings/+page.svelte
+│   │   └── ... (24 panel routes)
+│   └── lib/
+│       ├── api/                   # Tauri IPC wrappers (typed)
+│       ├── stores/                # Svelte stores (theme/locale/auth)
+│       ├── components/{ui,layout,panels}
+│       └── i18n/{cs,en}.ts
+│
+├── src-tauri/                     # Backend (Rust)
+│   ├── Cargo.toml, tauri.conf.json
+│   ├── icons/, capabilities/
+│   └── src/
+│       ├── main.rs, lib.rs
+│       ├── error.rs               # AppError enum
+│       ├── commands/              # #[tauri::command] handlers
+│       └── services/              # Business logic
+│
+├── legacy/                        # Python verze (v1.7.12) — archiv
+│   ├── gui/                       # všechny .py panely
+│   ├── app.py, main.py
+│   └── _build_clean.bat, requirements.txt, ...
+│
+├── assets/                        # Sdílené (logo, banner, fonts)
+├── poc/                           # PoC artefakty (PySide6 vs Tauri)
+├── CLAUDE.md                      # Migrační referenční dokument
+├── MIGRATION.md                   # Týdenní migration plán
+└── README.md
+```
 
-## Getting Started
+## Setup
 
-1. Download **`ZeddiHub.Tools.exe`** from the [Releases page](https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest)
-2. Run it — no installation, no Python required
-3. On first launch, choose your language and data folder location
-4. Done
+### Závislosti
+- **Rust 1.70+**: <https://www.rust-lang.org/tools/install>
+- **Node.js 18+**: <https://nodejs.org/>
+- **Visual Studio Build Tools** (Windows, jen pro Rust linker)
+- **WebView2** runtime (Win11 OK; Win10: <https://developer.microsoft.com/microsoft-edge/webview2/>)
 
----
+### Spuštění (dev mode, hot reload)
 
-## Features
+```cmd
+npm install
+npm run tauri:dev
+```
 
-### Game Tools — CS2 / CS:GO / Rust
+První spuštění ~5 min (kompilace Rust crates), další iterace ~5 s.
 
-| Tool | Description |
-|------|-------------|
-| Crosshair Generator | Live preview, export code |
-| Viewmodel Editor | Weapon settings with preview |
-| Autoexec Editor | Edit your config directly in the app |
-| Server CFG Generator | Create a server config file |
-| RCON Client | Remote server management |
-| Keybind Generator | Visual keyboard — assign commands by clicking |
-| Buy Binds | Purchase shortcuts for CS2 / CS:GO |
-| Rust Plugin Manager | Batch plugin repair, dependency analysis |
-| Translator | Translate JSON / TXT / LANG files into 20+ languages |
-| Server Watchdog | Background monitor that alerts when servers go offline/online |
+### Build production
 
-### PC Tools
+```cmd
+npm run tauri:build
+```
 
-- System information (CPU, GPU, RAM, Disk)
-- DNS flush, temp file cleanup
-- Ping tester, IP geolocation
-- Shutdown timer
+Výstupy:
+- `src-tauri/target/release/zeddihub-tools.exe` — standalone (~17 MB)
+- `src-tauri/target/release/bundle/nsis/ZeddiHub Tools_*-setup.exe` — NSIS installer (~4 MB)
+- `src-tauri/target/release/bundle/msi/ZeddiHub Tools_*.msi` — MSI (~6 MB)
 
-### Home Dashboard
+## Build legacy Python verze
 
-- Live server status via Steam A2S query (players, map, ping)
-- **Steam connect button** — opens `steam://connect/IP:PORT` directly
-- Quick links to Discord and website
+Python verze (v1.7.12) zůstává buildable v podsložce `legacy/`:
 
-### System Tray
-
-The app minimizes to the system tray instead of closing.  
-Right-click the tray icon for quick access to tools, settings, or to exit.  
-The tray menu is configurable via the web admin panel.
-
----
-
-## Auto-Update
-
-The app checks for new versions on every launch via GitHub Releases.  
-If an update is available, it downloads and installs automatically — no browser needed.
-
----
-
-## Requirements
-
-- Windows 10 or 11 (64-bit)
-- Internet connection (for server status, authorization and updates)
-
----
-
-## Changelog
-
-| Version | Highlights |
-|---------|------------|
-| **v1.7.12** | **ROLLBACK na v1.7.8 baseline.** v1.7.9 (panel pool experiment), v1.7.10 a v1.7.11 (neúspěšné pokusy fixnout black-rect bug po tray restore) byly staženy — místo aby aplikaci zrychlily, naopak ji 10× zpomalily přes redraw walks navrstvené na panel pool, a black-rect bug stejně přetrvával. CTk + Tk withdraw/deiconify cyklus má fundamentální omezení, které rebuild + redraw walker nedokázaly spolehlivě obejít. Návrat ke stabilnímu stavu před experimentem. Souběžně se připravuje **přechod na jiný UI stack** — viz `poc/` adresář s minimal prototypes v PySide6 a Tauri pro porovnání před commitnutím rewrite |
-| v1.7.11 | **Druhý hotfix pro „black rectangles after tray restore".** v1.7.10 fix přes `_draw()` nestačil — Canvas state CTk widgetů zůstal prázdný i po vynuceném redraw walku. Nový přístup: explicitní `_was_withdrawn` flag se nastavuje při vstupu do tray; první `<Map>` event po obnovení z tray ho detekuje a **zahodí celou panel cache + rebuildne aktivní panel od nuly**. Síťové ani disk volání to nevyvolá — HTTP cache (TTL) i Apps disk cache (6 h) data drží. Sidebar + header dostávají multi-technique redraw walk (3 vrstvy: `_draw` + `_set_appearance_mode` + `configure(fg_color=cur_fg)`) protože zachovávají user state (collapse stavy) a nedají se rebuildnout. Tray restore na ten samý panel je tak ~200–300 ms jednorázově, pak je zase vše rychlé |
-| v1.7.10 | **Hotfix pro „black rectangles after restore from tray"** + drobné micro-perf vylepšení v sidebar restyle. Když okno projde `withdraw()`/`deiconify()` cyklem, Tk nezachová drawing state CTk widgetů — Canvas zůstane prázdný a vidíš černé obdélníky místo políček. S panel poolem (v1.7.9) se to projevilo, protože widgety přežijí. Fix: po každém Map/Visibility eventu i v `show_with_fade` se projde widget tree aktivního panelu a vynutí se `_draw(no_color_updates=False)` na každém CTk widgetu. Debouncing přes `after_cancel` zaručí, že během fade-in animace se redraw spustí jednou. Sidebar restyle v `_navigate` má teď 2× get_theme() místo 100+ (cur_th + locked colors mimo smyčku) |
-| v1.7.9 | **Velký výkonnostní balíček po hloubkové analýze.** Nový **panel pool** s LRU cache (max 6 panelů) — místo `destroy()`+rebuild se panely jen `pack_forget`/`pack`, takže přepínání je o řád rychlejší a **obnovení z tray už nestahuje data znova**. Nové `gui/http_cache.py` — process-wide HTTP cache s TTL (recommended.json 30 min, GitHub stats + releases 1 h). Apps katalog už respektoval 6h disk cache. Tray restore na aktivní panel je no-op (žádný theme rebuild ani sidebar restyle). AppsPanel search má **250 ms debounce** — psaní v poli už nelaguje při 50+ kartách. Auth state se propaguje i do *cached* HomePanelu, takže po loginu/logoutu vidíš správný stav i když jsi byl mezitím jinde. Cache se invaliduje na light/dark toggle a změnu jazyka. `_quit_app` poctivě zavolá `destroy()` pro každý cached panel kvůli úklidu bg vláken (Watchdog monitoring loop atd.) |
-| v1.7.8 | **Konsolidovaná Utility** — Časovače / Makra / Procesy zpět do *jedné* sidebar položky „Utility" se 4 taby uvnitř (Systém, Časovače, Makra, Procesy), ve stejném UX patternu jako CS2 hráčské nástroje. Sidebar je kratší a přehlednější. **Přihlašovací dialog** nyní zobrazuje konkrétnější chybové hlášky — u neznámých stavů se připojí error-key + HTTP kód, u síťových chyb konkrétní důvod (DNS / SSL / timeout) — snazší diagnostika bez otevírání logů. Back-compat: staré nav_id (`pc_sysinfo`, `timers_stopky`, `macros_soon`, …) stále fungují a přesměrují na správný tab |
-| v1.7.7 | Nový panel **Aplikace** — katalog užitečných webů a nástrojů s fulltextovým vyhledáváním a dynamickými filtry z admin panelu; embedded **Edge WebView2** renderer (pywebview) s in-app auto-install runtime bootstrapperem a fallbackem na systémový prohlížeč; tři režimy otevírání položek (webview / external / download); 6h disk cache `quick_links.json` v `data_dir` s okamžitým seed render + refresh ze serveru; per-item ikona, popis, tagy, screenshot, kategorie; na straně webu nový admin editor `quick_links.php` (JSON editor s filter_groups) |
-| v1.7.6 | Full **macro system** — new package `gui/panels/macros/` with 15 step types (key tap/combo/press/release/type, mouse click/move/scroll, wait, random wait, loop start/end, if_pixel/endif, comment); **recorder** via pynput listeners with F8 stop hotkey, auto-waits between events and throttled mouse-move sampling; **engine** with loop + condition jump tables, playback speed 0.25×–4×, interruptible sleeps; **GlobalHotkeyManager** with conflict detection and pretty-print display; per-macro JSON store in `<data_dir>/macros/` + import/export; 2-column panel UI (list + detail) with Record / Play / Stop / Edit steps / Add step modal; replaces the v1.7.5 placeholder |
-| v1.7.5 | Login pill moved from sidebar to header (clickable); Utility split into four sub-sections — Systém / Časovače / Makra / Procesy; new timer panels: **Stopky** (count-up with laps + history), **Odpočet** (countdown with 5 post-expiry actions: dialog / beep / shutdown / custom / both) and **Časovač** (alarm at absolute HH:MM or relative H:M); new dedicated **Procesy** panel (sortable headers, live filter, kill selected, optional 3 s auto-refresh); placeholder panels for upcoming **Makra** (v1.7.6) and **Aplikace** (v1.7.7); FontAwesome icon set extended (`stopwatch`, `hourglass-half`, `grid`, `rotate-left`, `circle-dot`, `list-check`, `wand-magic-sparkles`, `sliders`, `cloud-arrow-down` …) |
-| v1.7.4 | Shared auth with mobile app: new REST backend `/api/auth/*` (SQLite + Bearer tokens, argon2id, 180-day per-device sessions); full in-app registration dialog (username + email + password); token-based auto-login via `/me`, legacy `auth.json` kept as offline fallback; all web content relocated to standalone `zeddihub-tools-website` repo (`api/`, `tools/`, `games/`) with desktop accessing it via Windows directory junction |
-| v1.7.3 | Speedtest: white numerics + extended results (IP/ISP/Server/Location) + history as right drawer; Downloadable tools: gray→orange→red progress bar, "Retry" button on error, click-anywhere catalog tile → in-window detail overlay with screenshot; Sidebar: "Edit order" drag-and-drop for external tools, Serverové nástroje pill always PREMIUM, full-row clickability |
-| v1.7.2 | N-09 Report a bug (GitHub Issue prefill), N-13 Novinky panel (Releases feed), F-07 close-behavior toggle + tray notification, F-12 web_favicon.ico unification, F-13 updater dialog fix + clickable pill, E-05 entry focus-ring, Account tab hidden for guests, admin/premium items fully hidden for non-admins, sidebar auth rebuild |
-| v2.0.2 | Server Updater (4-layer remote monitoring), admin-only *Other Tools* with downloadable modules, role-based access (admin/premium/user), Windows autostart + start-minimized toggles, first-launch wizard `%APPDATA%` preset |
-| v2.0.1 | yt-dlp frozen-build fix, single-instance lock, Auto Clicker overhaul (fixed XY / jitter / presets / live counter), Claude-app-style UI refresh, Web Uploader module, bcrypt migration |
-| v2.0.0 | Release Manager redesign, unified bilingual release notes, build-icon regeneration, Win11 Dark Gaming theme |
-| v1.9.0 | `gui/widgets.py` shared helpers, admin dashboard redesign with charts, audit log, atomic JSON writes, maintenance mode, one-click export |
-| v1.5.0 | FontAwesome icon system — all emoji replaced with FA 6 Free vector icons throughout the UI |
-| v1.4.0 | Navbar collapse fix, Steam connect button, dark/light mode, Server Watchdog, factory reset, DNS history, dual temp cleanup, landing page |
-| v1.3.1 | Hotfix: web admin panel .htaccess compatibility with FastCGI |
-| v1.3.0 | System tray icon, PHP web admin panel, configurable tray shortcuts |
-| v1.2.0 | Auto-update wizard, data folder selection on first launch |
-| v1.1.0 | UI redesign, PC Tools, CZ/EN language system, live server status |
-| v1.0.0 | Initial customtkinter GUI, splash screen, auth system |
-
----
-
-<details>
-<summary>For developers — build from source</summary>
-
-### Run from source
-
-```bash
-git clone https://github.com/ZeddiS/zeddihub-tools-desktop.git
-cd zeddihub-tools-desktop
+```cmd
+cd legacy
 pip install -r requirements.txt
-python app.py
+.\_build_clean.bat
 ```
 
-Requires Python 3.11+.
+Výstup: `legacy/dist/ZeddiHubTools.exe` (28 MB).
 
-### Build .exe
+## Co je hotovo (Phase 1)
 
-```bash
-pip install pyinstaller
-python -m PyInstaller --onefile --windowed --name "ZeddiHub.Tools" ^
-  --icon assets/web_favicon.ico ^
-  --add-data "assets;assets" ^
-  --add-data "gui;gui" ^
-  --add-data "locale;locale" ^
-  app.py
-```
+- ✅ Project scaffold (Tauri 2 + SvelteKit + TS + Tailwind)
+- ✅ Layout shell (Header / Sidebar / Content router)
+- ✅ Theme store + persistence (dark/light) přes localStorage
+- ✅ Locale store + i18n (cs/en) přes Svelte derived store
+- ✅ Tray icon + minimize-to-tray (Tauri native, **žádný black-rect bug**)
+- ✅ HTTP cache modul (Rust, in-memory TTL, stale-on-failure fallback)
+- ✅ Auth REST klient (Rust, talks to `https://zeddihub.eu/api/auth/*`, encrypted token storage)
+- ✅ HomePanel (cards + GitHub stats + login card + recommended grid + news section)
+- ✅ SettingsPanel skeleton (account / appearance / language / data / updates tabs)
+- ✅ 24 stub stránek pro ostatní panely
 
-</details>
+## Co bude dál
 
----
+Viz [`MIGRATION.md`](MIGRATION.md) — týdenní plán pro 24 zbývajících panelů + system features (updater, telemetrie, RCON, A2S, plugin manager).
 
-<details>
-<summary>Webhosting / Admin panel setup</summary>
+## IPC contract
 
-Since **v1.7.4** all web content lives in the separate [`zeddihub-tools-website`](../zeddihub-tools-website/) repo:
+Pojmenování: `<doména>_<akce>` (`auth_login`, `http_fetch_json`, …).
 
-- `api/auth/` + `api/wifi-map/` — REST API shared with the Android app
-- `tools/admin/` — PHP admin panel
-- `tools/data/` — static JSON feeds (servers, tray tools, recommended, admin_apps)
+Errors: každý command vrací `Result<T, AppError>`; frontend handluje přes
+`try { await invoke(...) } catch (e) { ... }`. `AppError` se serializuje
+do `{ key, message, status? }` pro snadné parsování v JS.
 
-Upload to hosting:
+Plný IPC seznam viz [`CLAUDE.md` Část 7](CLAUDE.md).
 
-- `api/` → `public_html/api/`
-- `tools/` → `public_html/tools/` (legacy URL kept for older clients)
+## Auto-update přechod z Python verze
 
-Requires PHP 7.3+ with PDO SQLite. See the website repo's `README.md` for deploy/secret details.
+Stará v1.7.x detekuje `v2.0.0` tag v GitHub Releases a transparentně
+nainstaluje novou Tauri verzi. Bridge migrator přesune existující data
+(auth.enc, settings.json, sticky notes, presety) do nového formátu
+(`%LOCALAPPDATA%\ZeddiHub\Tools\`). Detail viz CLAUDE.md Část 9.
 
-</details>
+## Licence
 
----
-
-## Česky
-
-### Rychlý začátek
-
-1. Stáhni **`ZeddiHub.Tools.exe`** ze [stránky Releases](https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest)
-2. Spusť — žádná instalace, žádný Python
-3. Při prvním spuštění zvol jazyk a složku pro data aplikace
-4. Hotovo
-
-### Funkce
-
-- **Herní nástroje** — crosshair, viewmodel, autoexec, server CFG, RCON, keybindy, buy bindy pro CS2/CS:GO/Rust
-- **PC nástroje** — info o systému, DNS flush, čištění temp, ping tester
-- **Domovská stránka** — live status serverů, rychlé odkazy
-- **Systémová lišta** — aplikace běží na pozadí, přístup přes pravý klik na ikonu
-- **Automatické aktualizace** — stažení a instalace přímo v aplikaci
-
-### Systémové požadavky
-
-- Windows 10 nebo 11 (64-bit)
-- Připojení k internetu
-
----
-
-<p align="center">
-  <a href="https://zeddihub.eu">zeddihub.eu</a>
-  &nbsp;&middot;&nbsp;
-  <a href="https://dsc.gg/zeddihub">Discord</a>
-  &nbsp;&middot;&nbsp;
-  <a href="https://zeddis.xyz">zeddis.xyz</a>
-  <br><br>
-  Made by <strong>ZeddiS</strong>
-</p>
+Proprietární. © ZeddiHub (ZeddiS), 2026.

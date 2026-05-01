@@ -1,0 +1,7 @@
+{
+  "version": "1.7.12",
+  "release_date": "2026-04-30",
+  "changelog": "v1.7.12: ROLLBACK na v1.7.8 baseline. v1.7.9 (panel pool), v1.7.10 a v1.7.11 (pokusy fixnout black-rect bug po tray restore) byly stažené — místo aby aplikaci zrychlily, zavedly redraw walks které ji 10× zpomalily a black-rect bug stejně přetrvával. Návrat ke stabilnímu stavu před experimentem. Plánuje se přechod na jiný UI stack (PySide6 nebo Tauri) — viz `poc/` adresář s prototypy obou variant pro porovnání.",
+  "mandatory": false,
+  "download_url": "https://github.com/ZeddiS/zeddihub-tools-desktop/releases/latest"
+}

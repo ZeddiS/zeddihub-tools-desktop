@@ -1,24 +1,31 @@
 # =========================================================================
-# ZeddiHub Tools Desktop — .gitignore
-# Cil: na GitHubu je POUZE source desktop aplikace.
-# Webhosting (PHP admin, data), Google Apps Script, build artefakty,
-# lokalni cache a tajemstvi ZUSTAVAJI lokalne.
+# ZeddiHub Tools Desktop — .gitignore (po reorganizaci na Tauri root)
 # =========================================================================
 
-# --- Build artefakty ---
-dist/
-build/
-*.spec
-!ZeddiHubTools.spec
+# --- Tauri build outputs ---
+src-tauri/target/
+src-tauri/gen/
 
-# --- Python cache ---
-__pycache__/
-*.pyc
-*.pyo
+# --- SvelteKit / Vite ---
+.svelte-kit/
+build/
+.vite/
+node_modules/
+
+# --- Legacy Python build outputs ---
+legacy/dist/
+legacy/build/
+legacy/__pycache__/
+legacy/**/__pycache__/
+legacy/**/*.pyc
+
+# --- Stará v2 podsložka (residual, file lock; smazat manuálně) ---
+zeddihub_v2/
 
 # --- IDE/editor ---
 .vscode/
 .idea/
+*.log
 
 # --- Runtime data (uzivatelska) ---
 /data/
@@ -34,7 +41,6 @@ assets/logo.png
 assets/web_favicon.ico
 
 # --- Serverova cast (od v1.7.4 v samostatnem repu zeddihub-tools-website) ---
-# Drzime v .gitignore pro pripad, ze nekdo obnovi junction jmenem webhosting.
 webhosting/
 
 # --- Google Apps Script (neni app source) ---
@@ -47,12 +53,10 @@ release_notes_v*.md
 release_1_8_0.*
 security_cleanup.bat
 release_1_8_0_manual.cmd
-CLAUDE.md
+CLAUDE_OLD.md
 
 # =========================================================================
 # Secrets
-# POZOR: .gitignore neCHRANI tajemstvi - pouze zamezuje pridani souboru.
-# Hodnotu tokenu NIKDY nevkladat do .gitignore jako radek!
 # =========================================================================
 .env
 .env.local
@@ -63,3 +67,6 @@ CLAUDE.md
 _launch_builder.bat
 .zeddibuild.local.json
 _build_tmp.spec
+
+# DS_Store / system
+.DS_Store

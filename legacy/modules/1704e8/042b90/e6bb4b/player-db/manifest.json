@@ -1,0 +1,11 @@
+{
+  "slug": "player-db",
+  "name": "Player Database",
+  "version": "1.0.0",
+  "kind": "panel",
+  "panel_module": "panel",
+  "panel_class": "PlayerDBPanel",
+  "icon": "database",
+  "require_admin": true,
+  "description": "Centralizovaná databáze hráčů s MySQL ingescí, šifrovanou cache a cross-platform přístupem."
+}
