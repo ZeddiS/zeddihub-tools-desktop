@@ -159,7 +159,7 @@
       <button
         type="button"
         class="text-left"
-        on:click={() => navTo(item.nav_id)}
+        onclick={() => navTo(item.nav_id)}
       >
         <Card strip={item.color ?? "#f0a500"} class="hover:bg-zh-card-hover cursor-pointer transition">
           <div class="font-semibold mb-1">{item.name}</div>

@@ -129,7 +129,7 @@
       class:text-black={isActive(item.href)}
       class:font-semibold={isActive(item.href)}
       class:hover:bg-zh-card-hover={!isActive(item.href)}
-      on:click={() => navigate(item.href)}
+      onclick={() => navigate(item.href)}
     >
       <svelte:component this={item.icon} size={16} />
       {$t(item.labelKey)}
@@ -142,7 +142,7 @@
   {#each sections as sec}
     <button
       class="flex items-center gap-2 px-3 h-7 rounded-button text-[10px] uppercase tracking-wider text-zh-text-muted hover:bg-zh-card-hover/50 transition mt-3"
-      on:click={() => (collapsed[sec.id] = !collapsed[sec.id])}
+      onclick={() => (collapsed[sec.id] = !collapsed[sec.id])}
     >
       <svelte:component this={sec.icon} size={11} />
       <span class="flex-1 text-left">{$t(sec.labelKey)}</span>
@@ -161,7 +161,7 @@
             class:text-black={isActive(item.href)}
             class:font-semibold={isActive(item.href)}
             class:hover:bg-zh-card-hover={!isActive(item.href)}
-            on:click={() => navigate(item.href, item.requiresAuth)}
+            onclick={() => navigate(item.href, item.requiresAuth)}
           >
             <svelte:component this={item.icon} size={14} />
             <span class="flex-1">{$t(item.labelKey)}</span>
@@ -186,7 +186,7 @@
         class:text-black={isActive(item.href)}
         class:font-semibold={isActive(item.href)}
         class:hover:bg-zh-card-hover={!isActive(item.href)}
-        on:click={() => navigate(item.href, item.requiresAuth)}
+        onclick={() => navigate(item.href, item.requiresAuth)}
       >
         <svelte:component this={item.icon} size={15} />
         {$t(item.labelKey)}

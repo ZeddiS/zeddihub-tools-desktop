@@ -53,6 +53,9 @@ pub fn run() {
             commands::http::http_invalidate,
             // system
             commands::system::system_info,
+            // net tools
+            commands::net_tools::net_dns_lookup,
+            commands::net_tools::net_port_check,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri app failed to start");

@@ -19,7 +19,7 @@
     class="px-3 h-9 rounded-button text-xs flex items-center gap-2 hover:bg-zh-card-hover transition"
     class:text-zh-success={$isAuthenticated}
     class:text-zh-text-muted={!$isAuthenticated}
-    on:click={() => goto("/settings")}
+    onclick={() => goto("/settings")}
   >
     {#if $isAuthenticated}
       <User size={14} />
@@ -33,7 +33,7 @@
   <!-- Lang toggle -->
   <button
     class="px-3 h-9 rounded-button text-xs hover:bg-zh-card-hover transition"
-    on:click={toggleLang}
+    onclick={toggleLang}
     title="Change language"
   >
     {$lang === "cs" ? "🇨🇿 CS" : "🇬🇧 EN"}
@@ -42,7 +42,7 @@
   <!-- Theme toggle -->
   <button
     class="w-9 h-9 rounded-button hover:bg-zh-card-hover transition flex items-center justify-center"
-    on:click={toggleTheme}
+    onclick={toggleTheme}
     title="Toggle theme"
   >
     {#if $theme === "dark"}

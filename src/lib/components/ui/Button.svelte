@@ -30,7 +30,7 @@
 <button
   {type}
   {disabled}
-  on:click={onclick}
+  {onclick}
   class={`px-4 h-9 rounded-button text-sm transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${variantClass[variant]} ${cls}`}
 >
   {@render children?.()}

@@ -918,10 +918,10 @@ Update tuto tabulku po dokončení každého panelu.
 | HomePanel | ✅ ported | 2.0.0-1 | 1 |
 | SettingsPanel — basic | 🟡 scaffold | 2.0.0-1 | 1 |
 | SettingsPanel — full features | ⏳ planned | | 3 |
-| AppsPanel | ⏳ planned | | 2 |
-| AboutPanel | ⏳ planned | | 2 |
-| NewsPanel | ⏳ planned | | 2 |
-| LinksPanel | ⏳ planned | | 2 |
+| AppsPanel | ✅ ported | 2.0.0-2 | 2 |
+| AboutPanel | ✅ ported | 2.0.0-2 | 2 |
+| NewsPanel | ✅ ported | 2.0.0-2 | 2 |
+| LinksPanel | ✅ ported | 2.0.0-2 | 2 |
 | LoginDialog (overlay) | ⏳ planned | | 3 |
 | First-launch wizard | ⏳ planned | | 10 |
 | CS2 PlayerPanel | ⏳ planned | | 4 |

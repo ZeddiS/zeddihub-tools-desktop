@@ -14,7 +14,8 @@
   let loginPass = $state("");
   let loginBusy = $state(false);
 
-  async function doLogin() {
+  async function doLogin(e?: Event) {
+    e?.preventDefault();
     if (!loginIdent || !loginPass) return;
     loginBusy = true;
     const ok = await auth.login(loginIdent, loginPass);
@@ -48,7 +49,7 @@
         class:border-transparent={activeTab !== tab.id}
         class:text-zh-text-muted={activeTab !== tab.id}
         class:hover:text-zh-text={activeTab !== tab.id}
-        on:click={() => (activeTab = tab.id)}
+        onclick={() => (activeTab = tab.id)}
       >
         <svelte:component this={tab.icon} size={14} />
         {$t(tab.labelKey)}
@@ -78,7 +79,7 @@
             {$auth.error}
           </div>
         {/if}
-        <form on:submit|preventDefault={doLogin} class="space-y-3">
+        <form onsubmit={doLogin} class="space-y-3">
           <div>
             <label for="ident" class="text-xs text-zh-text-muted block mb-1">{$t("auth_username")} / e-mail</label>
             <input
