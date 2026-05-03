@@ -12,6 +12,14 @@
     "core:webview:default",
     "shell:allow-open",
     "fs:default",
-    "dialog:default"
+    "fs:allow-write-text-file",
+    "fs:scope-home-recursive",
+    "fs:scope-document-recursive",
+    "fs:scope-download-recursive",
+    "fs:scope-desktop-recursive",
+    "dialog:default",
+    "dialog:allow-save",
+    "clipboard-manager:default",
+    "clipboard-manager:allow-write-text"
   ]
 }
