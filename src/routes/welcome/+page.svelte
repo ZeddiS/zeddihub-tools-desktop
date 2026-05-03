@@ -1,15 +1,19 @@
 <script lang="ts">
-  import { ArrowRight, Check, Globe, Folder, Sparkles } from "lucide-svelte";
+  import { ArrowRight, Check, Globe, Folder, Sparkles, FolderOpen } from "lucide-svelte";
+  import { Cz, Gb } from "svelte-circle-flags";
   import Button from "$components/ui/Button.svelte";
   import Card from "$components/ui/Card.svelte";
-  import { lang, setLang, t } from "$stores/locale";
+  import { lang, setLang } from "$stores/locale";
   import { settings } from "$stores/settings";
   import { settingsApi } from "$api/settings";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
   let step = $state<1 | 2 | 3>(1);
   let dataDir = $state("…");
+  let dataDirOverride = $state<string | null>(null);
+  let dataDirError = $state("");
 
   onMount(async () => {
     try {
@@ -19,23 +23,41 @@
     }
   });
 
+  async function pickDataDir() {
+    dataDirError = "";
+    try {
+      const sel = await openDialog({
+        directory: true,
+        multiple: false,
+        title: "Vyber datovou složku",
+      });
+      if (sel && typeof sel === "string") {
+        dataDirOverride = sel;
+      }
+    } catch (e: any) {
+      dataDirError = `✗ ${e?.message ?? e}`;
+    }
+  }
+
   async function complete() {
-    await settings.patch({ first_launch_done: true, lang: $lang });
+    await settings.patch({
+      first_launch_done: true,
+      lang: $lang,
+      data_dir_override: dataDirOverride ?? null,
+    });
     goto("/");
   }
+
+  let displayedDataDir = $derived(dataDirOverride ?? dataDir);
 </script>
 
 <div class="h-screen flex items-center justify-center bg-zh-bg p-8 select-none">
   <Card class="w-full max-w-2xl" padding={8}>
-    <!-- Header -->
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-12 h-12 rounded-card bg-zh-primary/15 flex items-center justify-center text-zh-primary">
-        <Sparkles size={20} />
-      </div>
-      <div>
-        <h1 class="text-2xl font-bold">Vítej v ZeddiHub Tools</h1>
-        <p class="text-sm text-zh-text-muted">Pojďme nastavit aplikaci. Pár kroků.</p>
-      </div>
+    <!-- Header — centered with logo -->
+    <div class="flex flex-col items-center text-center mb-6">
+      <img src="/logo.png" alt="ZeddiHub" class="w-20 h-20 mb-3 drop-shadow-lg" />
+      <h1 class="text-3xl font-bold text-zh-primary">ZeddiHub Tools</h1>
+      <p class="text-sm text-zh-text-muted mt-1">Pojďme aplikaci nastavit. Pár kroků.</p>
     </div>
 
     <!-- Step indicators -->
@@ -73,10 +95,12 @@
         <p class="text-sm text-zh-text-muted mb-4">Zvolíš si později kdykoliv v Nastavení.</p>
         <div class="flex gap-2 mb-6">
           <Button variant={$lang === "cs" ? "primary" : "secondary"} onclick={() => setLang("cs")}>
-            🇨🇿 Čeština
+            <span class="w-5 h-5 inline-flex items-center"><Cz /></span>
+            Čeština
           </Button>
           <Button variant={$lang === "en" ? "primary" : "secondary"} onclick={() => setLang("en")}>
-            🇬🇧 English
+            <span class="w-5 h-5 inline-flex items-center"><Gb /></span>
+            English
           </Button>
         </div>
         <div class="flex justify-end">
@@ -94,14 +118,30 @@
           <h2 class="text-lg font-semibold">Datová složka</h2>
         </div>
         <p class="text-sm text-zh-text-muted mb-3">
-          Aplikace bude ukládat nastavení, šifrované přihlašovací údaje, presety a cache do následující složky:
+          Aplikace ukládá nastavení, šifrované přihlašovací údaje, presety a cache do následující složky:
         </p>
-        <div class="bg-zh-card-hover rounded-entry px-3 py-2 text-xs font-mono break-all mb-4 border border-zh-border">
-          {dataDir}
+        <div class="bg-zh-card-hover rounded-entry px-3 py-2 text-xs font-mono break-all mb-3 border border-zh-border">
+          {displayedDataDir}
         </div>
-        <p class="text-xs text-zh-text-muted mb-6">
-          Cesta se dá změnit později v Nastavení → Datová složka.
-        </p>
+        {#if dataDirOverride}
+          <div class="text-xs text-zh-warning mb-3">
+            ⚠ Vlastní složka — změna se plně projeví po restartu aplikace.
+          </div>
+        {/if}
+        <div class="flex gap-2 mb-4">
+          <Button variant="secondary" onclick={pickDataDir}>
+            <FolderOpen size={14} />
+            Změnit složku…
+          </Button>
+          {#if dataDirOverride}
+            <Button variant="ghost" onclick={() => (dataDirOverride = null)}>
+              Vrátit default
+            </Button>
+          {/if}
+        </div>
+        {#if dataDirError}
+          <div class="text-xs text-zh-error mb-3">{dataDirError}</div>
+        {/if}
         <div class="flex gap-2 justify-between">
           <Button variant="ghost" onclick={() => (step = 1)}>← Zpět</Button>
           <Button variant="primary" onclick={() => (step = 3)}>

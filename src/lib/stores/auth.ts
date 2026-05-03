@@ -87,4 +87,6 @@ export const auth = createAuthStore();
 
 export const isAuthenticated = derived(auth, ($a) => $a.user !== null);
 export const isAdmin = derived(auth, ($a) => $a.user?.isAdmin === true);
+/** Hardcoded special role — true only for username "zeddis" (case-insensitive). */
+export const isOwner = derived(auth, ($a) => $a.user?.isOwner === true);
 export const currentUser = derived(auth, ($a) => $a.user);

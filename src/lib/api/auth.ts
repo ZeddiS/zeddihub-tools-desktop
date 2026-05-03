@@ -10,8 +10,10 @@ export interface UserDto {
   id: number;
   username: string;
   email: string;
-  role: string;       // "admin" | "premium" | "user"
+  role: string;          // "admin" | "premium" | "user"
   isAdmin: boolean;
+  /** Computed server-side from `username.toLowerCase() === "zeddis"`. */
+  isOwner: boolean;
 }
 
 export interface UserSession {

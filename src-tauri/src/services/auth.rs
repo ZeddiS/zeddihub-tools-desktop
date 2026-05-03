@@ -20,6 +20,11 @@ const APP_SECRET: &str = "696d63c65a8536637183028e4eecb841cd5b679ce7b2d33c6ef2d4
 
 const CLIENT_KIND: &str = "desktop";
 
+/// Hardcoded username (lowercase) that gets the special `owner` role.
+/// Owner sees hidden modules (e.g. Server Updater) and the admin panel
+/// `/server_updater` config page. No DB column needed.
+pub const OWNER_USERNAME: &str = "zeddis";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserDto {
     pub id: i64,
@@ -29,6 +34,24 @@ pub struct UserDto {
     pub role: String,
     #[serde(default, rename = "is_admin")]
     pub is_admin: bool,
+    /// Computed locally from `username.to_lowercase() == OWNER_USERNAME`.
+    /// Frontend gates Owner-only UI on this flag.
+    #[serde(default, rename = "is_owner")]
+    pub is_owner: bool,
+}
+
+/// Returns true when the user is the hardcoded Owner. Caller should
+/// re-compute this from the `username` field — never trust client-supplied
+/// `is_owner` for security-sensitive paths.
+pub fn is_owner_user(user: &UserDto) -> bool {
+    user.username.to_lowercase() == OWNER_USERNAME
+}
+
+/// Stamp `is_owner` flag on a UserDto from the username. All paths that
+/// produce a UserDto for the frontend must call this before returning.
+fn stamp_owner_flag(mut user: UserDto) -> UserDto {
+    user.is_owner = is_owner_user(&user);
+    user
 }
 
 /// What `/login` and `/register` return on success.
@@ -122,7 +145,8 @@ impl AuthState {
             return Err(AppError::Auth { key, message: msg });
         }
 
-        let session: UserSession = serde_json::from_value(body)?;
+        let mut session: UserSession = serde_json::from_value(body)?;
+        session.user = stamp_owner_flag(session.user);
 
         // Persist for resume.
         let persisted = PersistedSession {
@@ -173,7 +197,8 @@ impl AuthState {
             return Err(AppError::Auth { key, message: msg });
         }
 
-        let session: UserSession = serde_json::from_value(body)?;
+        let mut session: UserSession = serde_json::from_value(body)?;
+        session.user = stamp_owner_flag(session.user);
         let persisted = PersistedSession {
             username: session.user.username.clone(),
             token: session.token.clone(),
@@ -233,6 +258,7 @@ impl AuthState {
         let user: UserDto = serde_json::from_value(
             body.get("user").cloned().unwrap_or(serde_json::Value::Null),
         )?;
+        let user = stamp_owner_flag(user);
 
         // Update cached user.
         if let Some(s) = self.inner.write().await.as_mut() {
