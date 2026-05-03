@@ -14,7 +14,7 @@ export default {
   nav_links: "Odkazy",
   nav_apps: "Aplikace",
   nav_watchdog: "Server Watchdog",
-  nav_tools_download: "Stáhnout nástroje",
+  nav_tools_download: "Stažitelné moduly",
 
   nav_section_cs2: "CS2",
   nav_section_csgo: "CS:GO",

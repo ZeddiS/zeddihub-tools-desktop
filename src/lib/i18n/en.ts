@@ -10,7 +10,7 @@ export default {
   nav_links: "Links",
   nav_apps: "Apps",
   nav_watchdog: "Server Watchdog",
-  nav_tools_download: "Download tools",
+  nav_tools_download: "Downloadable modules",
 
   nav_section_cs2: "CS2",
   nav_section_csgo: "CS:GO",

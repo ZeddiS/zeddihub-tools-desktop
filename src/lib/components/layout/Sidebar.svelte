@@ -97,7 +97,7 @@
     { id: "watchdog", href: "/watchdog", icon: Eye,       labelKey: "nav_watchdog" },
     { id: "news",     href: "/news",     icon: Newspaper, labelKey: "nav_news" },
     { id: "links",    href: "/links",    icon: LinkIcon,  labelKey: "nav_links" },
-    { id: "tools-download", href: "/tools-download", icon: DownloadCloud, labelKey: "nav_tools_download", requiresAuth: true },
+    { id: "tools-download", href: "/tools-download", icon: DownloadCloud, labelKey: "nav_tools_download" },
     { id: "settings", href: "/settings", icon: Settings,  labelKey: "nav_settings" },
     { id: "about",    href: "/about",    icon: Info,      labelKey: "nav_about" },
   ];

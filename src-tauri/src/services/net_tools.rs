@@ -48,3 +48,21 @@ pub async fn port_check(host: &str, port: u16, timeout_ms: u64) -> AppResult<boo
         Err(_) => Ok(false),        // timeout
     }
 }
+
+/// TCP latency probe — returns roundtrip time to handshake completion in ms,
+/// or `None` on failure. Used by Ping Tester panel.
+pub async fn tcp_ping(host: &str, port: u16, timeout_ms: u64) -> AppResult<Option<f64>> {
+    if host.is_empty() {
+        return Err(AppError::BadInput("Host is empty".into()));
+    }
+    let addr = format!("{}:{}", host, port);
+    let timeout = Duration::from_millis(timeout_ms.max(100).min(30_000));
+
+    let start = std::time::Instant::now();
+    let res = tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&addr)).await;
+
+    Ok(match res {
+        Ok(Ok(_stream)) => Some(start.elapsed().as_secs_f64() * 1000.0),
+        Ok(Err(_)) | Err(_) => None,
+    })
+}

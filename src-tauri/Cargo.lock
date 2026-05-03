@@ -5904,7 +5904,7 @@ dependencies = [
 
 [[package]]
 name = "zeddihub-tools"
-version = "2.0.0-7"
+version = "2.0.0-8"
 dependencies = [
  "chacha20poly1305",
  "directories",

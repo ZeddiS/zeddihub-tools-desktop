@@ -12,3 +12,8 @@ pub async fn net_dns_lookup(domain: String, record_type: String) -> AppResult<Ve
 pub async fn net_port_check(host: String, port: u16, timeout_ms: u64) -> AppResult<bool> {
     net_tools::port_check(&host, port, timeout_ms).await
 }
+
+#[tauri::command]
+pub async fn net_tcp_ping(host: String, port: u16, timeout_ms: u64) -> AppResult<Option<f64>> {
+    net_tools::tcp_ping(&host, port, timeout_ms).await
+}

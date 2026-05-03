@@ -935,6 +935,24 @@ Update tuto tabulku po dokončení každého panelu.
 | Rust PlayerPanel (Sensitivity / ClientCfg / Binds / Tipy / PluginInfo / PluginAnalyzer) | ✅ ported | 2.0.0-6 | 6 |
 | Rust ServerPanel (ServerConfig / PluginManager / Rust RCON) | ✅ ported | 2.0.0-6 | 6 |
 | Rust RCON WebSocket service (tokio-tungstenite) | ✅ ported | 2.0.0-6 | 6 |
+| Owner role hardcoded (Tauri auth.rs + admin _lib.php) | ✅ ported | 2.0.0-7 | A |
+| Welcome wizard rewrite (logo + SVG flags + data dir picker) | ✅ ported | 2.0.0-7 | A |
+| Admin panel: Server Updater + Modules sidebar entries (Owner-only) | ✅ ported | 2.0.0-7 | A |
+| Admin panel: Klienti — DB účty tab odstraněn, role dropdown all 4 roles | ✅ ported | 2.0.0-7 | A |
+| Admin panel: Release Health diagnostic banner | ✅ ported | 2.0.0-7 | A |
+| Sidebar: Stažitelné moduly viditelné pro všechny | ✅ ported | 2.0.0-8 | 7 |
+| SensitivityPanel (20 her) | ✅ ported | 2.0.0-8 | 7 |
+| EDPIPanel (kalkulátor + tiers + pro player table) | ✅ ported | 2.0.0-8 | 7 |
+| PingTesterPanel (10 herních serverů + custom) | ✅ ported | 2.0.0-8 | 7 |
+| WatchdogPanel (UDP A2S monitoring + alerts) | ✅ ported | 2.0.0-8 | 7 |
+| TranslatorPanel (Google / MyMemory / LibreTranslate + file IO) | ✅ ported | 2.0.0-8 | 7 |
+| A2S service (UDP query) v Rustu | ✅ ported | 2.0.0-8 | 7 |
+| net_tcp_ping command (latence) | ✅ ported | 2.0.0-8 | 7 |
+| PCSysInfoPanel (CPU/RAM/disks live, auto-refresh) | ✅ ported | 2.0.0-8 | 8 |
+| PCNetToolsPanel (DNS / Port / IP geo / Ping) | ✅ ported | 2.0.0-8 | 8 |
+| PCUtilityPanel (Stopky / Odpočet / Procesy / Shutdown timer) | ✅ ported | 2.0.0-8 | 8 |
+| PCGameOptPanel + PCAdvancedPanel (placeholders) | 🟡 stub | 2.0.0-8 | 8 |
+| process_list / process_kill Rust commands | ✅ ported | 2.0.0-8 | 8 |
 | CS2 ServerPanel | ⏳ planned | | 5 |
 | CS2 KeybindPanel | ⏳ planned | | 5 |
 | CS:GO PlayerPanel | ⏳ planned | | 6 |

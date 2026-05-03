@@ -12,4 +12,8 @@ export const netToolsApi = {
   /** TCP port check. Returns true if connect within timeout succeeds. */
   portCheck: (host: string, port: number, timeoutMs: number = 3000) =>
     invoke<boolean>("net_port_check", { host, port, timeoutMs }),
+
+  /** TCP latency probe. Returns roundtrip ms to handshake or null on failure. */
+  tcpPing: (host: string, port: number, timeoutMs: number = 3000) =>
+    invoke<number | null>("net_tcp_ping", { host, port, timeoutMs }),
 };

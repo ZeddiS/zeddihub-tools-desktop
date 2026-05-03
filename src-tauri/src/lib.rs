@@ -58,9 +58,12 @@ pub fn run() {
             commands::http::http_invalidate,
             // system
             commands::system::system_info,
+            commands::system::process_list,
+            commands::system::process_kill,
             // net tools
             commands::net_tools::net_dns_lookup,
             commands::net_tools::net_port_check,
+            commands::net_tools::net_tcp_ping,
             // settings
             commands::settings::settings_load,
             commands::settings::settings_save,
@@ -76,6 +79,8 @@ pub fn run() {
             commands::rust_rcon::rust_rcon_send,
             commands::rust_rcon::rust_rcon_recv,
             commands::rust_rcon::rust_rcon_disconnect,
+            // a2s (UDP server query)
+            commands::a2s::a2s_query,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri app failed to start");
