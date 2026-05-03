@@ -1,6 +1,6 @@
 [package]
 name = "zeddihub-tools"
-version = "2.0.0-5"
+version = "2.0.0-6"
 description = "ZeddiHub Tools — Tauri build (v2 migration)"
 edition = "2021"
 rust-version = "1.70"
@@ -19,6 +19,10 @@ tauri-plugin-shell  = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs     = "2"
 tauri-plugin-clipboard-manager = "2"
+
+# Rust (Facepunch) RCON via WebSocket
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+futures-util      = "0.3"
 
 # Async + HTTP
 tokio   = { version = "1", features = ["full"] }

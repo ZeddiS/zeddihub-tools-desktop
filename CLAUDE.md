@@ -930,6 +930,11 @@ Update tuto tabulku po dokončení každého panelu.
 | CS:GO KeybindPanel | ✅ ported | 2.0.0-5 | 5 |
 | Rust KeybindPanel  | ✅ ported | 2.0.0-5 | 5 |
 | Source RCON Rust service (tokio TCP) | ✅ ported | 2.0.0-5 | 5 |
+| CS:GO PlayerPanel | ✅ ported | 2.0.0-6 | 6 |
+| CS:GO ServerPanel (Server.cfg / DB editor / RCON) | ✅ ported | 2.0.0-6 | 6 |
+| Rust PlayerPanel (Sensitivity / ClientCfg / Binds / Tipy / PluginInfo / PluginAnalyzer) | ✅ ported | 2.0.0-6 | 6 |
+| Rust ServerPanel (ServerConfig / PluginManager / Rust RCON) | ✅ ported | 2.0.0-6 | 6 |
+| Rust RCON WebSocket service (tokio-tungstenite) | ✅ ported | 2.0.0-6 | 6 |
 | CS2 ServerPanel | ⏳ planned | | 5 |
 | CS2 KeybindPanel | ⏳ planned | | 5 |
 | CS:GO PlayerPanel | ⏳ planned | | 6 |
