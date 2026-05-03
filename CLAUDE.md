@@ -925,6 +925,11 @@ Update tuto tabulku po dokončení každého panelu.
 | LoginDialog (overlay) | ✅ ported | 2.0.0-3 | 3 |
 | First-launch wizard | ✅ ported | 2.0.0-3 | 3 |
 | CS2 PlayerPanel | ✅ ported | 2.0.0-4 | 4 |
+| CS2 ServerPanel (Server.cfg / Gamemode / MapGroup / RCON) | ✅ ported | 2.0.0-5 | 5 |
+| CS2 KeybindPanel | ✅ ported | 2.0.0-5 | 5 |
+| CS:GO KeybindPanel | ✅ ported | 2.0.0-5 | 5 |
+| Rust KeybindPanel  | ✅ ported | 2.0.0-5 | 5 |
+| Source RCON Rust service (tokio TCP) | ✅ ported | 2.0.0-5 | 5 |
 | CS2 ServerPanel | ⏳ planned | | 5 |
 | CS2 KeybindPanel | ⏳ planned | | 5 |
 | CS:GO PlayerPanel | ⏳ planned | | 6 |

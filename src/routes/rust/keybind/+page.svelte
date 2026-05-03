@@ -1,6 +1,5 @@
 <script lang="ts">
-  import PanelStub from "$components/layout/PanelStub.svelte";
-  import { t } from "$stores/locale";
+  import KeybindPanel from "$components/panels/keybind/KeybindPanel.svelte";
 </script>
 
-<PanelStub title={$t("nav_keybind")} week={6} />
+<KeybindPanel game="rust" title="Rust — Keybind Generátor" />

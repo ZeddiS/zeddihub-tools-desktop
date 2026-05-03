@@ -15,6 +15,7 @@ use tauri::Manager;
 
 use crate::services::auth::AuthState;
 use crate::services::http_cache::HttpCache;
+use crate::services::rcon::RconState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,6 +26,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(HttpCache::new())
         .manage(AuthState::new())
+        .manage(RconState::new())
         .setup(|app| {
             // Tray
             services::tray::install(app.handle())?;
@@ -63,6 +65,10 @@ pub fn run() {
             commands::settings::settings_data_dir,
             commands::settings::settings_factory_reset,
             commands::settings::settings_mark_first_launch_done,
+            // rcon
+            commands::rcon::rcon_connect,
+            commands::rcon::rcon_send,
+            commands::rcon::rcon_disconnect,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri app failed to start");
